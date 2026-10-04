@@ -1,0 +1,45 @@
+{
+  "short_name": "Falcon POS",
+  "name": "Falcon POS — Workshop & Industrial POS",
+  "description": "Industrial-grade Point of Sale and Workshop ERP system for fan accessories, managing sales, multi-tier industrial ledgers, inventory, and analytics.",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "type": "image/png",
+      "sizes": "64x64"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#121417",
+  "theme_color": "#1c1f22",
+  "display": "standalone",
+  "orientation": "portrait"
+}

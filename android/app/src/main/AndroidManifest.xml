@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- OAuth Web Intent Fallback & Custom URL Scheme handler (RFC 8252) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.falconrodmaker.pos" android:host="oauth2redirect" />
+                <data android:scheme="com.falconrodmaker.pos" />
+            </intent-filter>
+
+            <!-- Google OAuth Reverse Client ID Scheme handler -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.googleusercontent.apps.614229042433-9uj9cvog5bn4fv6476r6nc1ho6a4rsfs" />
+            </intent-filter>
+
+            <!-- Custom App Deep Link Scheme handler -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="falconpos" android:host="oauth-callback" />
+                <data android:scheme="falconpos" />
+            </intent-filter>
+
+            <!-- Android App Links for Firebase & Google OAuth Redirect Handlers (Prevents Error 400 on Mobile Browser) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                      android:host="gen-lang-client-0360687883.firebaseapp.com"
+                      android:pathPrefix="/__/auth/handler" />
+                <data android:scheme="https"
+                      android:host="gen-lang-client-0360687883.firebaseapp.com"
+                      android:pathPrefix="/oauth-callback" />
+                <data android:scheme="https"
+                      android:host="gen-lang-client-0360687883.firebaseapp.com"
+                      android:pathPrefix="/oauth2redirect" />
+                <data android:scheme="https"
+                      android:host="gen-lang-client-0360687883.web.app"
+                      android:pathPrefix="/__/auth/handler" />
+            </intent-filter>
+
+            <!-- Google Workspace OAuth Scopes for Drive & Spreadsheets Authorization -->
+            <meta-data
+                android:name="com.google.android.gms.auth.OAUTH_SCOPES"
+                android:value="openid email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets" />
+            <meta-data
+                android:name="com.falconrodmaker.pos.OAUTH_DRIVE_SCOPE"
+                android:value="https://www.googleapis.com/auth/drive.file" />
+            <meta-data
+                android:name="com.falconrodmaker.pos.OAUTH_SPREADSHEETS_SCOPE"
+                android:value="https://www.googleapis.com/auth/spreadsheets" />
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Biometric Hardware Authentication -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+
+    <!-- Push & Lockscreen System Notifications (Android 13+ / API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Microphone & Voice Command Permissions -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- Storage & Offline Filesystem Permissions -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- Package Visibility Queries to force direct native app launching and OAuth flows -->
+    <queries>
+        <!-- Native Google Sheets Android App -->
+        <package android:name="com.google.android.apps.docs.editors.sheets" />
+        <!-- Native Google Drive Android App -->
+        <package android:name="com.google.android.apps.docs" />
+        <!-- Native Chrome Browser -->
+        <package android:name="com.android.chrome" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
+        </intent>
+    </queries>
+</manifest>

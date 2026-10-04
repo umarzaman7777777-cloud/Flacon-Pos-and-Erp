@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 460" width="100%" height="100%">
+  <defs>
+    <!-- Falcon Amber Gold Theme Gradients -->
+    <linearGradient id="falconThemeGrad" x1="0%" y1="0%" x2="100%" y2="80%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="20%" stop-color="#f59e0b" />
+      <stop offset="60%" stop-color="#d97706" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+
+    <!-- Secondary Feather Soft Highlight -->
+    <linearGradient id="featherHighlight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fffbeb" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0.2" />
+    </linearGradient>
+
+    <!-- Sleek Clean Metallic Steel Pipe Rod Gradient (Clean Tube, No Caps) -->
+    <linearGradient id="simpleRodPipeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#64748b" />
+      <stop offset="15%" stop-color="#94a3b8" />
+      <stop offset="35%" stop-color="#e2e8f0" />
+      <stop offset="50%" stop-color="#ffffff" />
+      <stop offset="70%" stop-color="#cbd5e1" />
+      <stop offset="85%" stop-color="#64748b" />
+      <stop offset="100%" stop-color="#334155" />
+    </linearGradient>
+
+    <!-- Chrome Collar Trim on Rod Ends -->
+    <linearGradient id="collarGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#b45309" />
+    </linearGradient>
+
+    <!-- Subtle Drop Shadow -->
+    <filter id="cleanShadow" x="-10%" y="-15%" width="125%" height="135%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- ========================================================= -->
+  <!-- 1. SOARING FALCON IN APP THEME COLOR (AMBER / GOLD)      -->
+  <!-- ========================================================= -->
+  <g id="falcon-theme-body" filter="url(#cleanShadow)">
+    <!-- Top-most Primary Wing Feather (Long Swept Wing) -->
+    <path d="M 65 45 C 120 115 175 165 270 180 C 230 165 180 130 135 88 C 102 55 80 48 65 45 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- 2nd Primary Wing Feather -->
+    <path d="M 88 100 C 138 155 192 190 285 200 C 235 185 185 158 148 124 C 120 100 102 98 88 100 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- 3rd Wing Feather -->
+    <path d="M 110 150 C 158 195 212 220 300 225 C 250 213 200 190 162 164 C 135 145 120 146 110 150 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- 4th Wing Feather -->
+    <path d="M 135 195 C 175 230 228 248 310 250 C 265 241 215 222 178 201 C 156 190 143 192 135 195 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- 5th Wing Feather -->
+    <path d="M 165 237 C 198 260 245 273 322 270 C 282 265 238 251 202 235 C 183 228 172 231 165 237 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- 6th Wing Feather & Coverts -->
+    <path d="M 198 272 C 230 286 272 290 334 285 C 298 280 260 268 228 259 C 210 255 203 261 198 272 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- Falcon Head, Neck Arch & Hooked Beak -->
+    <path d="M 290 175 C 335 203 365 230 388 230 C 405 230 428 226 450 235 C 468 241 480 253 474 265 C 462 277 445 273 428 268 C 412 265 400 269 388 277 C 355 303 305 315 245 319 C 172 323 122 293 85 267 C 135 310 208 333 285 327 C 345 323 400 305 435 277 C 446 269 458 269 468 262 C 452 255 435 254 418 255 C 402 257 385 248 368 230 C 345 207 318 190 290 175 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- Curved Hook Beak -->
+    <path d="M 450 235 C 470 241 484 253 478 272 C 472 259 463 253 452 249 C 438 247 422 249 405 249 C 422 241 438 237 450 235 Z" fill="#b45309" />
+    
+    <!-- Keen Falcon Eye -->
+    <circle cx="428" cy="249" r="4.5" fill="#ffffff" stroke="#92400e" stroke-width="0.8" />
+    <path d="M 420 247 Q 428 242 436 247 Q 428 252 420 247 Z" fill="#78350f" />
+    <circle cx="429" cy="248" r="1.5" fill="#ffffff" />
+    
+    <!-- Underbelly Swoop & Lower Wing Arch -->
+    <path d="M 115 295 C 180 340 270 353 358 328 C 292 345 205 333 142 303 C 128 296 119 294 115 295 Z" fill="url(#falconThemeGrad)" />
+    
+    <!-- Lower Tail Feathers Arching Down toward the Pipe -->
+    <path d="M 155 327 C 220 363 308 365 380 337 C 320 356 238 353 178 333 C 167 329 160 327 155 327 Z" fill="url(#falconThemeGrad)" />
+    <path d="M 125 347 C 205 381 288 387 355 363 C 282 378 192 371 136 351 C 130 349 126 347 125 347 Z" fill="url(#falconThemeGrad)" />
+
+    <!-- Talons / Claws Firmly Grasping the Clean Steel Pipe Rod -->
+    <g id="falcon-talon-feet" fill="#b45309">
+      <!-- Thigh feather cushion -->
+      <path d="M 215 358 C 205 373 200 392 208 408 C 220 402 230 387 228 368 Z" fill="url(#falconThemeGrad)" />
+      <!-- Left Claw curled over the top of the rod -->
+      <path d="M 203 398 C 196 408 193 420 197 430 C 203 428 207 420 208 405 Z" fill="#92400e" />
+      <path d="M 212 402 C 210 415 208 427 214 434 C 219 432 222 422 220 408 Z" fill="#b45309" />
+      
+      <!-- Right Claw curled over the rod -->
+      <path d="M 244 365 C 239 382 237 400 246 416 C 255 410 264 394 262 373 Z" fill="url(#falconThemeGrad)" />
+      <path d="M 240 405 C 236 416 233 428 238 436 C 243 434 246 424 246 410 Z" fill="#92400e" />
+      <path d="M 250 408 C 250 420 250 432 256 438 C 261 435 262 424 260 412 Z" fill="#b45309" />
+    </g>
+  </g>
+
+  <!-- ========================================================= -->
+  <!-- 2. PURE & SIMPLE STEEL PIPE ROD (CLEAN, NO CAPS/BULK)      -->
+  <!-- ========================================================= -->
+  <!-- Clean industrial hollow steel cylinder with sleek finish -->
+  <g id="simple-pipe-rod" transform="translate(130, 412) rotate(6.5 170 12)" filter="url(#cleanShadow)">
+    
+    <!-- 1. Sleek Pipe Body: Pure polished cylindrical rod -->
+    <rect x="10" y="2" width="370" height="20" rx="10" fill="url(#simpleRodPipeGrad)" stroke="#475569" stroke-width="1.6" />
+    
+    <!-- 2. High-Gloss Specular Chrome Reflection Line along the core of the pipe -->
+    <line x1="20" y1="7" x2="370" y2="7" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.95" />
+    <line x1="25" y1="12" x2="365" y2="12" stroke="#e2e8f0" stroke-width="1.2" stroke-linecap="round" opacity="0.6" />
+    <!-- Underside shadow gradient reflection line -->
+    <line x1="20" y1="17" x2="365" y2="17" stroke="#1e293b" stroke-width="1.8" stroke-linecap="round" opacity="0.75" />
+
+    <!-- 3. Left Rod End Terminal (Clean Precision Bevel + Clean Drilled Lock Pin Hole) -->
+    <!-- Left Clean End Rim Collar -->
+    <ellipse cx="14" cy="12" rx="4" ry="10" fill="#94a3b8" stroke="#334155" stroke-width="1.2" />
+    <ellipse cx="13" cy="12" rx="2" ry="7" fill="#1e293b" />
+    <!-- Left Safety Pin Cross Hole -->
+    <circle cx="36" cy="12" r="3" fill="#0f172a" stroke="#cbd5e1" stroke-width="0.9" />
+    <circle cx="36" cy="12" r="1.4" fill="#000000" />
+
+    <!-- 4. Right Rod End Terminal (Clean Coupling End + Fan Motor Lock Hole) -->
+    <!-- Clean Golden Accent Ring Trim on Coupling Neck -->
+    <rect x="340" y="2" width="4" height="20" rx="1.5" fill="url(#collarGrad)" />
+    <!-- Right Safety Split-Pin Hole -->
+    <circle cx="358" cy="12" r="3" fill="#0f172a" stroke="#cbd5e1" stroke-width="0.9" />
+    <circle cx="358" cy="12" r="1.4" fill="#000000" />
+    <!-- Right Clean End Rim -->
+    <ellipse cx="378" cy="12" rx="3.5" ry="9.5" fill="#64748b" stroke="#334155" stroke-width="1" />
+  </g>
+</svg>

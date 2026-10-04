@@ -1,0 +1,36 @@
+{
+	"appId": "com.falconrodmaker.pos",
+	"appName": "Falcon POS",
+	"webDir": "dist",
+	"bundledWebRuntime": false,
+	"server": {
+		"androidScheme": "https",
+		"cleartext": true,
+		"allowNavigation": [
+			"accounts.google.com",
+			"*.google.com",
+			"*.googleapis.com",
+			"gen-lang-client-0360687883.firebaseapp.com",
+			"gen-lang-client-0360687883.web.app",
+			"ais-dev-deik3gv5xuv5i5heuhgkaw-198776278872.asia-east1.run.app",
+			"ais-pre-deik3gv5xuv5i5heuhgkaw-198776278872.asia-east1.run.app",
+			"*.run.app"
+		]
+	},
+	"android": {
+		"allowMixedContent": true
+	},
+	"overrideUserAgent": "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36",
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 1800,
+			"launchAutoHide": true,
+			"backgroundColor": "#0F172A",
+			"androidSplashResourceName": "splash",
+			"androidScaleType": "CENTER_CROP",
+			"showSpinner": false,
+			"splashFullScreen": true,
+			"splashImmersive": true
+		}
+	}
+}

@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "PosSyncState": {
+      "title": "PosSyncState",
+      "description": "Central workshop ERP state synchronized across all factory POS terminals",
+      "type": "object",
+      "properties": {
+        "workspaceId": {
+          "type": "string",
+          "description": "Identifier for the workshop workspace",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of the latest state sync",
+          "maxLength": 64
+        },
+        "updatedByTerminal": {
+          "type": "string",
+          "description": "Name or ID of the terminal device that dispatched the update",
+          "maxLength": 64
+        },
+        "statePayload": {
+          "type": "string",
+          "description": "JSON serialized workshop state data payload",
+          "maxLength": 1048576
+        },
+        "version": {
+          "type": "number",
+          "description": "Monotonically increasing version counter for conflict prevention"
+        }
+      },
+      "required": ["workspaceId", "updatedAt", "updatedByTerminal", "statePayload", "version"]
+    },
+    "Terminal": {
+      "title": "Terminal",
+      "description": "Registered POS counter or workshop terminal device record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the terminal device",
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the counter or workshop terminal",
+          "maxLength": 64
+        },
+        "lastSeen": {
+          "type": "string",
+          "description": "ISO timestamp of terminal activity heartbeat",
+          "maxLength": 64
+        },
+        "role": {
+          "type": "string",
+          "description": "Counter or floor station designation",
+          "maxLength": 32
+        }
+      },
+      "required": ["id", "name", "lastSeen"]
+    },
+    "TransactionRecord": {
+      "title": "TransactionRecord",
+      "description": "Cloud transaction log created across terminals",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Invoice or transaction number",
+          "maxLength": 32
+        },
+        "date": {
+          "type": "string",
+          "description": "Date of the invoice",
+          "maxLength": 32
+        },
+        "time": {
+          "type": "string",
+          "description": "Time of the transaction",
+          "maxLength": 32
+        },
+        "total": {
+          "type": "number",
+          "description": "Total order amount in PKR"
+        },
+        "paid": {
+          "type": "boolean",
+          "description": "Whether the invoice is cleared or on credit"
+        },
+        "factory": {
+          "type": "string",
+          "description": "Customer factory or workshop account name",
+          "maxLength": 128
+        },
+        "terminalName": {
+          "type": "string",
+          "description": "Terminal where the invoice was generated",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "date", "total", "factory"]
+    },
+    "TestConnection": {
+      "title": "TestConnection",
+      "description": "Lightweight ping test document for validating Firestore connectivity",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Status of the connection test",
+          "maxLength": 32
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/sync_states/{stateId}": {
+      "schema": "PosSyncState",
+      "description": "Synced workshop state document for Falcon Rod Maker"
+    },
+    "/terminals/{terminalId}": {
+      "schema": "Terminal",
+      "description": "Heartbeat and metadata for connected POS and workshop terminals"
+    },
+    "/cloud_transactions/{txnId}": {
+      "schema": "TransactionRecord",
+      "description": "Direct cloud audit trail for sales orders and dispatches"
+    },
+    "/test/{testId}": {
+      "schema": "TestConnection",
+      "description": "Connection test ping endpoint"
+    }
+  }
+}

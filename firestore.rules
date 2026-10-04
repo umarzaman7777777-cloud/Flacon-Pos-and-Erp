@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidPosSyncState(data) {
+      return data.keys().hasAll(['workspaceId', 'updatedAt', 'updatedByTerminal', 'statePayload', 'version'])
+        && data.workspaceId is string && data.workspaceId.size() <= 64
+        && data.updatedAt is string && data.updatedAt.size() <= 64
+        && data.updatedByTerminal is string && data.updatedByTerminal.size() <= 64
+        && data.statePayload is string && data.statePayload.size() <= 1048576
+        && data.version is number;
+    }
+
+    function isValidTerminal(data) {
+      return data.keys().hasAll(['id', 'name', 'lastSeen'])
+        && data.id is string && data.id.size() <= 64
+        && data.name is string && data.name.size() <= 64
+        && data.lastSeen is string && data.lastSeen.size() <= 64
+        && (!('role' in data) || (data.role is string && data.role.size() <= 32));
+    }
+
+    function isValidTransactionRecord(data) {
+      return data.keys().hasAll(['id', 'date', 'total', 'factory'])
+        && data.id is string && data.id.size() <= 32
+        && data.date is string && data.date.size() <= 32
+        && data.total is number && data.total >= 0
+        && data.factory is string && data.factory.size() <= 128
+        && (!('paid' in data) || data.paid is bool)
+        && (!('time' in data) || (data.time is string && data.time.size() <= 32))
+        && (!('terminalName' in data) || (data.terminalName is string && data.terminalName.size() <= 64));
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /sync_states/{stateId} {
+      allow get: if isValidId(stateId);
+      allow list: if true;
+      allow create: if isValidId(stateId) && isValidPosSyncState(incoming());
+      allow update: if isValidId(stateId) && isValidPosSyncState(incoming());
+      allow delete: if false;
+    }
+
+    match /terminals/{terminalId} {
+      allow get: if isValidId(terminalId);
+      allow list: if true;
+      allow create: if isValidId(terminalId) && isValidTerminal(incoming());
+      allow update: if isValidId(terminalId) && isValidTerminal(incoming());
+      allow delete: if false;
+    }
+
+    match /cloud_transactions/{txnId} {
+      allow get: if isValidId(txnId);
+      allow list: if true;
+      allow create: if isValidId(txnId) && isValidTransactionRecord(incoming());
+      allow update: if isValidId(txnId) && isValidTransactionRecord(incoming());
+      allow delete: if false;
+    }
+
+    match /test/{testId} {
+      allow get: if isValidId(testId);
+      allow list: if true;
+      allow create, update: if isValidId(testId);
+      allow delete: if false;
+    }
+  }
+}

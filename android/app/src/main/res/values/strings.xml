@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Falcon POS</string>
+    <string name="title_activity_main">Falcon POS</string>
+    <string name="package_name">com.falconrodmaker.pos</string>
+    <string name="custom_url_scheme">com.falconrodmaker.pos</string>
+</resources>

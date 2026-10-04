@@ -1,0 +1,10 @@
+{
+  "name": "Falcon Rod Maker — POS & ERP",
+  "description": "Industrial-grade Point of Sale and Workshop ERP system for fan accessories, managing sales, multi-tier industrial ledgers, inventory, and analytics.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,132 @@
+apply plugin: 'com.android.application'
+
+def getAppVersionCode() {
+    // 1. Property passed via CLI (e.g. ./gradlew assembleDebug -PversionCode=1042)
+    if (project.hasProperty('versionCode')) {
+        try {
+            return project.property('versionCode').toString().toInteger()
+        } catch (Exception ignored) {}
+    }
+    // 2. CI/CD environment variable from GitHub Actions run number
+    def runNumber = System.getenv("GITHUB_RUN_NUMBER")
+    if (runNumber) {
+        try {
+            return 1000 + runNumber.toInteger()
+        } catch (Exception ignored) {}
+    }
+    // 3. Git commit count if git is available
+    try {
+        def proc = "git rev-list --count HEAD".execute([], project.rootDir)
+        proc.waitFor()
+        if (proc.exitValue() == 0) {
+            def count = proc.text.trim().toInteger()
+            if (count > 0) return 1000 + count
+        }
+    } catch (Exception ignored) {}
+    // 4. Fallback strictly monotonic timestamp in minutes
+    return (int) (System.currentTimeMillis() / 60000)
+}
+
+def getAppVersionName() {
+    // 1. Property passed via CLI (e.g. -PversionName=1.0.42)
+    if (project.hasProperty('versionName')) {
+        return project.property('versionName').toString()
+    }
+    // 2. CI/CD environment variable from GitHub Actions
+    def runNumber = System.getenv("GITHUB_RUN_NUMBER")
+    if (runNumber) {
+        return "1.0." + runNumber
+    }
+    // 3. Git commit count
+    try {
+        def proc = "git rev-list --count HEAD".execute([], project.rootDir)
+        proc.waitFor()
+        if (proc.exitValue() == 0) {
+            def count = proc.text.trim()
+            return "1.0." + count
+        }
+    } catch (Exception ignored) {}
+    return "1.0.1"
+}
+
+android {
+    namespace = "com.falconrodmaker.pos"
+    compileSdk = rootProject.ext.has('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
+    defaultConfig {
+        applicationId "com.falconrodmaker.pos"
+        minSdkVersion rootProject.ext.has('minSdkVersion') ? rootProject.ext.minSdkVersion : 22
+        targetSdkVersion rootProject.ext.has('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 36
+        versionCode getAppVersionCode()
+        versionName getAppVersionName()
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        falconSigning {
+            if (file('debug.keystore').exists()) {
+                storeFile file('debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
+    }
+    buildTypes {
+        debug {
+            if (file('debug.keystore').exists()) {
+                signingConfig signingConfigs.falconSigning
+            } else {
+                signingConfig signingConfigs.debug
+            }
+        }
+        release {
+            if (file('debug.keystore').exists()) {
+                signingConfig signingConfigs.falconSigning
+            } else {
+                signingConfig signingConfigs.debug
+            }
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.browser:browser:1.8.0'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:${project.hasProperty('androidxAppCompatVersion') ? project.property('androidxAppCompatVersion') : (rootProject.ext.has('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.0')}"
+    implementation "androidx.browser:browser:1.8.0"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:${project.hasProperty('androidxCoordinatorLayoutVersion') ? project.property('androidxCoordinatorLayoutVersion') : (rootProject.ext.has('androidxCoordinatorLayoutVersion') ? rootProject.ext.androidxCoordinatorLayoutVersion : '1.2.0')}"
+    implementation "androidx.core:core-splashscreen:${project.hasProperty('coreSplashScreenVersion') ? project.property('coreSplashScreenVersion') : (rootProject.ext.has('coreSplashScreenVersion') ? rootProject.ext.coreSplashScreenVersion : '1.0.1')}"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:${project.hasProperty('junitVersion') ? project.property('junitVersion') : (rootProject.ext.has('junitVersion') ? rootProject.ext.junitVersion : '4.13.2')}"
+    androidTestImplementation "androidx.test.ext:junit:${project.hasProperty('androidxJunitVersion') ? project.property('androidxJunitVersion') : (rootProject.ext.has('androidxJunitVersion') ? rootProject.ext.androidxJunitVersion : '1.2.1')}"
+    androidTestImplementation "androidx.test.espresso:espresso-core:${project.hasProperty('androidxEspressoCoreVersion') ? project.property('androidxEspressoCoreVersion') : (rootProject.ext.has('androidxEspressoCoreVersion') ? rootProject.ext.androidxEspressoCoreVersion : '3.6.1')}"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

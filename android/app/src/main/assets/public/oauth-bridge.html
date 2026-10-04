@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Falcon POS - Google Workspace Authorization Bridge</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background-color: #0b0f17;
+      color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 20px;
+      padding: 32px 24px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #f59e0b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+    p {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+    .status-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      font-family: monospace;
+      color: #cbd5e1;
+      text-align: left;
+      overflow-wrap: break-word;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: #f59e0b;
+      color: #000000;
+    }
+    .btn-primary:hover {
+      background: #d97706;
+    }
+    .btn-success {
+      background: #10b981;
+      color: #ffffff;
+    }
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #ffffff;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <div class="card">
+    <div class="badge">Falcon POS Mobile Sync</div>
+    <h1>Google Account Sync</h1>
+    <p>Authorizing Google Sheets & Google Drive directly for your Android device.</p>
+
+    <div id="status" class="status-box">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="spinner"></span>
+        <span>Initializing Google Authorization...</span>
+      </div>
+    </div>
+
+    <button id="authBtn" class="btn btn-primary" style="display: none;" onclick="startAuth()">
+      Authorize with Google
+    </button>
+
+    <button id="returnBtn" class="btn btn-success" style="display: none;" onclick="returnToApp()">
+      Return to Falcon POS App
+    </button>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCzCWW8agDjIKoJV4xktMc7hhqNbwYYSPA",
+      authDomain: "gen-lang-client-0360687883.firebaseapp.com",
+      projectId: "gen-lang-client-0360687883",
+      storageBucket: "gen-lang-client-0360687883.firebasestorage.app",
+      messagingSenderId: "614229042433",
+      appId: "1:614229042433:web:e00300cd7088f839caa700"
+    };
+
+    const CLIENT_ID = "614229042433-9uj9cvog5bn4fv6476r6nc1ho6a4rsfs.apps.googleusercontent.com";
+    const FIRESTORE_DB_ID = "ai-studio-falconrodmakerpo-4ec08e17-6c91-4aca-b59a-d747b503ca3a";
+    const DEFAULT_SCOPES = "openid email profile https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file";
+
+    const params = new URLSearchParams(window.location.search);
+    const emailHint = params.get("email") || "umarzaman7777777@gmail.com";
+    const scopes = params.get("scopes") || DEFAULT_SCOPES;
+
+    const statusEl = document.getElementById("status");
+    const authBtn = document.getElementById("authBtn");
+    const returnBtn = document.getElementById("returnBtn");
+
+    let app;
+    let db;
+    let savedToken = null;
+
+    try {
+      app = initializeApp(firebaseConfig);
+      db = getFirestore(app, FIRESTORE_DB_ID);
+    } catch (e) {
+      console.warn("Firebase init:", e);
+    }
+
+    let tokenClient;
+
+    window.startAuth = function() {
+      if (tokenClient) {
+        statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span><span>Waiting for Google confirmation...</span></div>';
+        tokenClient.requestAccessToken();
+      } else {
+        initClient();
+      }
+    };
+
+    window.returnToApp = function() {
+      if (!savedToken) return;
+      const callback1 = `falconpos://oauth-callback#access_token=${encodeURIComponent(savedToken)}&email=${encodeURIComponent(emailHint)}`;
+      const callback2 = `com.falconrodmaker.pos://oauth2redirect#access_token=${encodeURIComponent(savedToken)}&email=${encodeURIComponent(emailHint)}`;
+      window.location.href = callback1;
+      setTimeout(() => {
+        window.location.href = callback2;
+      }, 400);
+    };
+
+    async function handleTokenReceived(token, expiresIn = 3500) {
+      savedToken = token;
+      statusEl.innerHTML = '<div style="color: #34d399; font-weight: bold;">✓ Google Account Authorized!</div><div style="font-size: 11px; margin-top: 4px; color: #94a3b8;">Syncing credentials to Falcon POS Android APK...</div>';
+      authBtn.style.display = 'none';
+
+      // 1. Write token to Firestore document sync_states/falcon_workshop
+      try {
+        if (db) {
+          const docRef = doc(db, 'sync_states', 'falcon_workshop');
+          const snap = await getDoc(docRef);
+          let payloadObj = {};
+          let version = Date.now();
+          if (snap.exists()) {
+            const d = snap.data();
+            version = (d?.version || Date.now()) + 1;
+            if (d?.statePayload) {
+              try { payloadObj = JSON.parse(d.statePayload); } catch {}
+            }
+          }
+          payloadObj.cloudTokens = {
+            ...(payloadObj.cloudTokens || {}),
+            sheetsToken: token,
+            sheetsExpiresAt: Date.now() + (expiresIn * 1000),
+            sheetsEmail: emailHint,
+            driveToken: token,
+            driveExpiresAt: Date.now() + (expiresIn * 1000),
+            driveEmail: emailHint,
+            lastSyncedAt: new Date().toISOString()
+          };
+          await setDoc(docRef, {
+            workspaceId: 'falcon_rod_maker',
+            updatedAt: new Date().toISOString(),
+            updatedByTerminal: 'android_oauth_bridge',
+            statePayload: JSON.stringify(payloadObj),
+            version
+          });
+        }
+      } catch (err) {
+        console.warn("Firestore token publish failed:", err);
+      }
+
+      statusEl.innerHTML = '<div style="color: #34d399; font-weight: bold;">✓ Success! Returning to Falcon POS...</div>';
+      returnBtn.style.display = 'block';
+
+      // 2. Dispatch deep links into Android app
+      window.returnToApp();
+
+      // 3. Try to close browser tab after 2 seconds
+      setTimeout(() => {
+        try { window.close(); } catch {}
+      }, 2000);
+    }
+
+    function initClient() {
+      if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+        setTimeout(initClient, 300);
+        return;
+      }
+      try {
+        tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: scopes,
+          hint: emailHint,
+          prompt: 'select_account',
+          callback: async (resp) => {
+            if (resp.error) {
+              statusEl.innerHTML = `<span style="color: #f87171;">Authorization error: ${resp.error_description || resp.error}</span>`;
+              authBtn.style.display = 'block';
+              authBtn.innerText = 'Try Again';
+            } else if (resp.access_token) {
+              await handleTokenReceived(resp.access_token, resp.expires_in || 3500);
+            }
+          }
+        });
+        statusEl.innerHTML = '<span>Ready. Tap Authorize to select your Google account.</span>';
+        authBtn.style.display = 'block';
+        // Auto trigger request
+        tokenClient.requestAccessToken();
+      } catch (err) {
+        statusEl.innerHTML = `<span style="color: #f87171;">Failed to load Google client: ${err.message}</span>`;
+        authBtn.style.display = 'block';
+      }
+    }
+
+    window.addEventListener("load", () => {
+      setTimeout(initClient, 300);
+    });
+  </script>
+</body>
+</html>
