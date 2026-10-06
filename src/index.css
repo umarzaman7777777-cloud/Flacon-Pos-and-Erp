@@ -140,6 +140,69 @@ html[dir="rtl"] body {
   background-size: 32px 32px;
 }
 
+/* Industrial Blueprint Grid Overlay */
+.blueprint-grid-overlay {
+  background-image:
+    /* Minor 20px drafting grid lines */
+    linear-gradient(to right, rgba(56, 189, 248, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.06) 1px, transparent 1px),
+    /* Major 100px industrial division lines */
+    linear-gradient(to right, rgba(56, 189, 248, 0.15) 1.5px, transparent 1.5px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.15) 1.5px, transparent 1.5px),
+    /* Center intersection measurement tick points */
+    radial-gradient(circle, rgba(56, 189, 248, 0.35) 1.5px, transparent 1.5px);
+  background-size:
+    var(--grid-minor, 20px) var(--grid-minor, 20px),
+    var(--grid-minor, 20px) var(--grid-minor, 20px),
+    var(--grid-major, 100px) var(--grid-major, 100px),
+    var(--grid-major, 100px) var(--grid-major, 100px),
+    var(--grid-major, 100px) var(--grid-major, 100px);
+  background-position: 0 0, 0 0, 0 0, 0 0, -1px -1px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+html[data-theme="light"] .blueprint-grid-overlay {
+  background-image:
+    linear-gradient(to right, rgba(2, 132, 199, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(2, 132, 199, 0.07) 1px, transparent 1px),
+    linear-gradient(to right, rgba(2, 132, 199, 0.18) 1.5px, transparent 1.5px),
+    linear-gradient(to bottom, rgba(2, 132, 199, 0.18) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(2, 132, 199, 0.35) 1.5px, transparent 1.5px);
+  opacity: 0.75;
+}
+
+.blueprint-bg {
+  position: relative;
+}
+
+.blueprint-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(to right, rgba(56, 189, 248, 0.12) 1.5px, transparent 1.5px),
+    linear-gradient(to bottom, rgba(56, 189, 248, 0.12) 1.5px, transparent 1.5px);
+  background-size:
+    var(--grid-minor, 20px) var(--grid-minor, 20px),
+    var(--grid-minor, 20px) var(--grid-minor, 20px),
+    var(--grid-major, 100px) var(--grid-major, 100px),
+    var(--grid-major, 100px) var(--grid-major, 100px);
+  z-index: 0;
+  opacity: 0.9;
+}
+
+html[data-theme="light"] .blueprint-bg::before {
+  background-image:
+    linear-gradient(to right, rgba(2, 132, 199, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(2, 132, 199, 0.05) 1px, transparent 1px),
+    linear-gradient(to right, rgba(2, 132, 199, 0.14) 1.5px, transparent 1.5px),
+    linear-gradient(to bottom, rgba(2, 132, 199, 0.14) 1.5px, transparent 1.5px);
+}
+
 .bg-overlay-gradient {
   background-image:
     radial-gradient(circle at 15% -10%, var(--logo-a) 0%, transparent 45%),

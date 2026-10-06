@@ -19,7 +19,8 @@ import {
   UploadCloud,
   HardDrive,
   Database,
-  Trash2
+  Trash2,
+  Grid
 } from 'lucide-react';
 import { AppLanguage, AppTheme, PrinterSettings } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
@@ -42,6 +43,7 @@ interface TopBarProps {
   sheetsConnected?: boolean;
   driveConnected?: boolean;
   isSyncingWorkspace?: boolean;
+  isAutoAuthenticating?: boolean;
   onOpenWorkspaceModal?: () => void;
   onToggleTheme: () => void;
   onToggleLanguage?: (lang: AppLanguage) => void;
@@ -57,6 +59,8 @@ interface TopBarProps {
   recycleBinCount?: number;
   onOpenRecycleBin?: () => void;
   onOpenGmailVault?: () => void;
+  showBlueprintGrid?: boolean;
+  onToggleBlueprintGrid?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -73,6 +77,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   sheetsConnected = false,
   driveConnected = false,
   isSyncingWorkspace = false,
+  isAutoAuthenticating = false,
   onOpenWorkspaceModal,
   onToggleTheme,
   onToggleLanguage,
@@ -87,7 +92,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   isPrinterConfigActive = false,
   recycleBinCount = 0,
   onOpenRecycleBin,
-  onOpenGmailVault
+  onOpenGmailVault,
+  showBlueprintGrid = false,
+  onToggleBlueprintGrid
 }) => {
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
@@ -121,8 +128,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   const hasDrive = driveConnected || localDriveConnected;
   const hasAnyGoogle = hasSheets || hasDrive;
 
-  // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'offline' (red)
-  const isSyncing = isSyncingWorkspace || workspaceStatus === 'syncing';
+  // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'offline' (amber/red)
+  const isSyncing = isSyncingWorkspace || workspaceStatus === 'syncing' || isAutoAuthenticating;
   const googleState: 'live' | 'syncing' | 'offline' = isSyncing
     ? 'syncing'
     : hasAnyGoogle || workspaceStatus === 'synced' || workspaceStatus === 'ready'
@@ -256,6 +263,30 @@ export const TopBar: React.FC<TopBarProps> = ({
             {theme === 'dark' ? <Moon size={13} /> : <Sun size={13} className="text-amber-500" />}
           </button>
 
+          {/* Quick Blueprint Grid ON / OFF Button */}
+          {onToggleBlueprintGrid && (
+            <button
+              type="button"
+              id="topbar-grid-toggle-btn"
+              onClick={onToggleBlueprintGrid}
+              title={
+                showBlueprintGrid
+                  ? 'Blueprint Grid: ON (Click to hide grid for clear view)'
+                  : 'Blueprint Grid: OFF (Click to view layout measurement grid)'
+              }
+              className={`flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-2.5 rounded-full border text-[10.5px] font-mono font-bold transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
+                showBlueprintGrid
+                  ? 'border-sky-400 bg-sky-950/70 text-sky-300 hover:bg-sky-900 shadow-[0_0_10px_rgba(56,189,248,0.25)]'
+                  : 'border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-sky-400 text-[var(--text-dim)] hover:text-white'
+              }`}
+            >
+              <Grid size={12} className={showBlueprintGrid ? 'text-sky-400' : 'text-[var(--text-dim)]'} />
+              <span className="hidden xs:inline">
+                GRID {showBlueprintGrid ? 'ON' : 'OFF'}
+              </span>
+            </button>
+          )}
+
           {/* In-App PWA Install Action */}
           <PWAInstallButton variant="header" />
         </div>
@@ -337,18 +368,20 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="topbar-workspace-sync-btn"
             onClick={onOpenWorkspaceModal}
             title={
-              googleState === 'syncing'
+              isAutoAuthenticating
+                ? 'Google Workspace: Auto-authenticating and synchronizing Google Sheets & Drive...'
+                : googleState === 'syncing'
                 ? 'Google Workspace: Synchronization in progress (Uploading to Drive/Sheets)...'
                 : googleState === 'live'
-                ? `Google Workspace: Connected & Live (${hasSheets ? 'Sheets ✓' : ''} ${hasDrive ? 'Drive ✓' : ''}) • Click to open Cloud Hub`
-                : 'Google Workspace: Offline (Not connected to Google Drive or Sheets) • Click to connect'
+                ? `Google Workspace: Connected & Live (${hasSheets ? 'Sheets ✓' : ''} ${hasDrive ? 'Drive ✓' : ''}) • Auto-Sync Active`
+                : 'Google Workspace: Click to connect Google Drive & Sheets (Once connected, auto-authenticates & syncs every time you open the app)'
             }
             className={`flex items-center gap-1.5 sm:gap-2 h-7 sm:h-8 px-2.5 sm:px-3 rounded-full border text-[10.5px] font-mono font-bold uppercase transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
               googleState === 'live'
                 ? 'border-emerald-500/70 bg-emerald-950/60 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-900/70 shadow-[0_0_12px_rgba(16,185,129,0.18)]'
                 : googleState === 'syncing'
                 ? 'border-amber-500/80 bg-amber-950/60 text-amber-200 hover:border-amber-400 hover:bg-amber-900/70 shadow-[0_0_12px_rgba(245,158,11,0.22)]'
-                : 'border-rose-500/50 bg-rose-950/40 text-rose-300 hover:border-rose-400 hover:bg-rose-900/50'
+                : 'border-amber-500/50 bg-amber-950/40 text-amber-300 hover:border-amber-400 hover:bg-amber-900/50'
             }`}
           >
             {/* Status Icon */}
@@ -357,7 +390,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             ) : googleState === 'live' ? (
               <Cloud size={13} className="text-emerald-400 shrink-0" />
             ) : (
-              <CloudOff size={13} className="text-rose-400 shrink-0" />
+              <CloudOff size={13} className="text-amber-400 shrink-0" />
             )}
 
             {/* Glowing Beacon Dot */}
@@ -374,7 +407,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]'
                     : googleState === 'syncing'
                     ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]'
-                    : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
+                    : 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
                 }`}
               />
             </span>
@@ -386,9 +419,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                 {googleState === 'live' ? (
                   <span className="text-emerald-300 font-black">LIVE</span>
                 ) : googleState === 'syncing' ? (
-                  <span className="text-amber-300 font-black">SYNCING</span>
+                  <span className="text-amber-300 font-black">{isAutoAuthenticating ? 'AUTO-SYNC' : 'SYNCING'}</span>
                 ) : (
-                  <span className="text-rose-400 font-black">OFFLINE</span>
+                  <span className="text-amber-300 font-black">CONNECT</span>
                 )}
               </span>
 

@@ -57,6 +57,10 @@ interface WorkspaceSyncModalProps {
   onToggleDriveAutoBackup: (enabled?: boolean) => void;
   onChangeDriveAutoBackupInterval?: (hours: number) => void;
 
+  // Auto-Sync Engine
+  onAutoSyncNow?: () => Promise<boolean>;
+  isAutoAuthenticating?: boolean;
+
   // Navigation
   onNavigateToBackupTab: (tab: 'google_sheets' | 'google_drive' | 'cloud_status') => void;
   // Firestore sync state
@@ -98,6 +102,8 @@ export const WorkspaceSyncModal: React.FC<WorkspaceSyncModalProps> = ({
   onDisconnectDrive,
   onToggleDriveAutoBackup,
   onChangeDriveAutoBackupInterval,
+  onAutoSyncNow,
+  isAutoAuthenticating = false,
   onNavigateToBackupTab,
   syncState,
   pendingQueueCount = 0
@@ -170,6 +176,40 @@ export const WorkspaceSyncModal: React.FC<WorkspaceSyncModalProps> = ({
 
         {/* MODAL CONTENT */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* AUTO-AUTHENTICATION & STARTUP SYNC STATUS BANNER */}
+          <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
+                <Zap size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-emerald-300">
+                    Auto-Authentication & Startup Sync
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-[9px] font-bold border border-emerald-500/40">
+                    ACTIVE
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-dim)] truncate mt-0.5">
+                  Automatically authenticates Google Drive & Sheets and syncs all worksheets on app launch.
+                </p>
+              </div>
+            </div>
+
+            {onAutoSyncNow && (
+              <button
+                type="button"
+                onClick={() => onAutoSyncNow()}
+                disabled={isAutoAuthenticating || isSyncingSheets || isUploadingDrive}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs shrink-0"
+              >
+                <RefreshCw size={13} className={isAutoAuthenticating || isSyncingSheets || isUploadingDrive ? 'animate-spin' : ''} />
+                <span>{isAutoAuthenticating ? 'Auto-Syncing...' : 'Auto-Sync Now'}</span>
+              </button>
+            )}
+          </div>
+
           {/* STATS STRIP */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             <div className="p-3 rounded-xl border border-[var(--steel-line)] bg-[var(--panel-raised)]">

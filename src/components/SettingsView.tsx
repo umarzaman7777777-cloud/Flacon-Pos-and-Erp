@@ -19,6 +19,8 @@ import {
   ShieldCheck,
   Bell,
   Layers,
+  Grid,
+  Ruler,
   Image as ImageIcon,
   Smartphone,
   Volume2,
@@ -1207,27 +1209,174 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* Grid & Density */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1">
-            {/* CAD Grid */}
-            <div
-              onClick={() => onUpdateVisualSettings({ showBlueprintGrid: !visualSettings.showBlueprintGrid })}
-              className={`p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between bg-[var(--panel-raised)] ${
-                visualSettings.showBlueprintGrid ? 'border-amber-400' : 'border-[var(--steel-line)]'
-              }`}
-            >
-              <div>
-                <div className="font-bold text-[var(--text)]">CAD Blueprint Grid</div>
-                <div className="text-[10px] text-[var(--text-dim)] mt-0.5">Background geometric drafting mesh</div>
+          {/* Dedicated Blueprint Grid Overlay Toggle */}
+          <div className="p-4 rounded-xl border border-[var(--steel-line)] bg-[var(--panel-raised)] space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className={`p-2.5 rounded-xl border transition ${
+                  visualSettings.showBlueprintGrid
+                    ? 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                    : 'bg-zinc-800/40 text-zinc-400 border-white/5'
+                }`}>
+                  <Grid size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-xs sm:text-sm text-[var(--text)]">
+                      Blueprint Grid Overlay
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition ${
+                      visualSettings.showBlueprintGrid
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                        : 'bg-zinc-800/60 text-zinc-500 border border-white/5'
+                    }`}>
+                      {visualSettings.showBlueprintGrid ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-dim)] mt-0.5">
+                    Industrial layout measurement drafting grid on application background to visualize equipment dimensions and layout alignment accurately
+                  </p>
+                </div>
               </div>
-              <input
-                type="checkbox"
-                readOnly
-                checked={!!visualSettings.showBlueprintGrid}
-                className="rounded accent-amber-400"
-              />
+
+              {/* Master Toggle Switch */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!visualSettings.showBlueprintGrid}
+                onClick={() => onUpdateVisualSettings({ showBlueprintGrid: !visualSettings.showBlueprintGrid })}
+                className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  visualSettings.showBlueprintGrid
+                    ? 'bg-sky-500 shadow-[0_0_12px_rgba(56,189,248,0.4)]'
+                    : 'bg-zinc-700/60'
+                }`}
+              >
+                <span className="sr-only">Toggle Blueprint Grid overlay</span>
+                <span
+                  className={`pointer-events-none inline-flex items-center justify-center h-7 w-7 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out text-black ${
+                    visualSettings.showBlueprintGrid ? 'translate-x-7 text-sky-600 font-bold' : 'translate-x-0 text-zinc-400'
+                  }`}
+                >
+                  <Grid size={13} />
+                </span>
+              </button>
             </div>
 
+            {/* Live Interactive Calibration & Visual Preview */}
+            <div
+              onClick={() => onUpdateVisualSettings({ showBlueprintGrid: !visualSettings.showBlueprintGrid })}
+              className={`relative overflow-hidden rounded-xl border p-3 cursor-pointer transition select-none ${
+                visualSettings.showBlueprintGrid
+                  ? 'border-sky-500/40 bg-zinc-950/80 shadow-inner'
+                  : 'border-[var(--steel-line)] bg-black/20 opacity-70 hover:opacity-90'
+              }`}
+            >
+              {/* Dual-frequency CAD grid pattern preview dynamically scaled */}
+              <div
+                className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${
+                  visualSettings.showBlueprintGrid ? 'opacity-100 blueprint-grid-overlay' : 'opacity-20 bg-overlay-grid'
+                }`}
+                style={{
+                  '--grid-minor': `${visualSettings.blueprintGridScale || 20}px`,
+                  '--grid-major': `${(visualSettings.blueprintGridScale || 20) * 5}px`
+                } as React.CSSProperties}
+              />
+              <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${visualSettings.showBlueprintGrid ? 'bg-sky-400 animate-pulse' : 'bg-zinc-600'}`} />
+                  <span className="font-bold text-[var(--text)]">
+                    {visualSettings.showBlueprintGrid
+                      ? `Active CAD Grid (${visualSettings.blueprintGridScale || 20}px Minor / ${(visualSettings.blueprintGridScale || 20) * 5}px Major)`
+                      : 'Grid Disabled (Standard Solid Background)'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-zinc-400">
+                  <span className="px-2 py-0.5 rounded bg-black/60 border border-white/10 flex items-center gap-1">
+                    <Ruler size={11} className="text-amber-400" />
+                    <span>~{(((visualSettings.blueprintGridScale || 20) * 0.264)).toFixed(1)} mm Pitch ({visualSettings.blueprintGridScale || 20}px)</span>
+                  </span>
+                  <span className="text-sky-400 font-bold">
+                    {visualSettings.showBlueprintGrid ? 'Tap to disable' : 'Tap to enable'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid Line Scale / Density Slider & Measurement Calibration */}
+            <div className="pt-2 border-t border-[var(--steel-line)]/60 space-y-3 font-mono">
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <Sliders size={13} className="text-sky-400" />
+                  <span className="font-bold uppercase tracking-wider text-[var(--text)] text-[11px]">
+                    Grid Line Scale & Density Calibration
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">
+                    {visualSettings.blueprintGridScale || 20}px / Division
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    Major: {(visualSettings.blueprintGridScale || 20) * 5}px
+                  </span>
+                </div>
+              </div>
+
+              {/* Range Slider */}
+              <div className="space-y-1">
+                <input
+                  type="range"
+                  min="10"
+                  max="80"
+                  step="1"
+                  value={visualSettings.blueprintGridScale || 20}
+                  onChange={e => onUpdateVisualSettings({ blueprintGridScale: parseInt(e.target.value, 10) })}
+                  className="w-full h-2 rounded-lg bg-[var(--panel)] accent-sky-400 cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-[var(--text-dim)] pt-0.5">
+                  <span>10px (Micro 2.5mm)</span>
+                  <span className="text-amber-400 font-bold">20px (Default 5mm)</span>
+                  <span>40px (10mm / 1cm)</span>
+                  <span>80px (Large 20mm)</span>
+                </div>
+              </div>
+
+              {/* Real-World Measurement Unit Presets */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[10px] text-[var(--text-dim)] uppercase block font-semibold">
+                  Real-World Physical Unit Presets:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-[10px]">
+                  {[
+                    { px: 10, label: 'Micro (2.5 mm)', desc: 'High-Density Lathe' },
+                    { px: 20, label: '5.0 mm (Standard)', desc: 'Workshop Default' },
+                    { px: 25, label: '1/4 Inch (6.35 mm)', desc: 'Imperial Fraction' },
+                    { px: 38, label: '10.0 mm (1.0 cm)', desc: 'Metric Decimal' },
+                    { px: 50, label: '1/2 Inch (12.7 mm)', desc: 'Heavy Rod Pitch' }
+                  ].map(unit => {
+                    const isSelected = (visualSettings.blueprintGridScale || 20) === unit.px;
+                    return (
+                      <button
+                        key={unit.px}
+                        type="button"
+                        onClick={() => onUpdateVisualSettings({ blueprintGridScale: unit.px })}
+                        className={`p-1.5 rounded-lg border text-center transition cursor-pointer flex flex-col items-center justify-center ${
+                          isSelected
+                            ? 'bg-sky-500/25 border-sky-400 text-sky-200 font-bold ring-1 ring-sky-400 shadow-xs'
+                            : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white hover:border-zinc-500'
+                        }`}
+                      >
+                        <span className="font-bold text-[11px]">{unit.label}</span>
+                        <span className="text-[9px] text-zinc-400 mt-0.5">{unit.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Density & Font Scale */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
             {/* Density */}
             <div className="p-3.5 rounded-xl border border-[var(--steel-line)] bg-[var(--panel-raised)] space-y-1">
               <div className="font-bold text-[var(--text)]">Data Density</div>

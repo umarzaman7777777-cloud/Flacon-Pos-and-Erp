@@ -388,17 +388,13 @@
         const result = await auth.signInWithPopup(provider);
         handleCredential(result);
       } catch (err) {
-        console.warn("Popup attempt notice, falling back to redirect:", err);
-        if (
-          err.code === "auth/popup-blocked" || 
-          err.code === "auth/popup-closed-by-user" || 
-          err.code === "auth/cancelled-popup-request" ||
-          (err.message && err.message.toLowerCase().includes("popup"))
-        ) {
-          setStatus("Opening Google Login via full redirect...", "loading");
-          auth.signInWithRedirect(provider);
+        console.warn("Popup attempt notice:", err);
+        if (err.code === "auth/popup-blocked") {
+          setStatus("⚠️ Popup was blocked. Please tap the lock/settings icon in your browser address bar and enable 'Pop-ups and redirects', then tap Authorize again.", "error");
+        } else if (err.code === "auth/popup-closed-by-user") {
+          setStatus("Sign-in window was closed. Please tap Authorize to try again.", "error");
         } else {
-          setStatus("Authentication error: " + (err.message || err.code), "error");
+          setStatus("Sign-in notice: " + (err.message || err.code) + "<br/><span style='font-size:11px;color:#94a3b8;'>Tip: Clear Chrome browser cookies or open in Incognito if Google shows Error 400.</span>", "error");
         }
       }
     });

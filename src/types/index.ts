@@ -105,6 +105,7 @@ export interface VisualSettings {
   theme: ThemeMode;
   logoTheme: LogoTheme;
   showBlueprintGrid?: boolean;
+  blueprintGridScale?: number; // Minor division scale in pixels (10px - 80px, default 20px)
   density?: 'comfortable' | 'compact';
   fontSize?: 'small' | 'normal' | 'large';
   reduceMotion?: boolean;
@@ -178,6 +179,27 @@ export interface RodBlueprintSpecs {
   garterPinMaterial?: 'zinc_plated_steel' | 'stainless_steel' | 'brass';
   finishColor?: string;
   notes?: string;
+  // Extended Precision Engineering & Factory Detail Specs
+  topHoleOffsetMm?: number;
+  bottomHoleOffsetMm?: number;
+  slitWidthMm?: number;
+  slitLengthMm?: number;
+  slitOffsetMm?: number;
+  wallThicknessMm?: number;
+  innerDiameterMm?: number;
+  pipeEndCut?: 'square_deburred' | 'chamfer_45' | 'beveled' | 'slotted';
+  clampBoltSize?: 'M6' | 'M8' | 'M10';
+  clampEarWidthMm?: number;
+  clampEarSpacingMm?: number;
+  clampBoltLengthMm?: number;
+  maxWiringCables?: number;
+  coatingType?: 'powder_coated' | 'liquid_enamel' | 'chrome_plated' | 'galvanized' | 'raw_primed';
+  toleranceMm?: number;
+  loadRatingKg?: number;
+  tensileStrengthKg?: number;
+  engineerSignOff?: string;
+  cadRevision?: string;
+  batchCode?: string;
 }
 
 export interface Product {

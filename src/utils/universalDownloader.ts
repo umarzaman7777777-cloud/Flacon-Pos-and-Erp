@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { saveFileNatively, shareFileNatively } from './nativeFileSaver';
+import { openExternalUrl } from './openExternalUrl';
 import { triggerHaptic } from './haptics';
 
 /**
@@ -284,14 +285,15 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
     }
   }
 
-  // 3. WhatsApp Direct Share Link Fallback
+  // 3. Fallback: External System Share via Browser / WhatsApp
   try {
     const textMsg = encodeURIComponent(
       `*Falcon Rod Maker — Export Archive*\n📄 *File:* ${fileName}\n${
         payload.title ? `📝 ${payload.title}\n` : ''
       }Generated from Falcon POS & ERP Terminal`
     );
-    window.open(`https://api.whatsapp.com/send?text=${textMsg}`, '_blank');
+    const waUrl = `https://api.whatsapp.com/send?text=${textMsg}`;
+    await openExternalUrl(waUrl);
     triggerHaptic('click');
     return { success: true, method: 'whatsapp-direct' };
   } catch (_) {

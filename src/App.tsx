@@ -49,6 +49,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { LockScreen } from './components/LockScreen';
 import { AppOpeningSplash } from './components/AppOpeningSplash';
 import { TopBar } from './components/TopBar';
+import { BlueprintRulerOverlay } from './components/BlueprintRulerOverlay';
 import { Sidebar } from './components/Sidebar';
 import { OverviewView } from './components/OverviewView';
 import { ProductsView } from './components/ProductsView';
@@ -172,9 +173,96 @@ export const App: React.FC = () => {
             };
 
             if (parsed.transactions && Array.isArray(parsed.transactions)) {
-              parsed.transactions.forEach((tx: any) => {
-                if (tx.itemsSummary) tx.itemsSummary = sanitizeText(tx.itemsSummary);
+              let repairedCount = 0;
+              parsed.transactions = parsed.transactions.map((tx: any, idx: number) => {
+                let modified = false;
+                if (tx.itemsSummary) {
+                  const sanitized = sanitizeText(tx.itemsSummary);
+                  if (sanitized !== tx.itemsSummary) {
+                    tx.itemsSummary = sanitized;
+                    modified = true;
+                  }
+                }
+
+                // Ensure valid string ID
+                if (!tx.id || typeof tx.id !== 'string') {
+                  tx.id = String(idx + 1).padStart(4, '0');
+                  modified = true;
+                }
+
+                // Ensure total is numeric
+                if (typeof tx.total !== 'number' || isNaN(tx.total)) {
+                  tx.total = parseFloat(tx.total) || 0;
+                  modified = true;
+                }
+
+                // Ensure itemCount is valid
+                if (typeof tx.itemCount !== 'number' || isNaN(tx.itemCount) || tx.itemCount <= 0) {
+                  const sumParts = tx.itemsSummary ? tx.itemsSummary.split(/\s*\+\s*|\n|;/) : [];
+                  let count = 0;
+                  sumParts.forEach((p: string) => {
+                    const m = p.match(/^(\d+)\s*x/i);
+                    count += m ? parseInt(m[1], 10) : 1;
+                  });
+                  tx.itemCount = count > 0 ? count : 1;
+                  modified = true;
+                }
+
+                // Backfill itemCounts if missing
+                if (!tx.itemCounts && tx.itemsSummary) {
+                  const parts = tx.itemsSummary.split(/\s*\+\s*|\n|;/).filter(Boolean);
+                  const counts: number[] = [];
+                  parts.forEach((p: string) => {
+                    const m = p.match(/^(\d+)\s*x/i);
+                    counts.push(m ? parseInt(m[1], 10) : 1);
+                  });
+                  if (counts.length > 0) {
+                    tx.itemCounts = counts.join(', ');
+                    modified = true;
+                  }
+                }
+
+                // Backfill itemRates if missing
+                if (!tx.itemRates && tx.itemsSummary) {
+                  const parts = tx.itemsSummary.split(/\s*\+\s*|\n|;/).filter(Boolean);
+                  const total = tx.total || 0;
+                  const totalQty = tx.itemCount || parts.length || 1;
+                  const avgRate = Math.round(total / totalQty);
+                  tx.itemRates = parts.map(() => avgRate).join(', ');
+                  modified = true;
+                }
+
+                // Ensure customer/factory has a fallback
+                if (!tx.factory || typeof tx.factory !== 'string' || !tx.factory.trim()) {
+                  tx.factory = 'Walk-in Customer';
+                  modified = true;
+                }
+
+                // Ensure date and time
+                if (!tx.date) {
+                  tx.date = todayISO();
+                  modified = true;
+                }
+                if (!tx.time) {
+                  tx.time = '12:00';
+                  modified = true;
+                }
+
+                // Ensure boolean flags
+                if (typeof tx.confirmed !== 'boolean') {
+                  tx.confirmed = !!tx.receiptUrl;
+                  modified = true;
+                }
+                if (typeof tx.paid !== 'boolean') {
+                  tx.paid = false;
+                  modified = true;
+                }
+
+                if (modified) repairedCount++;
+                return tx;
               });
+
+              console.info(`[Falcon ERP] Storage state validated: ${parsed.transactions.length} transactions loaded (${repairedCount} normalized/repaired).`);
             }
             if (parsed.customerLedgers && Array.isArray(parsed.customerLedgers)) {
               parsed.customerLedgers.forEach((cl: any) => {
@@ -609,45 +697,110 @@ export const App: React.FC = () => {
   };
 
   const handleCheckoutUnpaid = (factoryName: string, orderDate: string) => {
-    if (state.cart.length === 0) return;
+    if (!state.cart || state.cart.length === 0) {
+      console.warn('[Falcon ERP] handleCheckoutUnpaid aborted: Cart is empty.');
+      return;
+    }
     hapticTransactionComplete();
 
-    const totalAmount = state.cart.reduce((sum, line) => sum + line.price * line.qty, 0);
-    const totalItems = state.cart.reduce((sum, line) => sum + line.qty, 0);
-    const summaryStr = state.cart.map(c => `${c.qty}x ${c.name}`).join(' + ');
-    const colorsStr = state.cart.map(c => c.color).filter(Boolean).join(', ');
-    const sizesStr = state.cart.map(c => c.size).filter(Boolean).join(', ');
+    // 1. Validate & sanitize parameters
+    const safeCustomer = (factoryName && typeof factoryName === 'string' && factoryName.trim())
+      ? factoryName.trim()
+      : 'Walk-in Customer';
+    const safeDate = (orderDate && typeof orderDate === 'string' && orderDate.trim())
+      ? orderDate.trim()
+      : todayISO();
+    const safeTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+    // 2. Validate Cart Lines & Compute Metrics
+    const validLines = state.cart.map((line, idx) => {
+      const qty = typeof line.qty === 'number' && !isNaN(line.qty) && line.qty > 0 ? line.qty : 1;
+      const price = typeof line.price === 'number' && !isNaN(line.price) && line.price >= 0 ? line.price : 0;
+      const name = line.name?.trim() || `Down Rod Item #${idx + 1}`;
+      const size = line.size?.trim() ? line.size.trim() : '-';
+      const color = line.color?.trim() ? line.color.trim() : '-';
+      return {
+        ...line,
+        qty,
+        price,
+        name,
+        size,
+        color
+      };
+    });
+
+    const totalAmount = validLines.reduce((sum, line) => sum + line.price * line.qty, 0);
+    const totalItems = validLines.reduce((sum, line) => sum + line.qty, 0);
+
+    // 3. Construct 1:1 positional metadata arrays to prevent misalignment in invoices and breakdowns
+    const summaryStr = validLines.map(c => `${c.qty}x ${c.name}`).join(' + ');
+    const countsStr = validLines.map(c => String(c.qty)).join(', ');
+    const ratesStr = validLines.map(c => String(c.price)).join(', ');
+    const productIdsStr = validLines.map(c => String(c.id)).join(', ');
+    const sizesStr = validLines.map(c => c.size).join(', ');
+    const colorsStr = validLines.map(c => c.color).join(', ');
+
+    // 4. Ensure next order ID is valid and collision-free
+    let assignedId = state.nextTxnId;
+    if (!assignedId || isNaN(parseInt(assignedId, 10))) {
+      assignedId = '0001';
+    }
+    const existingIds = new Set(state.transactions.map(t => t.id));
+    if (existingIds.has(assignedId)) {
+      const maxNum = state.transactions.reduce((max, t) => {
+        const n = parseInt(t.id, 10);
+        return !isNaN(n) && n > max ? n : max;
+      }, 0);
+      assignedId = String(maxNum + 1).padStart(4, '0');
+      console.warn(`[Falcon ERP] ID collision detected. Auto-adjusted nextTxnId to #${assignedId}`);
+    }
 
     const newTxn: Transaction = {
-      id: state.nextTxnId,
-      date: orderDate,
-      time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      id: assignedId,
+      date: safeDate,
+      time: safeTime,
       total: totalAmount,
       itemCount: totalItems,
+      itemCounts: countsStr,
+      itemRates: ratesStr,
+      itemProductIds: productIdsStr,
       paid: false,
       itemsSummary: summaryStr,
-      factory: factoryName,
-      colors: colorsStr || undefined,
-      sizes: sizesStr || undefined,
-      confirmed: false
+      factory: safeCustomer,
+      colors: colorsStr,
+      sizes: sizesStr,
+      confirmed: false,
+      device: 'POS-Terminal'
     };
 
-    // Calculate next order id, e.g. "0005" -> "0006"
-    const nextNum = parseInt(state.nextTxnId, 10) + 1;
+    console.info('[Falcon ERP] handleCheckoutUnpaid: New transaction created & validated:', {
+      orderId: newTxn.id,
+      customer: newTxn.factory,
+      itemCount: newTxn.itemCount,
+      total: newTxn.total,
+      itemCounts: newTxn.itemCounts,
+      itemRates: newTxn.itemRates,
+      sizes: newTxn.sizes,
+      colors: newTxn.colors,
+      lineItemsCount: validLines.length
+    });
+
+    // 5. Calculate next order id, e.g. "0005" -> "0006"
+    const nextNum = parseInt(assignedId, 10) + 1;
     const nextIdStr = String(nextNum).padStart(4, '0');
 
-    // Also append a Debit entry in this factory's customer ledger
+    // 6. Also append a Debit entry in this factory's customer ledger
     const updatedCustomerLedgers = prevCustomerLedgersAddDebit(
       state.customerLedgers,
-      factoryName,
-      `Order #${state.nextTxnId} (${summaryStr})`,
+      safeCustomer,
+      `Order #${assignedId} (${summaryStr})`,
       totalAmount,
-      orderDate
+      safeDate
     );
 
-    // Automatically decrement finished goods inventory stock
+    // 7. Automatically decrement finished goods inventory stock
     const cartProductQty: Record<string, number> = {};
-    state.cart.forEach(c => {
+    validLines.forEach(c => {
       cartProductQty[c.name] = (cartProductQty[c.name] || 0) + c.qty;
     });
     const updatedProducts = state.products.map(p => {
@@ -658,9 +811,9 @@ export const App: React.FC = () => {
       return p;
     });
 
-    // Dispatch native push notification if enabled
-    sendNativeNotification(`Order #${state.nextTxnId} Created`, {
-      body: `${factoryName || 'Walk-in'}: Rs. ${totalAmount.toLocaleString()} (${summaryStr})`,
+    // 8. Dispatch native push notification if enabled
+    sendNativeNotification(`Order #${assignedId} Created`, {
+      body: `${safeCustomer}: Rs. ${totalAmount.toLocaleString()} (${summaryStr})`,
       icon: '/falcon-theme-rod-logo.svg'
     });
 
@@ -675,8 +828,10 @@ export const App: React.FC = () => {
 
     setState(updatedState);
 
-    // Sync newly created transaction to Google Sheets live mirror if connected
+    // 9. Sync newly created transaction to Google Sheets live mirror if connected
     workspaceSync.syncTransactionToSheets(newTxn, updatedState);
+
+    console.info(`[Falcon ERP] State committed with Order #${assignedId}. Total transactions in state: ${updatedState.transactions.length}`);
 
     setActiveView('transactions');
   };
@@ -712,10 +867,47 @@ export const App: React.FC = () => {
   // ----------------------------------------------------
   const handleConfirmOrder = (id: string) => {
     hapticTap();
-    setState(prev => ({
-      ...prev,
-      transactions: prev.transactions.map(t => (t.id === id ? { ...t, confirmed: true } : t))
-    }));
+    console.info(`[Falcon ERP] handleConfirmOrder called for Order #${id}`);
+    setState(prev => {
+      const target = prev.transactions.find(t => t.id === id);
+      if (!target) {
+        console.warn(`[Falcon ERP] handleConfirmOrder: Order #${id} not found in state transactions.`);
+        return prev;
+      }
+      if (target.confirmed) {
+        console.info(`[Falcon ERP] Order #${id} is already confirmed in sales.`);
+        return prev;
+      }
+
+      const updatedTransactions = prev.transactions.map(t => {
+        if (t.id === id) {
+          const isDelivered = !!t.receiptUrl;
+          return {
+            ...t,
+            confirmed: true,
+            gatePassVerified: isDelivered ? true : (t.gatePassVerified ?? false)
+          };
+        }
+        return t;
+      });
+
+      const confirmedTxn = updatedTransactions.find(t => t.id === id)!;
+      console.info(`[Falcon ERP] Order #${id} successfully confirmed into sales.`, {
+        orderId: id,
+        customer: confirmedTxn.factory,
+        total: confirmedTxn.total,
+        receiptUrl: confirmedTxn.receiptUrl ? 'Present' : 'None',
+        gatePassVerified: confirmedTxn.gatePassVerified
+      });
+
+      // Synchronize confirmed status with Google Sheets live mirror if connected
+      workspaceSync.syncTransactionToSheets(confirmedTxn, { ...prev, transactions: updatedTransactions });
+
+      return {
+        ...prev,
+        transactions: updatedTransactions
+      };
+    });
   };
 
   const handleRecordPayment = (txnId: string, amount: number, method: string, detail: string) => {
@@ -1960,10 +2152,32 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`h-screen h-[100dvh] max-h-screen flex flex-col bg-[var(--canvas)] text-[var(--text)] transition-colors duration-200 overflow-hidden ${
+      className={`h-screen h-[100dvh] max-h-screen flex flex-col bg-[var(--canvas)] text-[var(--text)] transition-colors duration-200 overflow-hidden relative ${
         state.visualSettings.showBlueprintGrid ? 'blueprint-bg' : ''
       }`}
     >
+      {/* Industrial CAD Blueprint Grid Background Overlay */}
+      {state.visualSettings.showBlueprintGrid && (
+        <div
+          className="fixed inset-0 pointer-events-none z-0 blueprint-grid-overlay animate-in fade-in duration-300"
+          style={{
+            '--grid-minor': `${state.visualSettings.blueprintGridScale || 20}px`,
+            '--grid-major': `${(state.visualSettings.blueprintGridScale || 20) * 5}px`
+          } as React.CSSProperties}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Blueprint Grid Numeric Coordinate Rulers & Floating Quick-Toggle HUD */}
+      <BlueprintRulerOverlay
+        gridScale={state.visualSettings.blueprintGridScale || 20}
+        showGrid={!!state.visualSettings.showBlueprintGrid}
+        theme={state.visualSettings.theme === 'light' ? 'light' : 'dark'}
+        onToggleGrid={() =>
+          handleUpdateVisualSettings({ showBlueprintGrid: !state.visualSettings.showBlueprintGrid })
+        }
+      />
+
       {/* Top Navigation Bar */}
       <TopBar
         theme={state.visualSettings.theme === 'light' ? 'light' : 'dark'}
@@ -1979,6 +2193,11 @@ export const App: React.FC = () => {
         sheetsConnected={workspaceSync.sheetsConnected}
         driveConnected={workspaceSync.driveConnected}
         isSyncingWorkspace={workspaceSync.isSyncingSheets || workspaceSync.isUploadingDrive}
+        isAutoAuthenticating={workspaceSync.isAutoAuthenticating}
+        showBlueprintGrid={!!state.visualSettings.showBlueprintGrid}
+        onToggleBlueprintGrid={() =>
+          handleUpdateVisualSettings({ showBlueprintGrid: !state.visualSettings.showBlueprintGrid })
+        }
         onOpenWorkspaceModal={() => setIsWorkspaceModalOpen(true)}
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
         onToggleTheme={() => {
@@ -2332,6 +2551,7 @@ export const App: React.FC = () => {
               initialTab={activeView === 'exports' ? 'exports' : 'catalog'}
               onAddToCart={handleAddToCart}
               onNavigateToPos={() => setActiveView('products')}
+              onSaveProduct={handleSaveProduct}
             />
           )}
 
@@ -2459,6 +2679,8 @@ export const App: React.FC = () => {
         onDisconnectDrive={workspaceSync.disconnectDrive}
         onToggleDriveAutoBackup={workspaceSync.toggleDriveAutoBackup}
         onChangeDriveAutoBackupInterval={workspaceSync.changeDriveAutoBackupInterval}
+        onAutoSyncNow={workspaceSync.autoSyncNow}
+        isAutoAuthenticating={workspaceSync.isAutoAuthenticating}
         onNavigateToBackupTab={tab => {
           setBackupInitialTab(tab);
           setActiveView('backup');

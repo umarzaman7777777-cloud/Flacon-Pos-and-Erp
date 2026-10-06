@@ -3,7 +3,7 @@ import { auth, db, googleProvider } from '../firebase/config';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { notifyWorkspaceSyncUpdated, isNativeOrLocalEnvironment, storeSheetsToken } from './googleSheetsSync';
-import { getPersistent, setPersistent, removePersistent } from './persistentStorage';
+import { getPersistent, setPersistent, removePersistent, publishWorkspaceTokensToFirestore, autoSyncWorkspaceFromCloud } from './persistentStorage';
 
 declare global {
   interface Window {
@@ -69,6 +69,13 @@ export function storeDriveToken(token: string, expiresInSeconds: number = 3600, 
     if (email) {
       setPersistent(STORAGE_KEY_EMAIL, email);
     }
+    // Automatically replicate to Firestore cloud sync
+    publishWorkspaceTokensToFirestore({
+      driveToken: token,
+      expiresInSec: validDuration,
+      email: email || 'umarzaman7777777@gmail.com',
+      driveFolderId: getStoredDriveFolderId() || undefined
+    }).catch(() => {});
     notifyWorkspaceSyncUpdated();
   } catch (err) {
     console.error('Failed to store Drive token', err);
@@ -201,20 +208,25 @@ export function setDriveAutoBackupEnabled(enabled: boolean): void {
 }
 
 /**
- * Direct device-local token helpers (Cloud token sharing disabled per user preference)
+ * Cloud token helpers for automatic sync across all app launches and devices
  */
 export async function syncDriveTokenFromCloud(): Promise<DriveTokenInfo | null> {
-  // Tokens are strictly managed locally on this device
+  await autoSyncWorkspaceFromCloud();
   return getStoredDriveToken();
 }
 
 export async function publishDriveTokenToCloud(
-  _token: string,
-  _expiresInSec: number,
-  _email: string,
-  _folderId?: string
+  token: string,
+  expiresInSec: number = 3600,
+  email: string = 'umarzaman7777777@gmail.com',
+  folderId?: string
 ): Promise<void> {
-  // Disabled: Clean device-only authorization without cloud token exposure
+  await publishWorkspaceTokensToFirestore({
+    driveToken: token,
+    expiresInSec,
+    email,
+    driveFolderId: folderId
+  });
 }
 
 /**

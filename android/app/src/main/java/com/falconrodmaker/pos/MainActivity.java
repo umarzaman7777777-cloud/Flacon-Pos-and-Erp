@@ -95,6 +95,39 @@ public class MainActivity extends BridgeActivity {
                                 public boolean shouldOverrideUrlLoading(WebView view, String url) {
                                     if (url == null) return false;
                                     try {
+                                        // 0. WhatsApp App Scheme & Web Links
+                                        if (url.startsWith("whatsapp://")) {
+                                            try {
+                                                Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                                                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                                MainActivity.this.startActivity(waIntent);
+                                                if (authDialog.isShowing()) {
+                                                    authDialog.dismiss();
+                                                }
+                                                return true;
+                                            } catch (Exception notInstalled) {
+                                                try {
+                                                    Intent playStore = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.whatsapp"));
+                                                    playStore.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                                    MainActivity.this.startActivity(playStore);
+                                                    if (authDialog.isShowing()) authDialog.dismiss();
+                                                    return true;
+                                                } catch (Exception ignored) {}
+                                            }
+                                        }
+
+                                        if (url.contains("api.whatsapp.com") || url.contains("wa.me")) {
+                                            try {
+                                                Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                                                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                                MainActivity.this.startActivity(waIntent);
+                                                if (authDialog.isShowing()) {
+                                                    authDialog.dismiss();
+                                                }
+                                                return true;
+                                            } catch (Exception ignored) {}
+                                        }
+
                                         // 1. Android Intent URLs (intent://... -> launch Google Sheets/Drive app directly)
                                         if (url.startsWith("intent://") || url.startsWith("market://")) {
                                             Intent intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
@@ -619,14 +652,39 @@ public class MainActivity extends BridgeActivity {
                 );
 
                 Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                shareIntent.setType(mimeType);
+                String resolvedMime = (mimeType != null && !mimeType.isEmpty() && !mimeType.equals("application/octet-stream"))
+                    ? mimeType
+                    : (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) ? "image/jpeg"
+                    : fileName.endsWith(".png") ? "image/png"
+                    : fileName.endsWith(".pdf") ? "application/pdf"
+                    : "image/jpeg";
+                shareIntent.setType(resolvedMime);
                 shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                shareIntent.setClipData(android.content.ClipData.newRawUri("Export File", contentUri));
                 shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                java.util.List<android.content.pm.ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(shareIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+                for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
+                    String packageName = resolveInfo.activityInfo.packageName;
+                    getContext().grantUriPermission(packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
 
                 Intent chooser = Intent.createChooser(shareIntent, "Share " + fileName);
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getContext().startActivity(chooser);
+
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            getActivity().startActivity(chooser);
+                        } catch (Exception actErr) {
+                            try {
+                                getContext().startActivity(chooser);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                });
 
                 JSObject ret = new JSObject();
                 ret.put("success", true);

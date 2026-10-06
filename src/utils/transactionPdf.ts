@@ -22,10 +22,16 @@ export interface ParsedItemRow {
 
 export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
   const parts = txn.itemsSummary ? txn.itemsSummary.split(/\s*\+\s*|\n|;/).filter(Boolean) : [];
-  const countParts = txn.itemCounts ? txn.itemCounts.split(/[,;]/).map(s => parseFloat(s.trim())).filter(n => !isNaN(n)) : [];
-  const rateParts = txn.itemRates ? txn.itemRates.split(/[,;]/).map(s => parseFloat(s.trim())).filter(n => !isNaN(n)) : [];
-  const sizeParts = txn.sizes ? txn.sizes.split(/[,;]/).map(s => s.trim()).filter(Boolean) : [];
-  const colorParts = txn.colors ? txn.colors.split(/[,;]/).map(s => s.trim()).filter(Boolean) : [];
+  const countParts = txn.itemCounts ? txn.itemCounts.split(/[,;]/).map(s => {
+    const n = parseFloat(s.trim());
+    return isNaN(n) ? undefined : n;
+  }) : [];
+  const rateParts = txn.itemRates ? txn.itemRates.split(/[,;]/).map(s => {
+    const n = parseFloat(s.trim());
+    return isNaN(n) ? undefined : n;
+  }) : [];
+  const sizeParts = txn.sizes ? txn.sizes.split(/[,;]/).map(s => s.trim()) : [];
+  const colorParts = txn.colors ? txn.colors.split(/[,;]/).map(s => s.trim()) : [];
 
   const sanitizeName = (rawName: string) => {
     return rawName
@@ -50,8 +56,8 @@ export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
       qty: txn.itemCount || 1,
       rate: txn.total / (txn.itemCount || 1),
       total: txn.total,
-      size: txn.sizes,
-      color: txn.colors
+      size: txn.sizes && txn.sizes !== '-' ? txn.sizes : undefined,
+      color: txn.colors && txn.colors !== '-' ? txn.colors : undefined
     }];
   }
 
@@ -64,14 +70,14 @@ export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
     if (match) {
       qty = parseInt(match[1], 10);
       name = sanitizeName(match[2].trim());
-    } else if (countParts[index]) {
-      qty = countParts[index];
+    } else if (countParts[index] !== undefined) {
+      qty = countParts[index]!;
     } else if (parts.length === 1 && txn.itemCount) {
       qty = txn.itemCount;
     }
 
     let rate = rateParts[index];
-    if (!rate || isNaN(rate)) {
+    if (rate === undefined || isNaN(rate)) {
       if (parts.length === 1) {
         rate = Math.round(txn.total / Math.max(1, qty));
       } else {
@@ -79,14 +85,20 @@ export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
       }
     }
 
+    const rawSize = sizeParts[index] || (parts.length === 1 ? txn.sizes : undefined);
+    const cleanSize = rawSize && rawSize !== '-' && rawSize !== '—' ? rawSize : undefined;
+
+    const rawColor = colorParts[index] || (parts.length === 1 ? txn.colors : undefined);
+    const cleanColor = rawColor && rawColor !== '-' && rawColor !== '—' ? rawColor : undefined;
+
     const total = qty * rate;
     return {
       name,
       qty,
       rate,
       total,
-      size: sizeParts[index] || sizeParts[0] || txn.sizes,
-      color: colorParts[index] || colorParts[0] || txn.colors
+      size: cleanSize,
+      color: cleanColor
     };
   });
 }

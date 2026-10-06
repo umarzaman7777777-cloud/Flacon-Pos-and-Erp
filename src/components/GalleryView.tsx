@@ -31,13 +31,21 @@ import {
   Loader2,
   RotateCcw,
   Wrench,
-  Share2
+  Share2,
+  Maximize2,
+  SlidersHorizontal,
+  Save,
+  FileDown,
+  Settings2,
+  Shield,
+  Circle
 } from 'lucide-react';
 import { Product, AppLanguage, RecipeItem, ExportedItem, RodBlueprintSpecs } from '../types';
 import { DesignBlueprintStudio, RodBlueprintSvgOverlay } from './DesignBlueprintStudio';
 import { RodBlueprintStudioModal, defaultBlueprintSpecs } from './RodBlueprintStudioModal';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, parseDiameterToInches } from '../utils/helpers';
+import { fmt, parseDiameterToInches, formatDiameterMm, STANDARD_DIAMETER_OPTIONS } from '../utils/helpers';
+import { exportRodBlueprintPDF } from '../utils/blueprintPdfExport';
 import {
   getExportedItems,
   loadExportedItems,
@@ -59,6 +67,7 @@ interface GalleryViewProps {
   initialTab?: 'catalog' | 'custom_designer' | 'exports';
   onAddToCart: (product: Product, color?: string, size?: string) => void;
   onNavigateToPos?: () => void;
+  onSaveProduct?: (product: Product) => void;
 }
 
 // Technical fan down rod SVG engineering visualizer component
@@ -564,7 +573,8 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   companyName,
   initialTab = 'catalog',
   onAddToCart,
-  onNavigateToPos
+  onNavigateToPos,
+  onSaveProduct
 }) => {
   const [selectedCat, setSelectedCat] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -596,6 +606,16 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       }
       return updated;
     });
+
+    if (onSaveProduct) {
+      const found = products.find(p => p.id === productId);
+      if (found) {
+        onSaveProduct({
+          ...found,
+          blueprintSpecs: updatedSpecs
+        });
+      }
+    }
   };
 
   React.useEffect(() => {
@@ -674,7 +694,17 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
     return () => unsubscribe();
   }, []);
 
-  // Custom Fan Rod Designer State
+  // Comprehensive CAD Blueprint Designer & Specification State
+  const [selectedCatalogProductId, setSelectedCatalogProductId] = useState<number | 'custom'>('custom');
+  const [designerTab, setDesignerTab] = useState<'dimensions' | 'clamps' | 'holes' | 'threads' | 'cotter_pin' | 'finish_qa'>('dimensions');
+  const [designerCadViewMode, setDesignerCadViewMode] = useState<'assembly' | 'rod' | 'clamps' | 'garter_pin' | 'exploded'>('assembly');
+  const [customDiameterInput, setCustomDiameterInput] = useState<string>('');
+  const [designerSaveSuccess, setDesignerSaveSuccess] = useState<boolean>(false);
+  const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
+  const [pdfSuccess, setPdfSuccess] = useState<boolean>(false);
+  const designerSvgRef = React.useRef<SVGSVGElement | null>(null);
+
+  // Core dimensional & engineering parameters
   const [calcDiameter, setCalcDiameter] = useState<number>(18);
   const [calcSpokes, setCalcSpokes] = useState<number>(12);
   const [calcGauge, setCalcGauge] = useState<string>('16 Gauge');
@@ -686,6 +716,193 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   const [calcThreadStandard, setCalcThreadStandard] = useState<'BSPT' | 'Metric'>('BSPT');
   const [calcHasTopClamp, setCalcHasTopClamp] = useState<boolean>(true);
   const [calcHasBottomClamp, setCalcHasBottomClamp] = useState<boolean>(true);
+
+  // Extended precision detail specifications
+  const [calcRodType, setCalcRodType] = useState<'ceiling' | 'pedestal'>('ceiling');
+  const [calcClampStyle, setCalcClampStyle] = useState<'standard' | 'heavy_duty' | 'ring_collar' | 'welded_flange' | 'telescopic_sleeve'>('standard');
+  const [calcHoleSizeMm, setCalcHoleSizeMm] = useState<number>(8);
+  const [calcTopHoleCount, setCalcTopHoleCount] = useState<number>(1);
+  const [calcBottomHoleCount, setCalcBottomHoleCount] = useState<number>(2);
+  const [calcTopHoleOffsetMm, setCalcTopHoleOffsetMm] = useState<number>(15);
+  const [calcBottomHoleOffsetMm, setCalcBottomHoleOffsetMm] = useState<number>(25);
+  const [calcSlitWidthMm, setCalcSlitWidthMm] = useState<number>(3.5);
+  const [calcSlitLengthMm, setCalcSlitLengthMm] = useState<number>(18);
+  const [calcHasWireConduit, setCalcHasWireConduit] = useState<boolean>(true);
+  const [calcMaxWiringCables, setCalcMaxWiringCables] = useState<number>(4);
+  const [calcCanopyRings, setCalcCanopyRings] = useState<boolean>(true);
+  const [calcHasGarterPin, setCalcHasGarterPin] = useState<boolean>(true);
+  const [calcGarterPinType, setCalcGarterPinType] = useState<'split_cotter' | 'hairpin_r_clip' | 'through_bolt_locknut'>('split_cotter');
+  const [calcGarterPinDiameterMm, setCalcGarterPinDiameterMm] = useState<number>(3.2);
+  const [calcGarterPinLengthMm, setCalcGarterPinLengthMm] = useState<number>(45);
+  const [calcGarterPinMaterial, setCalcGarterPinMaterial] = useState<'zinc_plated_steel' | 'stainless_steel' | 'brass'>('zinc_plated_steel');
+  const [calcClampBoltSize, setCalcClampBoltSize] = useState<'M6' | 'M8' | 'M10'>('M8');
+  const [calcClampEarWidthMm, setCalcClampEarWidthMm] = useState<number>(22);
+  const [calcCoatingType, setCalcCoatingType] = useState<'powder_coated' | 'liquid_enamel' | 'chrome_plated' | 'galvanized' | 'raw_primed'>('powder_coated');
+  const [calcPipeEndCut, setCalcPipeEndCut] = useState<'square_deburred' | 'chamfer_45' | 'beveled' | 'slotted'>('square_deburred');
+  const [calcToleranceMm, setCalcToleranceMm] = useState<number>(0.1);
+  const [calcLoadRatingKg, setCalcLoadRatingKg] = useState<number>(35);
+  const [calcCadRevision, setCalcCadRevision] = useState<string>('Rev A');
+  const [calcEngineerSignOff, setCalcEngineerSignOff] = useState<string>('M. Bilal (Falcon Lead QA)');
+  const [calcNotes, setCalcNotes] = useState<string>('Precision Fan Down Rod Manufacturing Specification Sheet');
+
+  const currentBlueprintSpecs: RodBlueprintSpecs = {
+    rodType: calcRodType,
+    lengthInches: calcDiameter,
+    diameterInches: calcClampSize,
+    gauge: calcGauge,
+    hasTopClamp: calcHasTopClamp,
+    hasBottomClamp: calcHasBottomClamp,
+    clampStyle: calcClampStyle,
+    clampSize: calcClampSize,
+    clampGauge: calcClampGauge,
+    threadType: calcThreadType,
+    threadStandard: calcThreadStandard,
+    holeSizeMm: calcHoleSizeMm,
+    topHoleCount: calcTopHoleCount,
+    bottomHoleCount: calcBottomHoleCount,
+    topHoleOffsetMm: calcTopHoleOffsetMm,
+    bottomHoleOffsetMm: calcBottomHoleOffsetMm,
+    hasSafetySlit: calcHasMono,
+    slitWidthMm: calcSlitWidthMm,
+    slitLengthMm: calcSlitLengthMm,
+    hasWireConduit: calcHasWireConduit,
+    maxWiringCables: calcMaxWiringCables,
+    canopyRings: calcCanopyRings,
+    hasGarterPin: calcHasGarterPin,
+    garterPinType: calcGarterPinType,
+    garterPinDiameterMm: calcGarterPinDiameterMm,
+    garterPinLengthMm: calcGarterPinLengthMm,
+    garterPinMaterial: calcGarterPinMaterial,
+    clampBoltSize: calcClampBoltSize,
+    clampEarWidthMm: calcClampEarWidthMm,
+    coatingType: calcCoatingType,
+    pipeEndCut: calcPipeEndCut,
+    toleranceMm: calcToleranceMm,
+    loadRatingKg: calcLoadRatingKg,
+    cadRevision: calcCadRevision,
+    engineerSignOff: calcEngineerSignOff,
+    finishColor: calcColor,
+    notes: calcNotes
+  };
+
+  const handleLoadProductIntoDesigner = (prodId: number | 'custom') => {
+    setSelectedCatalogProductId(prodId);
+    if (prodId === 'custom') {
+      return;
+    }
+    const found = products.find(p => p.id === prodId);
+    if (!found) return;
+
+    const specs = found.blueprintSpecs;
+    const sizeNum = parseInt(found.size || '18', 10) || 18;
+    setCalcDiameter(specs?.lengthInches || sizeNum);
+    setCalcColor(found.color || specs?.finishColor || 'Matt Black');
+    setCalcGauge(found.gauge || specs?.gauge || '16 Gauge');
+    if (specs) {
+      setCalcRodType(specs.rodType || 'ceiling');
+      setCalcClampSize(specs.clampSize || specs.diameterInches || '3/4"');
+      setCalcClampGauge(specs.clampGauge || '16 Gauge');
+      setCalcHasTopClamp(specs.hasTopClamp ?? true);
+      setCalcHasBottomClamp(specs.hasBottomClamp ?? true);
+      setCalcClampStyle(specs.clampStyle || 'standard');
+      setCalcThreadType(specs.threadType || 'without_thread');
+      setCalcThreadStandard((specs.threadStandard === 'Metric' ? 'Metric' : 'BSPT'));
+      setCalcHoleSizeMm(specs.holeSizeMm || 8);
+      setCalcTopHoleCount(specs.topHoleCount ?? 1);
+      setCalcBottomHoleCount(specs.bottomHoleCount ?? 2);
+      setCalcTopHoleOffsetMm(specs.topHoleOffsetMm ?? 15);
+      setCalcBottomHoleOffsetMm(specs.bottomHoleOffsetMm ?? 25);
+      setCalcSlitWidthMm(specs.slitWidthMm ?? 3.5);
+      setCalcSlitLengthMm(specs.slitLengthMm ?? 18);
+      setCalcHasMono(specs.hasSafetySlit ?? true);
+      setCalcHasWireConduit(specs.hasWireConduit ?? true);
+      setCalcCanopyRings(specs.canopyRings ?? true);
+      setCalcHasGarterPin(specs.hasGarterPin ?? true);
+      setCalcGarterPinType(specs.garterPinType || 'split_cotter');
+      setCalcGarterPinDiameterMm(specs.garterPinDiameterMm || 3.2);
+      setCalcGarterPinLengthMm(specs.garterPinLengthMm || 45);
+      setCalcGarterPinMaterial(specs.garterPinMaterial || 'zinc_plated_steel');
+      setCalcClampBoltSize(specs.clampBoltSize || 'M8');
+      setCalcClampEarWidthMm(specs.clampEarWidthMm || 22);
+      setCalcCoatingType(specs.coatingType || 'powder_coated');
+      setCalcPipeEndCut(specs.pipeEndCut || 'square_deburred');
+      setCalcToleranceMm(specs.toleranceMm || 0.1);
+      setCalcLoadRatingKg(specs.loadRatingKg || 35);
+      setCalcCadRevision(specs.cadRevision || 'Rev A');
+      setCalcEngineerSignOff(specs.engineerSignOff || 'M. Bilal (Falcon Lead QA)');
+      setCalcNotes(specs.notes || found.name);
+    }
+  };
+
+  const handleSaveBlueprintToCatalog = (asNew: boolean = false) => {
+    if (!onSaveProduct) return;
+    
+    if (asNew || selectedCatalogProductId === 'custom') {
+      const newProd: Product = {
+        id: Date.now(),
+        name: `Fan Rod ${calcDiameter}" × Ø${calcClampSize} [${calcGauge.replace(' Gauge', 'G')} · ${calcColor}]`,
+        price: estimatedWholesalePrice,
+        cat: calcRodType === 'pedestal' ? 'Pedestal Extension Rod' : 'Ceiling Fan Down Rod',
+        color: calcColor,
+        size: `${calcDiameter}" × Ø${calcClampSize}`,
+        gauge: calcGauge,
+        weight: `${totalEstimatedWeightKg} kg`,
+        stock: 25,
+        reorderLevel: 5,
+        blueprintSpecs: currentBlueprintSpecs
+      };
+      onSaveProduct(newProd);
+      setSelectedCatalogProductId(newProd.id);
+    } else {
+      const found = products.find(p => p.id === selectedCatalogProductId);
+      if (found) {
+        const updated: Product = {
+          ...found,
+          size: `${calcDiameter}" × Ø${calcClampSize}`,
+          gauge: calcGauge,
+          color: calcColor,
+          weight: `${totalEstimatedWeightKg} kg`,
+          price: found.price || estimatedWholesalePrice,
+          blueprintSpecs: currentBlueprintSpecs
+        };
+        onSaveProduct(updated);
+      }
+    }
+    setDesignerSaveSuccess(true);
+    setTimeout(() => setDesignerSaveSuccess(false), 2200);
+  };
+
+  const handleExportDesignerPDF = async () => {
+    try {
+      setIsExportingPdf(true);
+      const prodForPdf: Product = {
+        id: typeof selectedCatalogProductId === 'number' ? selectedCatalogProductId : Date.now(),
+        name: typeof selectedCatalogProductId === 'number'
+          ? (products.find(p => p.id === selectedCatalogProductId)?.name || `Falcon ${calcDiameter}" × Ø${calcClampSize} Down Rod (${calcColor})`)
+          : `Falcon Fan Rod ${calcDiameter}" × Ø${calcClampSize} [${calcGauge.replace(' Gauge', 'G')} · ${calcColor}]`,
+        price: estimatedWholesalePrice,
+        cat: calcRodType === 'pedestal' ? 'Pedestal Extension Rod' : 'Ceiling Fan Down Rod',
+        color: calcColor,
+        size: `${calcDiameter}" × Ø${calcClampSize}`,
+        gauge: calcGauge,
+        weight: `${totalEstimatedWeightKg} kg`,
+        blueprintSpecs: currentBlueprintSpecs
+      };
+
+      await exportRodBlueprintPDF({
+        product: prodForPdf,
+        specs: currentBlueprintSpecs,
+        companyName,
+        svgElement: designerSvgRef.current
+      });
+      setPdfSuccess(true);
+      setTimeout(() => setPdfSuccess(false), 2500);
+    } catch (err) {
+      console.error('Failed to export blueprint PDF', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
@@ -840,25 +1057,43 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
     setTimeout(() => setCartFeedback(null), 1500);
   };
 
-  // Calculations for custom fan rod designer
-  const pipeUnitWeight = calcGauge === '14 Gauge' ? 0.052 : calcGauge === '16 Gauge' ? 0.042 : calcGauge === '18 Gauge' ? 0.035 : 0.028;
-  const estimatedPipeWeightKg = Math.round((calcDiameter * pipeUnitWeight) * 100) / 100;
+  // Physical engineering calculations for custom fan rod designer
+  const diaInchesVal = parseDiameterToInches(calcClampSize);
+  const diaMmVal = diaInchesVal * 25.4;
+  const wallMmVal = calcGauge === '14 Gauge' ? 2.0 : calcGauge === '16 Gauge' ? 1.6 : calcGauge === '18 Gauge' ? 1.2 : 0.9;
+  // Steel pipe weight: pi * (OD - t) * t * length * steel density (0.00000785 kg/mm3)
+  const pipeWeightPerInchKg = Math.PI * Math.max(1, diaMmVal - wallMmVal) * wallMmVal * 25.4 * 0.00000785;
+  const estimatedPipeWeightKg = Math.round((calcDiameter * pipeWeightPerInchKg) * 100) / 100;
 
-  // Clamp weight based on clamp gauge & size
+  // Clamp weight scaled by clamp gauge and diameter size
   const clampUnitWeight =
     (calcClampGauge === '14 Gauge' ? 0.045 : calcClampGauge === '16 Gauge' ? 0.035 : 0.025) *
-    (calcClampSize === '1-1/2"' ? 1.4 : calcClampSize === '1-1/4"' ? 1.25 : calcClampSize === '1"' ? 1.15 : 1.0);
+    Math.max(0.65, diaInchesVal / 0.75);
   const clampCount = (calcHasTopClamp ? 1 : 0) + (calcHasBottomClamp ? 1 : 0);
   const estimatedFittingsWeightKg = Math.round((clampCount * clampUnitWeight + (calcHasMono ? 0.02 : 0)) * 100) / 100;
 
   const totalEstimatedWeightKg = Math.round((estimatedPipeWeightKg + estimatedFittingsWeightKg) * 100) / 100;
 
-  // Wholesale price taking into account pipe, clamps, threading, and powder coating
+  // Wholesale price taking into account pipe weight, clamp size, threading, and powder coating
   const threadCost = calcThreadType === 'both_ends' ? 65 : calcThreadType !== 'without_thread' ? 35 : 0;
-  const clampBaseCost =
-    clampCount *
-    (calcClampSize === '1-1/2"' ? 45 : calcClampSize === '1-1/4"' ? 35 : calcClampSize === '1"' ? 28 : 22);
+  const clampBaseCost = clampCount * Math.round(18 + diaInchesVal * 16);
   const estimatedWholesalePrice = Math.round(estimatedPipeWeightKg * 290 + clampBaseCost + threadCost + 25);
+
+  const currentBlueprintProduct: Product = {
+    id: typeof selectedCatalogProductId === 'number' ? selectedCatalogProductId : Date.now(),
+    name: typeof selectedCatalogProductId === 'number'
+      ? (products.find(p => p.id === selectedCatalogProductId)?.name || `Falcon ${calcDiameter}" Down Rod (${calcColor})`)
+      : `Falcon Fan Rod ${calcDiameter}" × Ø${calcClampSize} [${calcGauge.replace(' Gauge', 'G')} · ${calcColor}]`,
+    price: estimatedWholesalePrice,
+    cat: calcRodType === 'pedestal' ? 'Pedestal Extension Rod' : 'Ceiling Fan Down Rod',
+    color: calcColor,
+    size: `${calcDiameter}" × Ø${calcClampSize}`,
+    gauge: calcGauge,
+    weight: `${totalEstimatedWeightKg} kg`,
+    stock: 25,
+    reorderLevel: 5,
+    blueprintSpecs: currentBlueprintSpecs
+  };
 
   const handlePrintSpecSheet = () => {
     window.print();
@@ -904,26 +1139,55 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
             <Package size={14} />
             <span>Finished Catalog</span>
           </button>
+          {/* Button 2: Blueprint Designer (Selector 1) */}
           <button
             type="button"
             onClick={() => setActiveTab('custom_designer')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
               activeTab === 'custom_designer'
                 ? 'bg-[var(--yellow)] text-black shadow-sm'
-                : 'text-[var(--text-dim)] hover:text-[var(--text)]'
+                : 'text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--panel)]'
             }`}
+            title="In-Page Interactive CAD Blueprint Workshop: Edit rod dimensions, clamps, hole offsets, threading, cotter pins & materials with full technical details"
           >
-            <Compass size={14} />
+            <Compass size={14} className={activeTab === 'custom_designer' ? 'text-black' : 'text-amber-400'} />
             <span>Blueprint Designer</span>
+            <span className={`hidden md:inline-flex text-[9px] px-1.5 py-0.2 rounded font-sans font-semibold ${
+              activeTab === 'custom_designer' ? 'bg-black/20 text-black' : 'bg-amber-400/10 text-amber-300 border border-amber-400/20'
+            }`}>
+              Live CAD
+            </span>
           </button>
+
+          {/* Button 3: Blueprint Studio (Selector 2) */}
           <button
             type="button"
-            onClick={() => setBlueprintStudioProduct(filteredProducts[0] || products[0])}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition bg-amber-500/15 border border-amber-500/40 text-amber-400 hover:bg-amber-500 hover:text-black shadow-xs cursor-pointer active:scale-95"
-            title="Open Interactive Rod Blueprint Studio to customize ceiling and pedestal rod sizes, clamps, and hole diameters"
+            onClick={() => {
+              const currentProd: Product = typeof selectedCatalogProductId === 'number'
+                ? products.find(p => p.id === selectedCatalogProductId) || filteredProducts[0] || products[0]
+                : {
+                    id: Date.now(),
+                    name: `Falcon Fan Rod ${calcDiameter}" × Ø${calcClampSize} [${calcGauge.replace(' Gauge', 'G')} · ${calcColor}]`,
+                    price: estimatedWholesalePrice,
+                    cat: calcRodType === 'pedestal' ? 'Pedestal Extension Rod' : 'Ceiling Fan Down Rod',
+                    color: calcColor,
+                    size: `${calcDiameter}" × Ø${calcClampSize}`,
+                    gauge: calcGauge,
+                    weight: `${totalEstimatedWeightKg} kg`,
+                    stock: 1,
+                    reorderLevel: 5,
+                    blueprintSpecs: currentBlueprintSpecs
+                  };
+              setBlueprintStudioProduct(currentProd);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition border border-amber-500/35 bg-amber-500/15 text-amber-300 hover:bg-amber-500 hover:text-black shadow-xs cursor-pointer active:scale-95"
+            title="Open Fullscreen Interactive CAD Blueprint Studio Modal with orthographic engineering drawings, 3D exploded view, and PDF export"
           >
-            <Wrench size={13} />
+            <Wrench size={13} className="text-amber-400 group-hover:text-black" />
             <span>Blueprint Studio</span>
+            <span className="hidden md:inline-flex text-[9px] px-1.5 py-0.2 rounded bg-amber-500/25 text-amber-200 font-sans font-semibold border border-amber-500/30">
+              Modal
+            </span>
           </button>
           <button
             type="button"
@@ -1139,428 +1403,1132 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         </>
       )}
 
-      {/* Custom Blueprint Fan Rod Designer / Estimator */}
+      {/* Custom Blueprint Fan Rod Designer / Estimator - Full CAD Engineering Workshop */}
       {activeTab === 'custom_designer' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-7">
-          {/* Controls Left Column */}
-          <div className="lg:col-span-6 space-y-5">
-            <div>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--yellow)] font-bold">
-                Workshop Estimator
-              </span>
-              <h3 className="font-serif font-black text-lg sm:text-xl text-[var(--text)]">
-                Custom Fan Rod Specification Calculator
-              </h3>
-              <p className="text-xs text-[var(--text-dim)] mt-1">
-                Configure dimensional parameters to compute exact steel pipe weight, safety fittings, and manufacturing costs.
-              </p>
-            </div>
-
-            {/* Slider: Rod Length */}
-            <div className="space-y-1.5 bg-[var(--panel-raised)] p-3.5 rounded-xl border border-[var(--steel-line)]">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-[var(--text-dim)]">Rod Length (Inches):</span>
-                <span className="font-bold text-[var(--yellow)] text-sm">{calcDiameter}&quot;</span>
+        <div className="space-y-5">
+          {/* Top Control Bar: Catalog Product Synchronizer & Quick Actions */}
+          <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                <SlidersHorizontal size={20} />
               </div>
-              <input
-                type="range"
-                min="12"
-                max="48"
-                step="6"
-                value={calcDiameter}
-                onChange={e => setCalcDiameter(parseInt(e.target.value, 10))}
-                className="w-full accent-[var(--yellow)] cursor-pointer"
-              />
-              <div className="flex justify-between text-[9px] text-[var(--text-dim)] font-mono">
-                <span>12&quot; (Standard)</span>
-                <span>18&quot; (Popular)</span>
-                <span>24&quot; (Deep)</span>
-                <span>36&quot; (High Ceiling)</span>
-                <span>48&quot; (Industrial)</span>
-              </div>
-            </div>
-
-            {/* Pipe Gauge & Finish Selectors */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono font-bold">Pipe Wall Gauge</label>
-                <select
-                  value={calcGauge}
-                  onChange={e => setCalcGauge(e.target.value)}
-                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-xs text-[var(--text)] focus:outline-none focus:border-[var(--yellow)] font-mono"
-                >
-                  <option value="14 Gauge">14 Gauge (2.0 mm Heavy)</option>
-                  <option value="16 Gauge">16 Gauge (1.6 mm Standard Heavy)</option>
-                  <option value="18 Gauge">18 Gauge (1.2 mm Light Commercial)</option>
-                  <option value="20 Gauge">20 Gauge (0.9 mm Extra Light)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono font-bold">Surface Coating</label>
-                <select
-                  value={calcColor}
-                  onChange={e => setCalcColor(e.target.value)}
-                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-xs text-[var(--text)] focus:outline-none focus:border-[var(--yellow)] font-mono"
-                >
-                  <option value="Matt Black">Matt Black Powder</option>
-                  <option value="Pure White">Pure White Gloss</option>
-                  <option value="Smoke Grey">Smoke Grey Metallic</option>
-                  <option value="Precision Silver">Precision Silver Metallic</option>
-                  <option value="Antique Gold">Antique Gold Brass</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Thread Specification (With Threads / Without Thread) */}
-            <div className="space-y-2 bg-[var(--panel-raised)] p-3.5 rounded-xl border border-[var(--steel-line)]">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-[var(--text)] uppercase text-[11px] font-mono">
-                  Threading Specification (Rod Ends)
-                </span>
-                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                  calcThreadType === 'without_thread'
-                    ? 'bg-zinc-800 text-zinc-300'
-                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                }`}>
-                  {calcThreadType === 'without_thread' ? 'Without Thread (Plain)' : `With Threads (${calcThreadStandard})`}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                <button
-                  type="button"
-                  onClick={() => setCalcThreadType('without_thread')}
-                  className={`p-2 rounded-lg border text-left flex items-center justify-between transition ${
-                    calcThreadType === 'without_thread'
-                      ? 'bg-amber-400 text-black font-bold border-amber-400 shadow-xs'
-                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
-                  }`}
-                >
-                  <span>Without Thread (Through-Bolt)</span>
-                  {calcThreadType === 'without_thread' && <Check size={13} />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCalcThreadType('both_ends')}
-                  className={`p-2 rounded-lg border text-left flex items-center justify-between transition ${
-                    calcThreadType === 'both_ends'
-                      ? 'bg-amber-400 text-black font-bold border-amber-400 shadow-xs'
-                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
-                  }`}
-                >
-                  <span>With Threads (Both Ends)</span>
-                  {calcThreadType === 'both_ends' && <Check size={13} />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCalcThreadType('top_only')}
-                  className={`p-2 rounded-lg border text-left flex items-center justify-between transition ${
-                    calcThreadType === 'top_only'
-                      ? 'bg-amber-400 text-black font-bold border-amber-400 shadow-xs'
-                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
-                  }`}
-                >
-                  <span>With Thread (Top End Only)</span>
-                  {calcThreadType === 'top_only' && <Check size={13} />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCalcThreadType('bottom_only')}
-                  className={`p-2 rounded-lg border text-left flex items-center justify-between transition ${
-                    calcThreadType === 'bottom_only'
-                      ? 'bg-amber-400 text-black font-bold border-amber-400 shadow-xs'
-                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
-                  }`}
-                >
-                  <span>With Thread (Bottom End Only)</span>
-                  {calcThreadType === 'bottom_only' && <Check size={13} />}
-                </button>
-              </div>
-
-              {calcThreadType !== 'without_thread' && (
-                <div className="pt-2 border-t border-[var(--steel-line)] flex items-center justify-between text-xs">
-                  <span className="text-[11px] text-[var(--text-dim)] font-mono">Thread Standard:</span>
-                  <div className="flex gap-2">
-                    {(['BSPT', 'Metric'] as const).map(std => (
-                      <button
-                        key={std}
-                        type="button"
-                        onClick={() => setCalcThreadStandard(std)}
-                        className={`px-2.5 py-1 rounded text-xs font-mono font-bold transition ${
-                          calcThreadStandard === std
-                            ? 'bg-sky-400 text-black'
-                            : 'bg-zinc-800 text-zinc-300 hover:text-white'
-                        }`}
-                      >
-                        {std === 'BSPT' ? 'BSPT (14 TPI Pipe Standard)' : 'Metric Fine (M25 Machine Thread)'}
-                      </button>
-                    ))}
-                  </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-serif font-black text-base sm:text-lg text-[var(--text)] tracking-tight">
+                    CAD Blueprint Designer & Specification Workshop
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold uppercase">
+                    {calcRodType === 'pedestal' ? 'Pedestal Fan Rod' : 'Ceiling Fan Down-Rod'}
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                    {calcDiameter}&quot; ({Math.round(calcDiameter * 25.4)}mm)
+                  </span>
                 </div>
-              )}
+                <p className="text-xs text-[var(--text-dim)] font-mono mt-0.5 truncate">
+                  Full detail CAD engineering: Dimensions, Clamps, Hole Offsets, Lathe Threads, Cotter Pins & Material Specs
+                </p>
+              </div>
             </div>
 
-            {/* Attached Clamp Sizes & Clamp Gauges */}
-            <div className="space-y-2.5 bg-[var(--panel-raised)] p-3.5 rounded-xl border border-[var(--steel-line)]">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-[var(--text)] uppercase text-[11px] font-mono">
-                  Attached Clamp Sizes & Gauges
-                </span>
-                <span className="text-[10px] font-mono font-bold text-amber-400">
-                  {calcClampSize} · {calcClampGauge}
-                </span>
+            {/* Catalog Synchronizer & Studio Modal Launch */}
+            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+              <div className="flex items-center gap-1.5 bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl px-2.5 py-1 text-xs font-mono">
+                <span className="text-[var(--text-dim)] text-[11px] whitespace-nowrap">Load Model:</span>
+                <select
+                  value={selectedCatalogProductId}
+                  onChange={e => {
+                    const val = e.target.value === 'custom' ? 'custom' : parseInt(e.target.value, 10);
+                    handleLoadProductIntoDesigner(val);
+                  }}
+                  className="bg-transparent text-[var(--yellow)] font-bold focus:outline-none cursor-pointer max-w-[160px] sm:max-w-[220px] truncate"
+                >
+                  <option value="custom" className="bg-zinc-900 text-white">✨ New Custom Specification</option>
+                  {products.map(p => (
+                    <option key={p.id} value={p.id} className="bg-zinc-900 text-white">
+                      {p.name} ({p.size || '18"'})
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Clamp Attachment Buttons */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  const currentProd: Product = typeof selectedCatalogProductId === 'number'
+                    ? products.find(p => p.id === selectedCatalogProductId) || currentBlueprintProduct
+                    : currentBlueprintProduct;
+                  setBlueprintStudioProduct(currentProd);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500 hover:text-black font-mono font-bold text-xs transition shadow-xs cursor-pointer active:scale-95"
+                title="Launch Fullscreen CAD Blueprint Studio Modal"
+              >
+                <Maximize2 size={13} />
+                <span className="hidden sm:inline">Fullscreen</span> Studio
+              </button>
+            </div>
+          </div>
+
+          {/* Main 2-Column Workshop: Detailed Tabs on Left, Live Vector Blueprint on Right */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-4 sm:p-6">
+            {/* LEFT COLUMN: 6 Detailed Engineering Tabs */}
+            <div className="lg:col-span-7 flex flex-col space-y-4">
+              {/* Tab Navigation Strip */}
+              <div className="flex flex-wrap gap-1 p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-mono font-bold">
                 {[
-                  { label: 'Dual Clamps', top: true, bottom: true },
-                  { label: 'Top Only', top: true, bottom: false },
-                  { label: 'Bottom Only', top: false, bottom: true },
-                  { label: 'Without Clamps', top: false, bottom: false }
-                ].map(opt => {
-                  const isSel = calcHasTopClamp === opt.top && calcHasBottomClamp === opt.bottom;
+                  { id: 'dimensions', label: '1. Dimensions & Tube', icon: Ruler },
+                  { id: 'clamps', label: '2. Clamps', icon: Wrench },
+                  { id: 'holes', label: '3. Holes & Slits', icon: Sliders },
+                  { id: 'threads', label: '4. Lathe Threads', icon: Settings2 },
+                  { id: 'cotter_pin', label: '5. Cotter Pin', icon: Shield },
+                  { id: 'finish_qa', label: '6. Finish & QA', icon: Sparkles }
+                ].map(t => {
+                  const Icon = t.icon;
+                  const isSel = designerTab === t.id;
                   return (
                     <button
-                      key={opt.label}
+                      key={t.id}
                       type="button"
-                      onClick={() => {
-                        setCalcHasTopClamp(opt.top);
-                        setCalcHasBottomClamp(opt.bottom);
-                      }}
-                      className={`p-2 rounded-lg border text-center transition font-bold text-[11px] ${
+                      onClick={() => setDesignerTab(t.id as any)}
+                      className={`flex-1 min-w-[110px] sm:min-w-0 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg transition text-[11px] cursor-pointer ${
                         isSel
-                          ? 'bg-amber-400 text-black border-amber-400 shadow-xs'
-                          : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
+                          ? 'bg-[var(--yellow)] text-black shadow-sm font-extrabold'
+                          : 'text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--panel)]'
                       }`}
                     >
-                      {opt.label}
+                      <Icon size={12} className={isSel ? 'text-black' : 'text-amber-400'} />
+                      <span className="truncate">{t.label}</span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* Clamp Size Selector */}
-              <div className="space-y-1 pt-1">
-                <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono block">
-                  Clamp Bore Diameter (Clamp Size)
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
-                  {[
-                    { val: '3/4"', label: '3/4" (19mm Std)' },
-                    { val: '1"', label: '1" (25.4mm Heavy)' },
-                    { val: '1-1/4"', label: '1-1/4" (32mm Ind)' },
-                    { val: '1-1/2"', label: '1-1/2" (38mm XL)' }
-                  ].map(c => (
-                    <button
-                      key={c.val}
-                      type="button"
-                      onClick={() => setCalcClampSize(c.val)}
-                      className={`p-2 rounded-lg border text-center transition text-xs font-bold ${
-                        calcClampSize === c.val
-                          ? 'bg-sky-500/20 border-sky-400 text-sky-300 ring-1 ring-sky-400'
-                          : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {/* TAB 1: DIMENSIONS & TUBE GEOMETRY */}
+              {designerTab === 'dimensions' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* Application Type */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2">
+                    <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono font-bold block">
+                      Application Type
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCalcRodType('ceiling');
+                          setCalcClampSize('3/4"');
+                          setCalcHasMono(true);
+                          setCalcCanopyRings(true);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                          calcRodType === 'ceiling'
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold ring-1 ring-amber-400'
+                            : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                        }`}
+                      >
+                        <div>
+                          <span className="block font-bold">Ceiling Fan Down-Rod</span>
+                          <span className="text-[10px] text-zinc-400">Standard suspended ceiling installation</span>
+                        </div>
+                        {calcRodType === 'ceiling' && <Check size={14} className="text-amber-400" />}
+                      </button>
 
-              {/* Clamp Stamping Gauge */}
-              <div className="space-y-1 pt-1">
-                <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono block">
-                  Clamp Wall Thickness (Gauge)
-                </label>
-                <div className="grid grid-cols-3 gap-1.5 text-xs font-mono">
-                  {[
-                    { val: '14 Gauge', label: '14G (2.0mm Heavy)' },
-                    { val: '16 Gauge', label: '16G (1.6mm Standard)' },
-                    { val: '18 Gauge', label: '18G (1.2mm Commercial)' }
-                  ].map(g => (
-                    <button
-                      key={g.val}
-                      type="button"
-                      onClick={() => setCalcClampGauge(g.val)}
-                      className={`p-2 rounded-lg border text-center transition text-xs font-bold ${
-                        calcClampGauge === g.val
-                          ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-1 ring-amber-400'
-                          : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
-                      }`}
-                    >
-                      {g.label}
-                    </button>
-                  ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCalcRodType('pedestal');
+                          setCalcClampSize('1"');
+                          setCalcHasMono(false);
+                          setCalcCanopyRings(false);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                          calcRodType === 'pedestal'
+                            ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold ring-1 ring-amber-400'
+                            : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                        }`}
+                      >
+                        <div>
+                          <span className="block font-bold">Pedestal Fan Extension Rod</span>
+                          <span className="text-[10px] text-zinc-400">Heavy telescopic column / bracket tube</span>
+                        </div>
+                        {calcRodType === 'pedestal' && <Check size={14} className="text-amber-400" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pipe Length (1" to 240") */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                      <div>
+                        <span className="font-bold uppercase text-[var(--text)] block">
+                          Pipe Length (Range: 1&quot; to 240&quot;)
+                        </span>
+                        <span className="text-[11px] text-[var(--text-dim)]">
+                          {(calcDiameter / 12).toFixed(1)} feet · Standard or custom factory cut
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] px-2 py-1">
+                          <input
+                            type="number"
+                            min="1"
+                            max="240"
+                            step="1"
+                            value={calcDiameter}
+                            onChange={e => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val)) setCalcDiameter(Math.max(1, Math.min(240, val)));
+                            }}
+                            className="w-14 bg-transparent text-right font-mono font-bold text-amber-300 text-sm focus:outline-none"
+                          />
+                          <span className="text-amber-300 font-mono font-bold text-sm ml-0.5">&quot;</span>
+                        </div>
+                        <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold text-xs">
+                          {Math.round(calcDiameter * 25.4)} mm
+                          {calcDiameter >= 39.37 ? ` / ${(calcDiameter * 0.0254).toFixed(2)}m` : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Steppers & Slider */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCalcDiameter(prev => Math.max(1, prev - 12))}
+                          className="px-2.5 py-1 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-zinc-300 hover:text-white text-xs font-bold transition active:scale-95 cursor-pointer"
+                          title="Minus 1 Foot (-12 inches)"
+                        >
+                          -12&quot;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCalcDiameter(prev => Math.max(1, prev - 1))}
+                          className="px-2.5 py-1 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-zinc-300 hover:text-white text-xs font-bold transition active:scale-95 cursor-pointer"
+                          title="Minus 1 inch"
+                        >
+                          -1&quot;
+                        </button>
+
+                        <input
+                          type="range"
+                          min="1"
+                          max="240"
+                          step="1"
+                          value={calcDiameter}
+                          onChange={e => setCalcDiameter(parseInt(e.target.value, 10) || 1)}
+                          className="flex-1 accent-[var(--yellow)] cursor-pointer h-2 bg-[var(--panel)] rounded-lg"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => setCalcDiameter(prev => Math.min(240, prev + 1))}
+                          className="px-2.5 py-1 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-zinc-300 hover:text-white text-xs font-bold transition active:scale-95 cursor-pointer"
+                          title="Plus 1 inch"
+                        >
+                          +1&quot;
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCalcDiameter(prev => Math.min(240, prev + 12))}
+                          className="px-2.5 py-1 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-zinc-300 hover:text-white text-xs font-bold transition active:scale-95 cursor-pointer"
+                          title="Plus 1 Foot (+12 inches)"
+                        >
+                          +12&quot;
+                        </button>
+                      </div>
+
+                      {/* Presets */}
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {[1, 6, 12, 18, 20, 24, 30, 36, 48, 60, 72, 96, 120, 144, 240].map(l => (
+                          <button
+                            key={l}
+                            type="button"
+                            onClick={() => setCalcDiameter(l)}
+                            className={`px-2 py-1 rounded text-xs font-mono transition cursor-pointer ${
+                              calcDiameter === l
+                                ? 'bg-[var(--yellow)] text-black font-bold ring-2 ring-yellow-300 shadow-sm'
+                                : 'bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
+                            }`}
+                          >
+                            {l}&quot;{l >= 36 ? ` (${(l / 12).toFixed(l % 12 === 0 ? 0 : 1)}ft)` : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Outer Diameter (OD) & Inner Diameter (ID) */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
+                      <div>
+                        <label className="font-bold uppercase text-[var(--text)] block">
+                          Pipe Outer Diameter (OD)
+                        </label>
+                        <span className="text-[11px] text-[var(--text-dim)]">
+                          From thin 1/8&quot; bore up to 3&quot; heavy industrial tubing
+                        </span>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/30 font-bold">
+                        Ø {calcClampSize} ({formatDiameterMm(calcClampSize)} mm)
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs font-mono">
+                      {STANDARD_DIAMETER_OPTIONS.map(dia => (
+                        <button
+                          key={dia}
+                          type="button"
+                          onClick={() => setCalcClampSize(dia)}
+                          className={`p-2 rounded-xl border text-center transition cursor-pointer flex flex-col items-center justify-center ${
+                            calcClampSize === dia
+                              ? 'bg-sky-500/25 border-sky-400 text-sky-200 font-bold ring-2 ring-sky-400 shadow-sm'
+                              : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
+                          }`}
+                        >
+                          <span className="text-xs font-bold">Ø {dia}</span>
+                          <span className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                            {formatDiameterMm(dia)} mm
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Custom OD */}
+                    <div className="pt-2 border-t border-[var(--steel-line)] flex items-center gap-2 text-xs font-mono">
+                      <span className="text-[var(--text-dim)] shrink-0">Custom Tooling OD:</span>
+                      <input
+                        type="text"
+                        placeholder="e.g. 1-3/4&quot;, 22mm, 1.2&quot;"
+                        value={customDiameterInput}
+                        onChange={e => setCustomDiameterInput(e.target.value)}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] text-white focus:outline-none focus:border-sky-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customDiameterInput.trim()) {
+                            const clean = customDiameterInput.trim().endsWith('"') ? customDiameterInput.trim() : `${customDiameterInput.trim()}"`;
+                            setCalcClampSize(clean);
+                            setCustomDiameterInput('');
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-sky-500 text-black font-bold hover:bg-sky-400 transition cursor-pointer"
+                      >
+                        Apply OD
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Steel Wall Thickness & Gauge + End Cut */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5">
+                      <label className="font-bold uppercase text-[var(--text)] block">
+                        Pipe Steel Gauge (Wall Thickness)
+                      </label>
+                      <select
+                        value={calcGauge}
+                        onChange={e => setCalcGauge(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-white focus:border-[var(--yellow)] focus:outline-none"
+                      >
+                        <option value="14 Gauge">14 Gauge (2.0 mm Heavy Duty)</option>
+                        <option value="16 Gauge">16 Gauge (1.6 mm Standard Commercial)</option>
+                        <option value="18 Gauge">18 Gauge (1.2 mm Light Duty)</option>
+                        <option value="20 Gauge">20 Gauge (0.9 mm Extra Light)</option>
+                      </select>
+                      <div className="text-[10px] text-amber-400 pt-1">
+                        Est. Pipe ID: {Math.max(2, Math.round((parseFloat(formatDiameterMm(calcClampSize)) - 2 * (calcGauge === '14 Gauge' ? 2.0 : calcGauge === '16 Gauge' ? 1.6 : calcGauge === '18 Gauge' ? 1.2 : 0.9)) * 10) / 10)} mm
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5">
+                      <label className="font-bold uppercase text-[var(--text)] block">
+                        Pipe End Cut & Deburring
+                      </label>
+                      <select
+                        value={calcPipeEndCut}
+                        onChange={e => setCalcPipeEndCut(e.target.value as any)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-white focus:border-[var(--yellow)] focus:outline-none"
+                      >
+                        <option value="square_deburred">Square Cut & Deburred (Standard)</option>
+                        <option value="chamfer_45">45° Internal/External Chamfer</option>
+                        <option value="beveled">30° Weld Bevel Cut</option>
+                        <option value="slotted">Axial Safety Slotted End</option>
+                      </select>
+                      <div className="text-[10px] text-[var(--text-dim)] pt-1">
+                        CNC tolerance: {calcToleranceMm === 0.05 ? '±0.05 mm High Precision' : '±0.10 mm (ISO 2768-m)'}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* TAB 2: MOUNTING CLAMPS & SHACKLES */}
+              {designerTab === 'clamps' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* Clamp Presets */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono font-bold block">
+                      Mounting Clamp Configuration
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                      {[
+                        { label: 'Dual Clamps (Top + Bottom)', desc: 'Ceiling shackle + motor coupler', top: true, bottom: true, icon: Check },
+                        { label: 'Without Clamps (Bare Pipe)', desc: 'Hollow plain tube ends', top: false, bottom: false, icon: Circle },
+                        { label: 'Top Clamp Only', desc: 'Ceiling shackle only', top: true, bottom: false, icon: Check },
+                        { label: 'Bottom Clamp Only', desc: 'Motor coupler only', top: false, bottom: true, icon: Check }
+                      ].map(opt => {
+                        const isSel = calcHasTopClamp === opt.top && calcHasBottomClamp === opt.bottom;
+                        return (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() => {
+                              setCalcHasTopClamp(opt.top);
+                              setCalcHasBottomClamp(opt.bottom);
+                            }}
+                            className={`p-3 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                              isSel
+                                ? 'bg-emerald-500/15 border-emerald-400 text-emerald-300 ring-1 ring-emerald-400 font-bold'
+                                : 'bg-[var(--panel-raised)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                            }`}
+                          >
+                            <div>
+                              <span className="block">{opt.label}</span>
+                              <span className="text-[10px] text-zinc-400 font-normal">{opt.desc}</span>
+                            </div>
+                            {isSel && <Check size={14} className="text-emerald-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Clamp Style & Thickness */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5">
+                      <label className="font-bold uppercase text-[var(--text)] block">
+                        Clamp Fabrication Style
+                      </label>
+                      <select
+                        value={calcClampStyle}
+                        onChange={e => setCalcClampStyle(e.target.value as any)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-white focus:border-[var(--yellow)] focus:outline-none"
+                      >
+                        <option value="standard">Standard Stamped Heavy Steel</option>
+                        <option value="heavy_duty">Forged Heavy-Duty Cast Iron</option>
+                        <option value="ring_collar">Split Ring Locking Collar</option>
+                        <option value="welded_flange">Welded Heavy Base Flange</option>
+                        <option value="telescopic_sleeve">Telescopic Sleeve (Pedestal)</option>
+                      </select>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5">
+                      <label className="font-bold uppercase text-[var(--text)] block">
+                        Clamp Gauge (Stamping Thickness)
+                      </label>
+                      <select
+                        value={calcClampGauge}
+                        onChange={e => setCalcClampGauge(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-white focus:border-[var(--yellow)] focus:outline-none"
+                      >
+                        <option value="12 Gauge">12 Gauge (2.6 mm Heavy Duty)</option>
+                        <option value="14 Gauge">14 Gauge (2.0 mm Standard Heavy)</option>
+                        <option value="16 Gauge">16 Gauge (1.6 mm Commercial)</option>
+                        <option value="18 Gauge">18 Gauge (1.2 mm Light Duty)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Fastener Hardware: Bolt & Ear Width */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2 text-xs font-mono">
+                    <span className="font-bold uppercase text-[var(--text)] block">
+                      Fastener Hardware & Ear Geometry
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <div>
+                        <span className="text-[10px] text-[var(--text-dim)] block mb-1">Fastener Bolt Size</span>
+                        <div className="flex gap-1">
+                          {(['M6', 'M8', 'M10'] as const).map(b => (
+                            <button
+                              key={b}
+                              type="button"
+                              onClick={() => setCalcClampBoltSize(b)}
+                              className={`flex-1 py-1.5 rounded-lg border text-center font-bold ${
+                                calcClampBoltSize === b
+                                  ? 'bg-amber-400 text-black border-amber-400'
+                                  : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                              }`}
+                            >
+                              {b}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] text-[var(--text-dim)] block mb-1">Ear Width Spacing</span>
+                        <div className="flex gap-1">
+                          {[18, 22, 25, 30].map(w => (
+                            <button
+                              key={w}
+                              type="button"
+                              onClick={() => setCalcClampEarWidthMm(w)}
+                              className={`flex-1 py-1.5 rounded-lg border text-center font-bold ${
+                                calcClampEarWidthMm === w
+                                  ? 'bg-sky-400 text-black border-sky-400'
+                                  : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                              }`}
+                            >
+                              {w}mm
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="col-span-2 sm:col-span-1 flex flex-col justify-end">
+                        <div className="p-2 rounded bg-black/30 border border-white/5 text-[11px] text-zinc-300">
+                          Locknut: <span className="text-emerald-400 font-bold">Nylon Insert</span> DIN 985
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: HOLE DRILLING & SAFETY SLITS */}
+              {designerTab === 'holes' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* Through-Hole Diameter */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2">
+                    <label className="text-[10px] uppercase text-[var(--text-dim)] font-mono font-bold block">
+                      Fastener Through-Hole Diameter
+                    </label>
+                    <div className="grid grid-cols-4 gap-2 text-xs font-mono">
+                      {[6, 8, 10, 12].map(size => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setCalcHoleSizeMm(size)}
+                          className={`p-2.5 rounded-xl border text-center transition cursor-pointer ${
+                            calcHoleSizeMm === size
+                              ? 'bg-sky-500/25 border-sky-400 text-sky-200 font-bold ring-1 ring-sky-400'
+                              : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
+                          }`}
+                        >
+                          <span className="block text-sm font-bold">Ø {size} mm</span>
+                          <span className="text-[9px] text-[var(--text-dim)]">
+                            {size === 6 ? 'M6 Bolt' : size === 8 ? 'Standard M8' : size === 10 ? 'Heavy M10' : '12mm Shackle'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Top & Bottom Hole Counts + Offsets */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[var(--text)] uppercase">Top Safety Holes</span>
+                        <span className="text-amber-400 font-bold">{calcTopHoleCount} holes · {calcTopHoleOffsetMm}mm off</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[0, 1, 2].map(cnt => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => setCalcTopHoleCount(cnt)}
+                            className={`py-1.5 rounded-lg border font-bold ${
+                              calcTopHoleCount === cnt
+                                ? 'bg-amber-400 text-black border-amber-400'
+                                : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                            }`}
+                          >
+                            {cnt === 0 ? 'None' : `${cnt} Hole`}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="pt-1">
+                        <span className="text-[10px] text-[var(--text-dim)] block mb-1">Offset from Top Edge:</span>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[10, 15, 20, 25].map(off => (
+                            <button
+                              key={off}
+                              type="button"
+                              onClick={() => setCalcTopHoleOffsetMm(off)}
+                              className={`py-1 rounded border text-[10px] font-bold ${
+                                calcTopHoleOffsetMm === off
+                                  ? 'bg-sky-400 text-black border-sky-400'
+                                  : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                              }`}
+                            >
+                              {off}mm
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[var(--text)] uppercase">Bottom Motor Holes</span>
+                        <span className="text-amber-400 font-bold">{calcBottomHoleCount} holes · {calcBottomHoleOffsetMm}mm off</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[0, 1, 2].map(cnt => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => setCalcBottomHoleCount(cnt)}
+                            className={`py-1.5 rounded-lg border font-bold ${
+                              calcBottomHoleCount === cnt
+                                ? 'bg-amber-400 text-black border-amber-400'
+                                : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                            }`}
+                          >
+                            {cnt === 0 ? 'None' : `${cnt} Hole`}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="pt-1">
+                        <span className="text-[10px] text-[var(--text-dim)] block mb-1">Offset from Bottom Edge:</span>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[15, 20, 30, 40].map(off => (
+                            <button
+                              key={off}
+                              type="button"
+                              onClick={() => setCalcBottomHoleOffsetMm(off)}
+                              className={`py-1 rounded border text-[10px] font-bold ${
+                                calcBottomHoleOffsetMm === off
+                                  ? 'bg-sky-400 text-black border-sky-400'
+                                  : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                              }`}
+                            >
+                              {off}mm
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Safety Slits & Internal Wiring Channel */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-3 text-xs font-mono">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="font-bold text-[var(--text)] block">Safety Cotter Pin Slit</span>
+                        <span className="text-[11px] text-[var(--text-dim)]">
+                          Slot cut {calcSlitWidthMm}mm × {calcSlitLengthMm}mm for secondary safety locking
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={calcHasMono}
+                        onChange={e => setCalcHasMono(e.target.checked)}
+                        className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between cursor-pointer pt-2 border-t border-[var(--steel-line)]">
+                      <div>
+                        <span className="font-bold text-[var(--text)] block">Internal Hollow Wiring Conduit</span>
+                        <span className="text-[11px] text-[var(--text-dim)]">
+                          Continuous tubular conduit for up to {calcMaxWiringCables} isolated copper wire lines
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={calcHasWireConduit}
+                        onChange={e => setCalcHasWireConduit(e.target.checked)}
+                        className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: THREADING & CNC LATHE TOOLING */}
+              {designerTab === 'threads' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-3 text-xs font-mono">
+                    <label className="text-[10px] uppercase text-[var(--text-dim)] font-bold block">
+                      CNC Lathe Threading Operations
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'without_thread', label: 'Without Thread (Plain Tube)', desc: 'Smooth bore for shackle through-bolts' },
+                        { id: 'both_ends', label: 'With Threads (Both Ends)', desc: 'Threaded top & bottom motor coupler' },
+                        { id: 'top_only', label: 'With Thread (Top End Only)', desc: 'Threaded into ceiling collar' },
+                        { id: 'bottom_only', label: 'With Thread (Bottom End Only)', desc: 'Threaded into fan motor body' }
+                      ].map(t => {
+                        const isSel = calcThreadType === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setCalcThreadType(t.id as any)}
+                            className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition cursor-pointer ${
+                              isSel
+                                ? 'bg-amber-400 text-black font-bold border-amber-400 shadow-sm'
+                                : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white'
+                            }`}
+                          >
+                            <div>
+                              <span className="block font-bold">{t.label}</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">{t.desc}</span>
+                            </div>
+                            {isSel && <Check size={14} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {calcThreadType !== 'without_thread' && (
+                      <div className="pt-2 border-t border-[var(--steel-line)] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-[var(--text-dim)]">Thread Standard & Pitch:</span>
+                          <div className="flex gap-1.5">
+                            {(['BSPT', 'Metric', 'NPT'] as const).map(std => (
+                              <button
+                                key={std}
+                                type="button"
+                                onClick={() => setCalcThreadStandard(std as any)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                                  calcThreadStandard === std
+                                    ? 'bg-sky-400 text-black'
+                                    : 'bg-[var(--panel)] text-[var(--text-dim)] border border-[var(--steel-line)]'
+                                }`}
+                              >
+                                {std === 'BSPT' ? 'BSPT (14 TPI Pipe)' : std === 'Metric' ? 'Metric (M25×1.5)' : 'NPT (US Taper)'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 5: SAFETY COTTER / GARTER PIN */}
+              {designerTab === 'cotter_pin' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-3 text-xs font-mono">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="font-bold text-[var(--text)] block">Include Safety Cotter / Garter Pin</span>
+                        <span className="text-[11px] text-[var(--text-dim)]">
+                          Mechanical locking pin to prevent bolt slippage under fan vibration
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={calcHasGarterPin}
+                        onChange={e => setCalcHasGarterPin(e.target.checked)}
+                        className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    {calcHasGarterPin && (
+                      <div className="space-y-3 pt-2 border-t border-[var(--steel-line)]">
+                        <div>
+                          <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                            Cotter Pin Type
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'split_cotter', label: 'Split Cotter Pin', desc: 'DIN 94 dual leg' },
+                              { id: 'hairpin_r_clip', label: 'R-Clip Hairpin', desc: 'DIN 11024 spring' },
+                              { id: 'through_bolt_locknut', label: 'Bolt & Locknut', desc: 'M6 nyloc assembly' }
+                            ].map(pt => (
+                              <button
+                                key={pt.id}
+                                type="button"
+                                onClick={() => setCalcGarterPinType(pt.id as any)}
+                                className={`p-2 rounded-xl border text-left font-bold ${
+                                  calcGarterPinType === pt.id
+                                    ? 'bg-amber-400 text-black border-amber-400 shadow-sm'
+                                    : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                }`}
+                              >
+                                <span className="block text-xs">{pt.label}</span>
+                                <span className="text-[9px] text-zinc-500 font-normal">{pt.desc}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                              Pin Diameter (mm)
+                            </span>
+                            <div className="grid grid-cols-4 gap-1">
+                              {[2.5, 3.2, 4.0, 5.0].map(dia => (
+                                <button
+                                  key={dia}
+                                  type="button"
+                                  onClick={() => setCalcGarterPinDiameterMm(dia)}
+                                  className={`py-1.5 rounded-lg border text-center font-bold ${
+                                    calcGarterPinDiameterMm === dia
+                                      ? 'bg-sky-400 text-black border-sky-400'
+                                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                  }`}
+                                >
+                                  Ø{dia}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                              Pin Length (mm)
+                            </span>
+                            <div className="grid grid-cols-4 gap-1">
+                              {[35, 45, 55, 65].map(len => (
+                                <button
+                                  key={len}
+                                  type="button"
+                                  onClick={() => setCalcGarterPinLengthMm(len)}
+                                  className={`py-1.5 rounded-lg border text-center font-bold ${
+                                    calcGarterPinLengthMm === len
+                                      ? 'bg-sky-400 text-black border-sky-400'
+                                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                  }`}
+                                >
+                                  {len}mm
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                            Pin Material Specification
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'zinc_plated_steel', label: 'Zinc Plated Steel' },
+                              { id: 'stainless_steel', label: 'Stainless Steel 304' },
+                              { id: 'brass', label: 'Corrosion-Resistant Brass' }
+                            ].map(mat => (
+                              <button
+                                key={mat.id}
+                                type="button"
+                                onClick={() => setCalcGarterPinMaterial(mat.id as any)}
+                                className={`py-1.5 px-2 rounded-lg border text-center font-bold text-[11px] ${
+                                  calcGarterPinMaterial === mat.id
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
+                                    : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                }`}
+                              >
+                                {mat.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 6: FINISH, LOAD RATING & QA SIGN-OFF */}
+              {designerTab === 'finish_qa' && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  {/* Colors */}
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2 text-xs font-mono">
+                    <label className="text-[10px] uppercase text-[var(--text-dim)] font-bold block">
+                      Electrostatic Powder Coating Finish (80 Micron)
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { name: 'Matt Black', colorHex: '#18181b' },
+                        { name: 'Pure White', colorHex: '#f8fafc' },
+                        { name: 'Smoke Grey', colorHex: '#64748b' },
+                        { name: 'Precision Silver', colorHex: '#cbd5e1' },
+                        { name: 'Antique Gold', colorHex: '#ca8a04' },
+                        { name: 'Hammered Copper', colorHex: '#b45309' },
+                        { name: 'Royal Ivory', colorHex: '#fef3c7' },
+                        { name: 'Raw Steel', colorHex: '#334155' }
+                      ].map(c => (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onClick={() => setCalcColor(c.name)}
+                          className={`p-2 rounded-xl border flex items-center gap-2 transition cursor-pointer ${
+                            calcColor === c.name
+                              ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold ring-1 ring-amber-400'
+                              : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                          }`}
+                        >
+                          <span className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0" style={{ backgroundColor: c.colorHex }} />
+                          <span className="truncate">{c.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* QA & Engineering Sign-Off */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                    <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1">
+                      <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block">CAD Drawing Revision</span>
+                      <select
+                        value={calcCadRevision}
+                        onChange={e => setCalcCadRevision(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2 py-1.5 text-white"
+                      >
+                        <option value="Rev A">Rev A (Initial Production)</option>
+                        <option value="Rev B">Rev B (Reinforced Clamps)</option>
+                        <option value="Rev C">Rev C (Heavy Duty Certified)</option>
+                      </select>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1">
+                      <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block">Certified Working Load</span>
+                      <select
+                        value={calcLoadRatingKg}
+                        onChange={e => setCalcLoadRatingKg(parseInt(e.target.value, 10))}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2 py-1.5 text-white"
+                      >
+                        <option value="25">25 kg (Light Ceiling Fans)</option>
+                        <option value="35">35 kg (Standard 56&quot; Fans)</option>
+                        <option value="50">50 kg (Commercial Heavy Duty)</option>
+                        <option value="75">75 kg (Industrial High-CFM)</option>
+                      </select>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1">
+                      <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block">Lead Engineer Sign-Off</span>
+                      <input
+                        type="text"
+                        value={calcEngineerSignOff}
+                        onChange={e => setCalcEngineerSignOff(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2 py-1.5 text-white font-mono text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1 text-xs font-mono">
+                    <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block">Workshop Fabrication Notes</span>
+                    <input
+                      type="text"
+                      value={calcNotes}
+                      onChange={e => setCalcNotes(e.target.value)}
+                      placeholder="e.g. Pre-drill 8mm holes before powder coating, apply zinc wash"
+                      className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Fittings checklist */}
-            <div className="flex items-center gap-4 text-xs font-mono">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={calcHasMono}
-                  onChange={e => setCalcHasMono(e.target.checked)}
-                  className="rounded accent-[var(--yellow)]"
+            {/* RIGHT COLUMN: Live Multi-Angle CAD Vector Blueprint Overlay & BOM */}
+            <div className="lg:col-span-5 flex flex-col justify-between space-y-4">
+              {/* CAD Multi-Angle View Switcher */}
+              <div className="flex items-center justify-between gap-1 p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-mono">
+                {[
+                  { id: 'assembly', label: '📐 Assembly' },
+                  { id: 'rod', label: '📏 Tube' },
+                  { id: 'clamps', label: '🔩 Clamps' },
+                  { id: 'garter_pin', label: '🧷 Cotter Pin' },
+                  { id: 'exploded', label: '⚙️ Exploded' }
+                ].map(v => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setDesignerCadViewMode(v.id as any)}
+                    className={`flex-1 py-1 px-1.5 rounded-lg text-center font-bold text-[10px] transition cursor-pointer ${
+                      designerCadViewMode === v.id
+                        ? 'bg-sky-400 text-black shadow-xs font-black'
+                        : 'text-[var(--text-dim)] hover:text-white'
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* High-Precision Interactive SVG Blueprint Canvas */}
+              <div className="rounded-xl overflow-hidden border border-[var(--steel-line)] bg-zinc-950 p-2 shadow-inner">
+                {/* Live Dimension & Spec Badges */}
+                <div className="flex items-center justify-between flex-wrap gap-1.5 mb-2 px-1 text-[10px] font-mono">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-md bg-sky-500/25 text-sky-300 border border-sky-500/40 font-bold">
+                      OD: Ø {calcClampSize} ({formatDiameterMm(calcClampSize)} mm)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
+                      ID: Ø {Math.max(1, Math.round((parseFloat(formatDiameterMm(calcClampSize)) - 2 * wallMmVal) * 10) / 10)} mm
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      L: {calcDiameter}&quot;
+                    </span>
+                  </div>
+                  <span className="text-zinc-400 font-bold bg-black/40 px-2 py-0.5 rounded border border-white/10">
+                    Net: {totalEstimatedWeightKg} kg
+                  </span>
+                </div>
+
+                <RodBlueprintSvgOverlay
+                  specs={currentBlueprintSpecs}
+                  interactive={true}
+                  viewMode={designerCadViewMode}
+                  svgRef={designerSvgRef}
+                  className="w-full h-72 sm:h-80"
                 />
-                <span>Include Pre-Drilled Safety Bolt & Cotter Pin Slit</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Blueprint Visual & Calculated Bill of Materials Right Column */}
-          <div className="lg:col-span-6 flex flex-col justify-between space-y-4">
-            <FanRodWireframe
-              sizeInches={calcDiameter}
-              colorName={calcColor}
-              isInspecting={true}
-              wireGauge={calcGauge}
-              clampSize={calcClampSize}
-              clampGauge={calcClampGauge}
-              threadType={calcThreadType}
-              threadStandard={calcThreadStandard}
-              hasTopClamp={calcHasTopClamp}
-              hasBottomClamp={calcHasBottomClamp}
-            />
-
-            {/* Engineered Recipe Output Box */}
-            <div className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl p-4 space-y-3">
-              <h4 className="font-serif font-bold text-xs uppercase text-[var(--yellow)] flex items-center gap-1.5">
-                <Scale size={14} />
-                <span>Calculated Material Consumption</span>
-              </h4>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-                <div className="p-2 rounded bg-black/30 border border-white/5">
-                  <span className="text-[9px] text-[var(--text-dim)] block">Steel Pipe</span>
-                  <span className="font-bold text-[var(--text)]">{estimatedPipeWeightKg} kg</span>
-                </div>
-                <div className="p-2 rounded bg-black/30 border border-white/5">
-                  <span className="text-[9px] text-[var(--text-dim)] block">Fittings & Pin</span>
-                  <span className="font-bold text-[var(--text)]">{estimatedFittingsWeightKg} kg</span>
-                </div>
-                <div className="p-2 rounded bg-black/30 border border-white/5">
-                  <span className="text-[9px] text-[var(--text-dim)] block">Net Weight</span>
-                  <span className="font-bold text-amber-400">{totalEstimatedWeightKg} kg</span>
-                </div>
-                <div className="p-2 rounded bg-black/30 border border-white/5">
-                  <span className="text-[9px] text-[var(--text-dim)] block">Est. Rate</span>
-                  <span className="font-bold text-emerald-400">Rs {fmt(estimatedWholesalePrice)}</span>
-                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="pt-2 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const threadDesc =
-                      calcThreadType === 'without_thread'
-                        ? 'Without Thread'
-                        : calcThreadType === 'both_ends'
-                        ? `Dual ${calcThreadStandard} Thd`
-                        : `${calcThreadType === 'top_only' ? 'Top' : 'Bottom'} ${calcThreadStandard} Thd`;
-                    const clampDesc =
-                      calcHasTopClamp && calcHasBottomClamp
-                        ? `Dual Clamps (${calcClampSize} ${calcClampGauge.replace(' Gauge', 'G')})`
-                        : !calcHasTopClamp && !calcHasBottomClamp
-                        ? 'Without Clamps'
-                        : `Single Clamp (${calcClampSize})`;
+              {/* Calculated Bill of Materials (BOM) & Pricing Box */}
+              <div className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl p-4 space-y-3 font-mono">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs uppercase text-[var(--yellow)] flex items-center gap-1.5">
+                    <Scale size={14} />
+                    <span>Calculated Bill of Materials</span>
+                  </h4>
+                  <span className="text-[10px] text-zinc-400 font-bold">
+                    Factor of Safety: 5:1
+                  </span>
+                </div>
 
-                    const customItem: Product = {
-                      id: Date.now(),
-                      name: `Fan Rod ${calcDiameter}" [${calcGauge.replace(' Gauge', 'G')} · ${clampDesc} · ${threadDesc}]`,
-                      price: estimatedWholesalePrice,
-                      cat: `${calcDiameter}" Custom Specification`,
-                      color: calcColor,
-                      size: `${calcDiameter} inch`,
-                      gauge: calcGauge,
-                      weight: `${totalEstimatedWeightKg} kg`,
-                      stock: 1,
-                      reorderLevel: 5,
-                      blueprintSpecs: {
-                        rodType: 'ceiling',
-                        lengthInches: calcDiameter,
-                        diameterInches: calcClampSize === '1-1/2"' ? '1-1/2"' : calcClampSize === '1-1/4"' ? '1-1/4"' : calcClampSize === '1"' ? '1"' : '3/4"',
-                        gauge: calcGauge,
-                        hasTopClamp: calcHasTopClamp,
-                        hasBottomClamp: calcHasBottomClamp,
-                        clampStyle: 'standard',
-                        clampSize: calcClampSize,
-                        clampGauge: calcClampGauge,
-                        threadType: calcThreadType,
-                        threadStandard: calcThreadStandard,
-                        holeSizeMm: 8,
-                        topHoleCount: 1,
-                        bottomHoleCount: 2,
-                        hasSafetySlit: calcHasMono,
-                        hasWireConduit: true,
-                        canopyRings: true,
-                        finishColor: calcColor
-                      }
-                    };
-                    onAddToCart(customItem, calcColor, `${calcDiameter} inch`);
-                    setCustomCartAdded(true);
-                    setTimeout(() => setCustomCartAdded(false), 2200);
-                  }}
-                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs shadow transition active:scale-95 ${
-                    customCartAdded
-                      ? 'bg-emerald-500 text-white shadow-emerald-500/20'
-                      : 'bg-[var(--yellow)] text-black hover:brightness-110'
-                  }`}
-                >
-                  {customCartAdded ? (
-                    <>
-                      <Check size={14} className="stroke-[3]" />
-                      <span>Added to POS Invoice Cart!</span>
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart size={14} />
-                      <span>Send Spec Rod Directly to POS Cart</span>
-                    </>
-                  )}
-                </button>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                  <div className="p-2 rounded bg-black/30 border border-white/5">
+                    <span className="text-[9px] text-[var(--text-dim)] block">Steel Pipe</span>
+                    <span className="font-bold text-[var(--text)]">{estimatedPipeWeightKg} kg</span>
+                  </div>
+                  <div className="p-2 rounded bg-black/30 border border-white/5">
+                    <span className="text-[9px] text-[var(--text-dim)] block">Fittings & Pin</span>
+                    <span className="font-bold text-[var(--text)]">{estimatedFittingsWeightKg} kg</span>
+                  </div>
+                  <div className="p-2 rounded bg-black/30 border border-white/5">
+                    <span className="text-[9px] text-[var(--text-dim)] block">Net Assembly</span>
+                    <span className="font-bold text-amber-400">{totalEstimatedWeightKg} kg</span>
+                  </div>
+                  <div className="p-2 rounded bg-black/30 border border-white/5">
+                    <span className="text-[9px] text-[var(--text-dim)] block">Wholesale Rate</span>
+                    <span className="font-bold text-emerald-400">Rs {fmt(estimatedWholesalePrice)}</span>
+                  </div>
+                </div>
 
-                <div className="flex items-center gap-2">
+                {/* All Action Buttons */}
+                <div className="space-y-2 pt-1">
+                  {/* Send to POS Cart */}
                   <button
                     type="button"
-                    onClick={handleExportCustomBlueprintJPG}
-                    disabled={isExportingBlueprint}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-xs hover:bg-amber-500/20 active:scale-95 transition disabled:opacity-50"
+                    onClick={() => {
+                      const customItem: Product = {
+                        id: Date.now(),
+                        name: `Fan Rod ${calcDiameter}" × Ø${calcClampSize} [${calcGauge.replace(' Gauge', 'G')} · ${calcColor}]`,
+                        price: estimatedWholesalePrice,
+                        cat: calcRodType === 'pedestal' ? 'Pedestal Extension Rod' : 'Ceiling Fan Down Rod',
+                        color: calcColor,
+                        size: `${calcDiameter}" × Ø${calcClampSize}`,
+                        gauge: calcGauge,
+                        weight: `${totalEstimatedWeightKg} kg`,
+                        stock: 1,
+                        reorderLevel: 5,
+                        blueprintSpecs: currentBlueprintSpecs
+                      };
+                      onAddToCart(customItem, calcColor, `${calcDiameter}" × Ø${calcClampSize}`);
+                      setCustomCartAdded(true);
+                      setTimeout(() => setCustomCartAdded(false), 2200);
+                    }}
+                    className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-xs shadow transition active:scale-95 cursor-pointer ${
+                      customCartAdded
+                        ? 'bg-emerald-500 text-white shadow-emerald-500/20'
+                        : 'bg-[var(--yellow)] text-black hover:brightness-110'
+                    }`}
                   >
-                    {isExportingBlueprint ? (
+                    {customCartAdded ? (
                       <>
-                        <Loader2 size={14} className="animate-spin" />
-                        <span>Exporting Blueprint JPG...</span>
-                      </>
-                    ) : blueprintSuccess ? (
-                      <>
-                        <CheckCircle2 size={14} className="text-emerald-400" />
-                        <span className="text-emerald-400">Saved to Gallery & Downloaded!</span>
+                        <Check size={14} className="stroke-[3]" />
+                        <span>Added to POS Invoice Cart!</span>
                       </>
                     ) : (
                       <>
-                        <ImageIcon size={14} />
-                        <span>Export Blueprint (JPG)</span>
+                        <ShoppingCart size={14} />
+                        <span>Send Spec Rod Directly to POS Cart</span>
                       </>
                     )}
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handlePrintSpecSheet}
-                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] text-xs font-bold transition"
-                  >
-                    <Printer size={14} />
-                    <span>Print</span>
-                  </button>
+                  {/* Save to Catalog & Save as New Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveBlueprintToCatalog(false)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 font-bold text-xs hover:bg-emerald-500 hover:text-black transition cursor-pointer active:scale-95"
+                    >
+                      {designerSaveSuccess ? (
+                        <>
+                          <CheckCircle2 size={13} className="text-emerald-400" />
+                          <span>Specs Saved to Catalog!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save size={13} />
+                          <span>Save Blueprint Specs</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSaveBlueprintToCatalog(true)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white font-bold text-xs transition cursor-pointer active:scale-95"
+                      title="Add this customized fan rod as a new inventory item in the catalog"
+                    >
+                      <Plus size={13} />
+                      <span>Add as New Item</span>
+                    </button>
+                  </div>
+
+                  {/* High-Res Exports & Print */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExportDesignerPDF}
+                      disabled={isExportingPdf}
+                      className="flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-300 font-bold text-[11px] hover:bg-sky-500 hover:text-black transition disabled:opacity-50 cursor-pointer active:scale-95"
+                      title="Export official high-resolution CAD Blueprint PDF specification sheet"
+                    >
+                      {isExportingPdf ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : pdfSuccess ? (
+                        <CheckCircle2 size={12} className="text-emerald-400" />
+                      ) : (
+                        <FileDown size={12} />
+                      )}
+                      <span>CAD PDF</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleExportCustomBlueprintJPG}
+                      disabled={isExportingBlueprint}
+                      className="flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-[11px] hover:bg-amber-500 hover:text-black transition disabled:opacity-50 cursor-pointer active:scale-95"
+                      title="Export high-resolution Blueprint JPG drawing"
+                    >
+                      {isExportingBlueprint ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <ImageIcon size={12} />
+                      )}
+                      <span>CAD JPG</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handlePrintSpecSheet}
+                      className="flex items-center justify-center gap-1 py-2 px-2 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-white font-bold text-[11px] transition cursor-pointer active:scale-95"
+                      title="Print Technical Spec Sheet"
+                    >
+                      <Printer size={12} />
+                      <span>Print</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

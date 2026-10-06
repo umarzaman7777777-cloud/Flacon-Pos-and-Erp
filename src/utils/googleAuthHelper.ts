@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
 import { auth, googleProvider } from '../firebase/config';
-import { GoogleAuthProvider, signInWithPopup, getRedirectResult, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, User } from 'firebase/auth';
 import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, clearSheetsToken } from './googleSheetsSync';
 import { storeDriveToken, getStoredDriveToken, clearDriveToken } from './googleDriveBackup';
 
@@ -154,66 +154,93 @@ export async function checkRedirectAuthResult(): Promise<GoogleAuthResult | null
 }
 
 /**
- * Silently refreshes Google Workspace (Sheets & Drive) access tokens in the background
- * without showing 2FA notifications, dialogs, or disrupting the workshop terminal.
+ * Automatically authenticates and retrieves an active token on app launch or resume.
+ * 1. Checks valid local storage token.
+ * 2. Pulls credentials from Firestore cloud sync (restoring prior session).
+ * 3. Restores from active Firebase Auth session.
  */
-export async function refreshGoogleWorkspaceTokenSilently(preferredEmail: string = 'umarzaman7777777@gmail.com'): Promise<string | null> {
-  // 1. Google Identity Services (GIS) silent token refresh (Web & Chrome)
-  if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-    try {
-      const scopes = [
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive.file'
-      ];
-      const token = await new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Silent refresh timed out')), 6000);
-        try {
-          const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: '614229042433-9uj9cvog5bn4fv6476r6nc1ho6a4rsfs.apps.googleusercontent.com',
-            scope: scopes.join(' '),
-            hint: preferredEmail,
-            prompt: '', // Empty prompt = silent background request without 2FA or popup!
-            callback: (resp: any) => {
-              clearTimeout(timer);
-              if (resp?.access_token) {
-                resolve(resp.access_token);
-              } else {
-                reject(new Error(resp?.error_description || resp?.error || 'No token returned'));
-              }
-            }
-          });
-          tokenClient.requestAccessToken({ prompt: '' });
-        } catch (initErr) {
-          clearTimeout(timer);
-          reject(initErr);
-        }
-      });
+export async function autoAuthenticateAndGetActiveToken(preferredEmail: string = 'umarzaman7777777@gmail.com'): Promise<string | null> {
+  // 1. Check local stored token with at least 2 minutes validity
+  const currentSheets = getStoredSheetsToken();
+  const now = Date.now();
+  if (currentSheets?.token && currentSheets.expiresAt && (currentSheets.expiresAt - now > 120000)) {
+    return currentSheets.token;
+  }
+  const currentDrive = getStoredDriveToken();
+  if (currentDrive?.token && currentDrive.expiresAt && (currentDrive.expiresAt - now > 120000)) {
+    return currentDrive.token;
+  }
 
-      if (token) {
-        storeSheetsToken(token, 3600, preferredEmail);
-        storeDriveToken(token, 3600, preferredEmail);
-        notifyWorkspaceSyncUpdated();
-        console.info('[Falcon Auth] ✓ Google Workspace token refreshed silently in background.');
-        return token;
+  // 2. Check Firestore cloud sync for existing tokens
+  try {
+    const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+    const cloudSyncResult = await autoSyncWorkspaceFromCloud();
+    if (cloudSyncResult.sheetsSynced || cloudSyncResult.driveSynced) {
+      const refreshedLocal = getStoredSheetsToken() || getStoredDriveToken();
+      if (refreshedLocal?.token && (!refreshedLocal.expiresAt || refreshedLocal.expiresAt > now)) {
+        console.info('[Falcon Auth] ✓ Restored active token from Firestore cloud sync.');
+        return refreshedLocal.token;
       }
-    } catch (silentErr) {
-      console.debug('[Falcon Auth] GIS silent refresh notice:', silentErr);
+    }
+  } catch (cloudErr) {
+    console.debug('[Falcon Auth] Startup cloud sync check:', cloudErr);
+  }
+
+  // 3. Check active Firebase Auth user session
+  if (auth.currentUser) {
+    try {
+      await auth.currentUser.getIdToken(true);
+      const restored = getStoredSheetsToken() || getStoredDriveToken();
+      if (restored?.token) {
+        return restored.token;
+      }
+    } catch (fbErr) {
+      console.debug('[Falcon Auth] Firebase session check notice:', fbErr);
     }
   }
 
-  // 2. Firebase Auth active session fallback
+  // 4. Return existing token if present even in grace period
+  if (currentSheets?.token && !currentSheets.token.startsWith('falcon_offline_session_')) {
+    return currentSheets.token;
+  }
+  if (currentDrive?.token && !currentDrive.token.startsWith('falcon_offline_session_')) {
+    return currentDrive.token;
+  }
+
+  return null;
+}
+
+/**
+ * Silently refreshes Google Workspace (Sheets & Drive) access tokens in the background
+ * using Firebase Auth and Firestore cloud sync without throwing origin_mismatch errors.
+ */
+export async function refreshGoogleWorkspaceTokenSilently(preferredEmail: string = 'umarzaman7777777@gmail.com'): Promise<string | null> {
+  // 1. Check Firestore cloud sync first
+  try {
+    const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+    const cloudSyncResult = await autoSyncWorkspaceFromCloud();
+    if (cloudSyncResult.sheetsSynced || cloudSyncResult.driveSynced) {
+      const refreshedLocal = getStoredSheetsToken() || getStoredDriveToken();
+      if (refreshedLocal?.token && (!refreshedLocal.expiresAt || refreshedLocal.expiresAt > Date.now())) {
+        return refreshedLocal.token;
+      }
+    }
+  } catch (e) {
+    console.debug('[Falcon Auth] Silent cloud sync notice:', e);
+  }
+
+  // 2. Firebase Auth active session token verification
   if (auth.currentUser) {
     try {
       await auth.currentUser.getIdToken(true);
       const currentSheets = getStoredSheetsToken();
       if (currentSheets?.token) {
-        storeSheetsToken(currentSheets.token, 3600, preferredEmail);
+        return currentSheets.token;
       }
       const currentDrive = getStoredDriveToken();
       if (currentDrive?.token) {
-        storeDriveToken(currentDrive.token, 3600, preferredEmail);
+        return currentDrive.token;
       }
-      return currentSheets?.token || currentDrive?.token || null;
     } catch (fbErr) {
       console.debug('[Falcon Auth] Firebase session token check notice:', fbErr);
     }
@@ -329,47 +356,22 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
   } catch (popupErr: any) {
     console.warn('[Falcon Auth] Direct sign-in attempt notice:', popupErr?.code || popupErr?.message);
 
-    // 2. Google Identity Services (GIS) Token Client Fallback (Web)
-    if (typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
+    // 2. Mobile Browser / Popup Blocked Fallback via Firebase Redirect
+    if (popupErr?.code === 'auth/popup-blocked') {
       try {
-        console.info('[Falcon Auth] Using Google Identity Services (GIS) direct authorization...');
-        const token = await new Promise<string>((resolve, reject) => {
-          const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: '614229042433-9uj9cvog5bn4fv6476r6nc1ho6a4rsfs.apps.googleusercontent.com',
-            scope: scopes.join(' '),
-            hint: preferredEmail,
-            prompt: 'select_account',
-            callback: (resp: any) => {
-              if (resp.error) {
-                reject(new Error(resp.error_description || resp.error));
-              } else if (resp.access_token) {
-                resolve(resp.access_token);
-              } else {
-                reject(new Error('No access token received from Google Identity Services.'));
-              }
-            }
-          });
-          tokenClient.requestAccessToken();
-        });
-
-        if (token) {
-          storeSheetsToken(token, 3600, preferredEmail);
-          storeDriveToken(token, 3600, preferredEmail);
-          notifyWorkspaceSyncUpdated();
-          return {
-            accessToken: token,
-            expiresIn: 3600,
-            userEmail: preferredEmail
-          };
-        }
-      } catch (gisErr) {
-        console.warn('[Falcon Auth] GIS client attempt notice:', gisErr);
+        console.info('[Falcon Auth] Popup blocked; switching to Firebase redirect sign-in flow...');
+        await signInWithRedirect(auth, provider);
+        return {
+          accessToken: '',
+          expiresIn: 3600,
+          userEmail: preferredEmail
+        };
+      } catch (redirErr) {
+        console.warn('[Falcon Auth] Redirect sign-in notice:', redirErr);
+        throw new Error('Google Sign-In popup was blocked by your browser. Please tap "Allow Popups" or try again directly.');
       }
     }
 
-    if (popupErr?.code === 'auth/popup-blocked') {
-      throw new Error('Google Sign-In popup was blocked by your browser. Please tap "Allow Popups" or try again directly.');
-    }
     if (popupErr?.code === 'auth/popup-closed-by-user') {
       throw new Error('Google sign-in window was closed before completion. Please tap Sign In again.');
     }
@@ -408,49 +410,9 @@ export async function purgeAndResetAllGoogleTokens(): Promise<void> {
 
 /**
  * Silently refreshes Google OAuth tokens in the background without user interaction.
- * Uses Google Identity Services with prompt: '' to fetch a fresh token seamlessly.
+ * Uses Firebase Auth and Firestore cloud sync to retrieve active tokens.
  */
 export async function refreshGoogleTokensSilently(preferredEmail: string = 'umarzaman7777777@gmail.com'): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-
-  // 1. Try Google Identity Services (GIS) Token Client silently
-  if ((window as any).google?.accounts?.oauth2) {
-    try {
-      const freshToken = await new Promise<string>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Silent refresh timed out')), 8000);
-        try {
-          const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: '614229042433-9uj9cvog5bn4fv6476r6nc1ho6a4rsfs.apps.googleusercontent.com',
-            scope: DEFAULT_GOOGLE_SCOPES.join(' '),
-            hint: preferredEmail,
-            prompt: '', // Silent background refresh: no consent prompt
-            callback: (resp: any) => {
-              clearTimeout(timeout);
-              if (resp.access_token) {
-                resolve(resp.access_token);
-              } else {
-                reject(new Error(resp.error || 'No token in silent response'));
-              }
-            }
-          });
-          tokenClient.requestAccessToken({ prompt: '' });
-        } catch (e) {
-          clearTimeout(timeout);
-          reject(e);
-        }
-      });
-
-      if (freshToken) {
-        storeSheetsToken(freshToken, 3600, preferredEmail);
-        storeDriveToken(freshToken, 3600, preferredEmail);
-        notifyWorkspaceSyncUpdated();
-        return freshToken;
-      }
-    } catch (e) {
-      console.info('[Falcon Auth] Silent background refresh notice:', e);
-    }
-  }
-
-  return null;
+  return refreshGoogleWorkspaceTokenSilently(preferredEmail);
 }
 

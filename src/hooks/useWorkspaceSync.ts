@@ -3,14 +3,17 @@ import { AppState, Transaction } from '../types';
 import {
   getStoredSheetsToken,
   getStoredSpreadsheetId,
+  setStoredSpreadsheetId,
   getStoredSpreadsheetTitle,
   getStoredSpreadsheetUrl,
   getLastSheetsSyncTime,
+  setLastSheetsSyncTime,
   getSheetsAutoSyncEnabled,
   setSheetsAutoSyncEnabled,
   clearSheetsToken,
   requestGoogleSheetsToken,
   populateAllSheets,
+  createMasterFalconSpreadsheet,
   syncSingleTransactionWithSheet,
   WORKSPACE_SYNC_EVENT,
   notifyWorkspaceSyncUpdated,
@@ -20,6 +23,8 @@ import {
 import {
   getStoredDriveToken,
   getStoredDriveFolderId,
+  setStoredDriveFolderId,
+  getOrCreateBackupFolder,
   getLastDriveBackupTime,
   setLastDriveBackupTime,
   getDriveAutoBackupEnabled,
@@ -35,6 +40,8 @@ import {
 } from '../utils/googleDriveBackup';
 import { getDatabaseJSONString } from '../utils/syncReport';
 import { generateFullDatabaseSQL } from '../utils/sqlExporter';
+import { initPersistentStorage } from '../utils/persistentStorage';
+import { autoAuthenticateAndGetActiveToken, refreshGoogleWorkspaceTokenSilently } from '../utils/googleAuthHelper';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { auth } from '../firebase/config';
 import { openExternalUrl } from '../utils/openExternalUrl';
@@ -66,12 +73,16 @@ export interface WorkspaceSyncState {
   driveSuccessMsg: string | null;
   driveBackupsCount: number;
 
+  // Auto-Authentication Engine state
+  isAutoAuthenticating: boolean;
+
   // Combined Status for Header Indicator
   workspaceStatus: 'syncing' | 'synced' | 'ready' | 'warning' | 'disconnected';
   statusBadgeText: string;
   statusBadgeTooltip: string;
 
   // Actions
+  autoSyncNow: (customState?: AppState) => Promise<boolean>;
   syncAllSheets: (customState?: AppState) => Promise<boolean>;
   syncTransactionToSheets: (transaction: Transaction) => Promise<boolean>;
   backupToDrive: (format?: 'json' | 'sql', customState?: AppState) => Promise<boolean>;
@@ -112,6 +123,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSuccessMsg, setDriveSuccessMsg] = useState<string | null>(null);
   const [driveBackupsCount, setDriveBackupsCount] = useState<number>(0);
+  const [isAutoAuthenticating, setIsAutoAuthenticating] = useState(true);
 
   const initialBackupChecked = useRef(false);
   const isBackingUpRef = useRef(false);
@@ -209,45 +221,129 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
     }
   }, [driveTokenInfo?.token]);
 
-  // Automated session backup to Google Drive
+  // Automated Workspace Sync on App Launch and On-Demand
+  const autoSyncNow = useCallback(async (customState?: AppState): Promise<boolean> => {
+    const stateToSync = customState || appState;
+    setIsAutoAuthenticating(true);
+    setSheetsError(null);
+    setDriveError(null);
+
+    try {
+      // 1. Initialize persistent storage and fetch active token via silent auto-auth
+      await initPersistentStorage();
+      const activeToken = await autoAuthenticateAndGetActiveToken(currentUserEmail);
+
+      if (!activeToken) {
+        console.info('[Workspace Sync] Auto-auth waiting for one-time Google connection.');
+        setIsAutoAuthenticating(false);
+        refreshWorkspaceState();
+        return false;
+      }
+
+      refreshWorkspaceState();
+
+      // 2. Auto-locate or create Master Spreadsheet
+      let curSheetId = getStoredSpreadsheetId();
+      if (!curSheetId) {
+        try {
+          console.info('[Workspace Sync] Setting up Master Falcon Spreadsheet automatically...');
+          const info = await createMasterFalconSpreadsheet(activeToken, stateToSync);
+          curSheetId = info.spreadsheetId;
+          setStoredSpreadsheetId(curSheetId);
+          setSpreadsheetId(curSheetId);
+        } catch (e: any) {
+          console.warn('[Workspace Sync] Auto-create spreadsheet notice:', e);
+        }
+      }
+
+      // 3. Auto-locate or create Google Drive Backup folder
+      let curFolderId = getStoredDriveFolderId();
+      if (!curFolderId) {
+        try {
+          const folder = await getOrCreateBackupFolder(activeToken);
+          setStoredDriveFolderId(folder.id);
+          setDriveFolderId(folder.id);
+        } catch (e: any) {
+          console.warn('[Workspace Sync] Auto-create backup folder notice:', e);
+        }
+      }
+
+      let sheetsSuccess = false;
+      let driveSuccess = false;
+
+      // 4. AUTOMATICALLY SYNC SHEETS ON APP OPEN
+      if (curSheetId) {
+        setIsSyncingSheets(true);
+        try {
+          await populateAllSheets(activeToken, curSheetId, stateToSync);
+          const nowTime = new Date().toLocaleString('en-GB');
+          setLastSheetsSync(nowTime);
+          setLastSheetsSyncTime(nowTime);
+          sheetsSuccess = true;
+          console.info('[Workspace Sync] ✓ Google Sheets automatically synchronized on app launch!');
+        } catch (sErr: any) {
+          console.warn('[Workspace Sync] Startup Sheets sync notice:', sErr);
+        } finally {
+          setIsSyncingSheets(false);
+        }
+      }
+
+      // 5. AUTOMATICALLY BACKUP TO GOOGLE DRIVE ON APP OPEN
+      try {
+        setIsUploadingDrive(true);
+        const { jsonString, filename } = getDatabaseJSONString(stateToSync, currentUserEmail, terminalId, true);
+        const uploaded = await uploadBackupToGoogleDrive(activeToken, {
+          fileName: filename,
+          fileContent: jsonString,
+          mimeType: 'application/json',
+          description: `Falcon Rod Maker POS - Automated App Launch Backup (${stateToSync.transactions?.length || 0} txns, ${stateToSync.products?.length || 0} products)`
+        });
+        const nowIso = new Date().toISOString();
+        setLastDriveBackup(nowIso);
+        setLastDriveBackupTime(nowIso);
+        setDriveBackupsCount(prev => prev + 1);
+        driveSuccess = true;
+        console.info('[Workspace Sync] ✓ Google Drive backup uploaded on app launch:', uploaded.name);
+      } catch (dErr: any) {
+        console.warn('[Workspace Sync] Startup Drive backup notice:', dErr);
+      } finally {
+        setIsUploadingDrive(false);
+      }
+
+      if (sheetsSuccess || driveSuccess) {
+        setSheetsSuccessMsg('✓ Google Workspace auto-authenticated & synced on app open!');
+        setTimeout(() => setSheetsSuccessMsg(null), 5000);
+        notifyWorkspaceSyncUpdated();
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.warn('[Workspace Sync] Startup autoSyncNow notice:', err);
+      return false;
+    } finally {
+      setIsAutoAuthenticating(false);
+      refreshWorkspaceState();
+    }
+  }, [appState, currentUserEmail, terminalId, refreshWorkspaceState]);
+
+  // Trigger Automatic Authentication & Sync immediately upon application mount
   useEffect(() => {
     if (initialBackupChecked.current) return;
     initialBackupChecked.current = true;
 
-    if (driveAutoBackup && driveTokenInfo?.token) {
-      const lastBackupStr = getLastDriveBackupTime();
-      let shouldBackup = true;
+    console.info('[Workspace Sync] App opened: starting automatic authentication & sync...');
+    autoSyncNow();
+  }, [autoSyncNow]);
 
-      if (lastBackupStr) {
-        const lastTime = new Date(lastBackupStr).getTime();
-        // If backed up within the last 6 hours, skip auto backup
-        if (!isNaN(lastTime) && Date.now() - lastTime < 6 * 60 * 60 * 1000) {
-          shouldBackup = false;
-        }
-      }
-
-      if (shouldBackup) {
-        console.log('Initiating automated session Google Drive snapshot backup...');
-        const { jsonString, filename } = getDatabaseJSONString(appState, currentUserEmail, terminalId, true);
-        uploadBackupToGoogleDrive(driveTokenInfo.token, {
-          fileName: filename,
-          fileContent: jsonString,
-          mimeType: 'application/json',
-          description: `Falcon Rod Maker POS - Automated Session Backup (${appState.transactions.length} txns, ${appState.products.length} products)`
-        })
-          .then(file => {
-            console.log('Automated Google Drive session backup successful:', file.name);
-            setDriveSuccessMsg(`✓ Auto-backup saved to Google Drive: ${file.name}`);
-            setDriveBackupsCount(prev => prev + 1);
-            setLastDriveBackup(new Date().toISOString());
-            setTimeout(() => setDriveSuccessMsg(null), 5000);
-          })
-          .catch(err => {
-            console.warn('Automated Drive session backup encountered error:', err);
-          });
-      }
-    }
-  }, [driveAutoBackup, driveTokenInfo?.token, appState, currentUserEmail, terminalId]);
+  // Auto-sync whenever user returns to or resumes the app
+  useEffect(() => {
+    const handleAppResume = () => {
+      console.info('[Workspace Sync] Window focused / resumed: verifying workspace sync...');
+      autoSyncNow();
+    };
+    window.addEventListener('focus', handleAppResume);
+    return () => window.removeEventListener('focus', handleAppResume);
+  }, [autoSyncNow]);
 
   // Debounced auto-sync engine with concurrency locking, maxWait, and cooldown buffer
   const lastSyncedHashRef = useRef<string>('');
@@ -644,7 +740,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   let statusBadgeText = 'G-Sync';
   let statusBadgeTooltip = 'Google Workspace: Click to connect Google Sheets & Drive';
 
-  if (isSyncing) {
+  if (isAutoAuthenticating) {
+    workspaceStatus = 'syncing';
+    statusBadgeText = 'Auto-Connecting...';
+    statusBadgeTooltip = 'Google Workspace: Automatically authenticating and synchronizing with Google Sheets & Drive...';
+  } else if (isSyncing) {
     workspaceStatus = 'syncing';
     statusBadgeText = isSyncingSheets ? 'Sheets Syncing...' : 'Drive Uploading...';
     statusBadgeTooltip = 'Google Workspace synchronizing live data in background...';
@@ -664,7 +764,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   } else if (sheetsConnected) {
     workspaceStatus = 'ready';
     statusBadgeText = 'Sheets Ready';
-    statusBadgeTooltip = 'Google Sheets: Authorized. Click to select or create a spreadsheet.';
+    statusBadgeTooltip = 'Google Sheets: Authorized. Auto-creating / linking spreadsheet.';
   }
 
   // Direct App Openers using Explicit Android Intents & Custom Tabs
@@ -705,12 +805,16 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
     driveSuccessMsg,
     driveBackupsCount,
 
+    // Auto-auth engine
+    isAutoAuthenticating,
+
     // Workspace overview
     workspaceStatus,
     statusBadgeText,
     statusBadgeTooltip,
 
     // Actions
+    autoSyncNow,
     syncAllSheets,
     syncTransactionToSheets,
     backupToDrive,

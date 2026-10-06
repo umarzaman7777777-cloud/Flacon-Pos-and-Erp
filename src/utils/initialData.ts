@@ -448,6 +448,7 @@ export const INITIAL_STATE: AppState = {
     theme: 'dark',
     logoTheme: 'amber',
     showBlueprintGrid: true,
+    blueprintGridScale: 20,
     density: 'comfortable',
     fontSize: 'normal',
     reduceMotion: false

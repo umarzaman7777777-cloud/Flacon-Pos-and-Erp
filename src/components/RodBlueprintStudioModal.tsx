@@ -110,9 +110,12 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
   const lenRatio = Math.log10(clampedLength) / Math.log10(240);
   const pipeWidth = Math.round(75 + lenRatio * 185);
   const diaInches = parseDiameterToInches(specs.diameterInches);
-  const pipeHeight = Math.max(10, Math.min(36, Math.round(10 + Math.sqrt(Math.max(0.1, diaInches) / 0.125) * 4.4)));
-  const startX = (340 - pipeWidth) / 2;
+  const baseDia = Math.max(0.125, Math.min(3.5, diaInches));
+  const pipeHeight = Math.round(9 + Math.min(baseDia, 3.2) * 17.5);
   const centerY = 110;
+  const clampHeight = Math.max(24, pipeHeight + 14);
+  const clampY = centerY - clampHeight / 2;
+  const startX = (340 - pipeWidth) / 2;
 
   // Hole radius in SVG pixels based on holeSizeMm (6mm ~ 2.4px, 12mm ~ 4.8px)
   const holeRadius = Math.max(2.2, (specs.holeSizeMm / 8) * 3.2);
@@ -350,9 +353,9 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
                     {/* Clamp Bracket Collar */}
                     <rect
                       x={startX - 12}
-                      y={centerY - 16}
+                      y={clampY}
                       width="14"
-                      height="32"
+                      height={clampHeight}
                       rx="3"
                       fill="#1e293b"
                       stroke="#f59e0b"
@@ -435,9 +438,9 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
                     {/* Motor Coupling Spindle Collar */}
                     <rect
                       x={startX + pipeWidth - 2}
-                      y={centerY - 16}
+                      y={clampY}
                       width="16"
-                      height="32"
+                      height={clampHeight}
                       rx="3"
                       fill="#1e293b"
                       stroke="#f59e0b"
@@ -571,10 +574,11 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
                   y={centerY + 3}
                   textAnchor="end"
                   fill="#38bdf8"
-                  fontSize="8.5"
+                  fontSize="7.5"
                   fontFamily="monospace"
+                  fontWeight="bold"
                 >
-                  OD Ø {specs.diameterInches}
+                  OD Ø {specs.diameterInches} ({formatDiameterMm(specs.diameterInches)}mm)
                 </text>
 
                 {/* Hole Size Annotation */}

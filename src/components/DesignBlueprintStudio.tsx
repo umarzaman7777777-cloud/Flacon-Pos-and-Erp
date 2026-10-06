@@ -112,9 +112,11 @@ export const RodBlueprintSvgOverlay: React.FC<{
   const lenRatio = Math.log10(clampedLength) / Math.log10(240); // 0 at 1", 1 at 240"
   const pipeWidth = Math.round(68 + lenRatio * 168);
 
-  // Dynamic diameter scaling from 1/8" upwards
+  // Dynamic, proportional diameter scaling with clear visual graduation:
+  // 1/8" -> ~11px, 1/4" -> ~13px, 1/2" -> ~18px, 3/4" -> ~22px, 1" -> ~27px, 1-1/4" -> ~32px, 1-1/2" -> ~37px, 2" -> ~46px, 3" -> ~63px
   const diaInches = parseDiameterToInches(specs.diameterInches);
-  const pipeHeight = Math.max(9, Math.min(36, Math.round(9 + Math.sqrt(Math.max(0.1, diaInches) / 0.125) * 4.4)));
+  const baseDia = Math.max(0.125, Math.min(3.5, diaInches));
+  const pipeHeight = Math.round(9 + Math.min(baseDia, 3.2) * 17.5);
 
   const viewBoxW = 280;
   const viewBoxH = compact ? 180 : 210;
@@ -122,7 +124,7 @@ export const RodBlueprintSvgOverlay: React.FC<{
   const centerY = viewBoxH / 2 - (compact ? 8 : 10);
 
   // Dynamic clamp dimensions wrapping proportionally around the pipe body
-  const clampHeight = Math.max(22, pipeHeight + 12);
+  const clampHeight = Math.max(24, pipeHeight + 14);
   const clampY = centerY - clampHeight / 2;
   const clampEarOffset = clampHeight / 2 + 3;
 
@@ -164,12 +166,16 @@ export const RodBlueprintSvgOverlay: React.FC<{
   if (viewMode === 'rod') {
     const rodScaleW = 185;
     const rodStartX = 72;
-    const rodH = Math.max(14, Math.min(32, pipeHeight));
+    const rodH = Math.max(12, Math.min(54, pipeHeight));
     const secCX = 34;
     const secCY = centerY;
-    const secR = rodH / 2;
-    const wallThick = Math.max(1.8, Math.min(4.5, (22 - parseInt(specs.gauge || '16', 10)) * 0.6 + 2.2));
-    const innerR = Math.max(2.5, secR - wallThick);
+    const secR = Math.max(7, Math.min(26, rodH / 2));
+    const gaugeNum = parseInt(specs.gauge || '16', 10);
+    const wallThickMm = gaugeNum === 14 ? 2.0 : gaugeNum === 16 ? 1.6 : gaugeNum === 18 ? 1.2 : 0.9;
+    const diaMm = diaInches * 25.4;
+    const innerDiaMm = Math.max(1, diaMm - 2 * wallThickMm);
+    const wallThickPx = Math.max(1.8, Math.min(secR * 0.45, (wallThickMm / Math.max(6, diaMm)) * (secR * 2.2)));
+    const innerR = Math.max(2.5, secR - wallThickPx);
 
     return (
       <svg
@@ -183,7 +189,7 @@ export const RodBlueprintSvgOverlay: React.FC<{
           CAD PART 1: MAIN TUBULAR STEEL ROD
         </text>
         <text x={viewBoxW - 12} y="16" textAnchor="end" fill="#94a3b8" fontSize="7" fontFamily="monospace">
-          OD: {specs.diameterInches} • GAUGE: {specs.gauge}
+          OD: {specs.diameterInches} ({diaMm.toFixed(1)}mm) • GAUGE: {specs.gauge}
         </text>
 
         {/* Centerline Construction Axis */}
@@ -195,10 +201,10 @@ export const RodBlueprintSvgOverlay: React.FC<{
           <circle cx={secCX} cy={secCY} r={innerR} fill="#060c18" stroke="#0284c7" strokeWidth="1" strokeDasharray="3 2" />
           <line x1={secCX - secR} y1={secCY} x2={secCX - innerR} y2={secCY} stroke="#f59e0b" strokeWidth="1.5" />
           <text x={secCX} y={secCY + secR + 11} textAnchor="middle" fill="#38bdf8" fontSize="6" fontFamily="monospace" fontWeight="bold">
-            Ø {specs.diameterInches} OD
+            Ø {specs.diameterInches} ({diaMm.toFixed(1)}mm)
           </text>
           <text x={secCX} y={secCY - secR - 6} textAnchor="middle" fill="#f59e0b" fontSize="5.5" fontFamily="monospace">
-            {specs.gauge} Wall
+            ID {innerDiaMm.toFixed(1)}mm • {specs.gauge}
           </text>
         </g>
 
@@ -266,6 +272,8 @@ export const RodBlueprintSvgOverlay: React.FC<{
     const clampCY = centerY + 4;
     const boreDia = specs.clampSize || specs.diameterInches || '3/4"';
     const clampG = specs.clampGauge || '16 Gauge';
+    const boreDiaInches = parseDiameterToInches(boreDia);
+    const boreRadius = Math.max(8, Math.min(23, Math.round(9 + boreDiaInches * 6.5)));
 
     return (
       <svg
@@ -279,7 +287,7 @@ export const RodBlueprintSvgOverlay: React.FC<{
           CAD PART 2: CEILING SHACKLE & MOTOR COUPLER CLAMPS
         </text>
         <text x={viewBoxW - 12} y="16" textAnchor="end" fill="#94a3b8" fontSize="7" fontFamily="monospace">
-          BORE: {boreDia} • GAUGE: {clampG}
+          BORE: {boreDia} ({formatDiameterMm(boreDia)} mm) • GAUGE: {clampG}
         </text>
 
         {/* Divider */}
@@ -295,7 +303,7 @@ export const RodBlueprintSvgOverlay: React.FC<{
               {/* Collar body */}
               <rect x={clamp1X - 22} y={clampCY - 28} width="44" height="56" rx="6" fill="#1e293b" stroke="#f59e0b" strokeWidth="2" />
               {/* Collar inner bore */}
-              <circle cx={clamp1X} cy={clampCY - 4} r="15" fill="#060c18" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 2" />
+              <circle cx={clamp1X} cy={clampCY - 4} r={boreRadius} fill="#060c18" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 2" />
               {/* Pinch bolt ears */}
               <rect x={clamp1X - 28} y={clampCY - 34} width="8" height="12" rx="2" fill="#475569" stroke="#f59e0b" strokeWidth="1.2" />
               <rect x={clamp1X - 28} y={clampCY + 18} width="8" height="12" rx="2" fill="#475569" stroke="#f59e0b" strokeWidth="1.2" />
@@ -336,7 +344,7 @@ export const RodBlueprintSvgOverlay: React.FC<{
               {/* Coupler body */}
               <rect x={clamp2X - 24} y={clampCY - 28} width="48" height="56" rx="6" fill="#1e293b" stroke="#f59e0b" strokeWidth="2" />
               {/* Motor spindle socket bore */}
-              <circle cx={clamp2X} cy={clampCY - 4} r="16" fill="#060c18" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 2" />
+              <circle cx={clamp2X} cy={clampCY - 4} r={boreRadius + 1} fill="#060c18" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="4 2" />
               {/* Dual motor locking bolt pin holes */}
               <circle cx={clamp2X - 7} cy={clampCY - 4} r="3.5" fill="#0284c7" stroke="#ffffff" strokeWidth="0.8" />
               <circle cx={clamp2X + 7} cy={clampCY - 4} r="3.5" fill="#0284c7" stroke="#ffffff" strokeWidth="0.8" />
@@ -589,7 +597,7 @@ export const RodBlueprintSvgOverlay: React.FC<{
     const centerXpl = viewBoxW / 2;
     const centerYpl = centerY;
     const rodW = 100;
-    const rodH = Math.max(12, Math.min(24, pipeHeight));
+    const rodH = Math.max(12, Math.min(48, pipeHeight));
 
     return (
       <svg
@@ -1274,10 +1282,11 @@ export const RodBlueprintSvgOverlay: React.FC<{
             y={centerY + 3}
             textAnchor="end"
             fill="#38bdf8"
-            fontSize="8"
+            fontSize="7"
             fontFamily="monospace"
+            fontWeight="bold"
           >
-            Ø {specs.diameterInches}
+            Ø {specs.diameterInches} ({formatDiameterMm(specs.diameterInches)}mm)
           </text>
 
           <text
@@ -1312,7 +1321,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
   });
 
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [activeTab, setActiveTab] = useState<'size' | 'clamps' | 'holes' | 'pipe'>('size');
+  const [activeTab, setActiveTab] = useState<'size' | 'clamps' | 'holes' | 'pipe' | 'cotter' | 'qa'>('size');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [cartSuccess, setCartSuccess] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -1562,6 +1571,28 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
                 }`}
               >
                 4. Gauge & Type
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('cotter')}
+                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                  activeTab === 'cotter'
+                    ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
+                    : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
+                }`}
+              >
+                5. Cotter Pin
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('qa')}
+                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                  activeTab === 'qa'
+                    ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
+                    : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
+                }`}
+              >
+                6. QA & Specs
               </button>
             </div>
 
@@ -2371,6 +2402,194 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 5: SAFETY COTTER / GARTER PIN */}
+              {activeTab === 'cotter' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-3 text-xs font-mono">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="font-bold text-[var(--text)] block">Include Safety Cotter / Garter Pin</span>
+                        <span className="text-[11px] text-[var(--text-dim)]">
+                          Secondary mechanical fastener to lock shackle bolt securely under rotational vibrations
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={specs.hasGarterPin ?? true}
+                        onChange={e => setSpecs(prev => ({ ...prev, hasGarterPin: e.target.checked }))}
+                        className="w-4 h-4 accent-amber-400 rounded cursor-pointer"
+                      />
+                    </label>
+
+                    {(specs.hasGarterPin ?? true) && (
+                      <div className="space-y-3 pt-2 border-t border-[var(--steel-line)]">
+                        <div>
+                          <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                            Cotter Pin Type
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'split_cotter', label: 'Split Cotter Pin', desc: 'DIN 94 dual prong' },
+                              { id: 'hairpin_r_clip', label: 'R-Clip Hairpin', desc: 'DIN 11024 spring wire' },
+                              { id: 'through_bolt_locknut', label: 'Bolt & Locknut', desc: 'M6 Nyloc safety pair' }
+                            ].map(pt => (
+                              <button
+                                key={pt.id}
+                                type="button"
+                                onClick={() => setSpecs(prev => ({ ...prev, garterPinType: pt.id as any }))}
+                                className={`p-2 rounded-xl border text-left font-bold ${
+                                  (specs.garterPinType || 'split_cotter') === pt.id
+                                    ? 'bg-amber-400 text-black border-amber-400 shadow-sm'
+                                    : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                }`}
+                              >
+                                <span className="block text-xs">{pt.label}</span>
+                                <span className="text-[9px] text-zinc-500 font-normal">{pt.desc}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                              Pin Diameter (mm)
+                            </span>
+                            <div className="grid grid-cols-4 gap-1">
+                              {[2.5, 3.2, 4.0, 5.0].map(dia => (
+                                <button
+                                  key={dia}
+                                  type="button"
+                                  onClick={() => setSpecs(prev => ({ ...prev, garterPinDiameterMm: dia }))}
+                                  className={`py-1.5 rounded-lg border text-center font-bold ${
+                                    (specs.garterPinDiameterMm || 3.2) === dia
+                                      ? 'bg-sky-400 text-black border-sky-400'
+                                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                  }`}
+                                >
+                                  Ø{dia}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                              Pin Length (mm)
+                            </span>
+                            <div className="grid grid-cols-4 gap-1">
+                              {[35, 45, 55, 65].map(len => (
+                                <button
+                                  key={len}
+                                  type="button"
+                                  onClick={() => setSpecs(prev => ({ ...prev, garterPinLengthMm: len }))}
+                                  className={`py-1.5 rounded-lg border text-center font-bold ${
+                                    (specs.garterPinLengthMm || 45) === len
+                                      ? 'bg-sky-400 text-black border-sky-400'
+                                      : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                  }`}
+                                >
+                                  {len}mm
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-[var(--text-dim)] uppercase font-bold block mb-1">
+                            Pin Material Specification
+                          </span>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'zinc_plated_steel', label: 'Zinc Plated Steel' },
+                              { id: 'stainless_steel', label: 'Stainless Steel 304' },
+                              { id: 'brass', label: 'Corrosion-Resistant Brass' }
+                            ].map(mat => (
+                              <button
+                                key={mat.id}
+                                type="button"
+                                onClick={() => setSpecs(prev => ({ ...prev, garterPinMaterial: mat.id as any }))}
+                                className={`py-1.5 px-2 rounded-lg border text-center font-bold text-[11px] ${
+                                  (specs.garterPinMaterial || 'zinc_plated_steel') === mat.id
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400'
+                                    : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)]'
+                                }`}
+                              >
+                                {mat.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 6: QA, LOAD RATING & SPECS */}
+              {activeTab === 'qa' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5">
+                      <label className="font-bold uppercase text-[var(--text)] block">
+                        CAD Drawing Revision
+                      </label>
+                      <select
+                        value={specs.cadRevision || 'Rev A'}
+                        onChange={e => setSpecs(prev => ({ ...prev, cadRevision: e.target.value }))}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-white"
+                      >
+                        <option value="Rev A">Rev A (Production Standard)</option>
+                        <option value="Rev B">Rev B (Reinforced Clamping)</option>
+                        <option value="Rev C">Rev C (Heavy Duty Certified)</option>
+                      </select>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5">
+                      <label className="font-bold uppercase text-[var(--text)] block">
+                        Certified Safe Working Load
+                      </label>
+                      <select
+                        value={specs.loadRatingKg || 35}
+                        onChange={e => setSpecs(prev => ({ ...prev, loadRatingKg: parseInt(e.target.value, 10) }))}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-2 text-white"
+                      >
+                        <option value="25">25 kg (Lightweight Ceiling Fans)</option>
+                        <option value="35">35 kg (Standard 56&quot; Fans)</option>
+                        <option value="50">50 kg (Commercial Heavy Duty)</option>
+                        <option value="75">75 kg (Industrial High-CFM)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5 text-xs font-mono">
+                    <label className="font-bold uppercase text-[var(--text)] block">
+                      Lead Mechanical Engineer Sign-Off
+                    </label>
+                    <input
+                      type="text"
+                      value={specs.engineerSignOff || 'M. Bilal (Falcon Lead QA)'}
+                      onChange={e => setSpecs(prev => ({ ...prev, engineerSignOff: e.target.value }))}
+                      className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-1.5 text-xs font-mono">
+                    <label className="font-bold uppercase text-[var(--text)] block">
+                      Workshop Blueprint Notes
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={specs.notes || ''}
+                      onChange={e => setSpecs(prev => ({ ...prev, notes: e.target.value }))}
+                      placeholder="e.g. Ensure 80 micron electrostatic powder coat, deburr all bolt holes prior to painting"
+                      className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg p-2.5 text-white font-mono text-xs focus:outline-none focus:border-amber-400"
+                    />
                   </div>
                 </div>
               )}

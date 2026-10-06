@@ -3,7 +3,7 @@ import { auth, db } from '../firebase/config';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { AppState, Transaction, Product, CustomerLedgerAccount, RawStockItem, Expense, Factory } from '../types';
-import { getPersistent, setPersistent, removePersistent } from './persistentStorage';
+import { getPersistent, setPersistent, removePersistent, publishWorkspaceTokensToFirestore, autoSyncWorkspaceFromCloud } from './persistentStorage';
 
 declare global {
   interface Window {
@@ -109,6 +109,15 @@ export function storeSheetsToken(token: string, expiresInSeconds: number = 3600,
     if (email) {
       setPersistent(STORAGE_KEY_SHEETS_EMAIL, email);
     }
+    // Automatically replicate to Firestore cloud sync
+    publishWorkspaceTokensToFirestore({
+      sheetsToken: token,
+      expiresInSec: validDuration,
+      email: email || ALLOWED_SHEETS_OWNER_EMAIL,
+      spreadsheetId: getStoredSpreadsheetId() || undefined,
+      spreadsheetTitle: getStoredSpreadsheetTitle() || undefined,
+      spreadsheetUrl: getStoredSpreadsheetUrl() || undefined
+    }).catch(() => {});
     notifyWorkspaceSyncUpdated();
   } catch (err) {
     console.error('Failed to store Sheets token', err);
@@ -235,22 +244,29 @@ export function isNativeOrLocalEnvironment(): boolean {
 }
 
 /**
- * Direct device-local token helpers (Cloud token sharing disabled per user preference)
+ * Cloud token helpers for automatic sync across all app launches and devices
  */
 export async function syncSheetsTokenFromCloud(): Promise<SheetsTokenInfo | null> {
-  // Tokens are strictly managed locally on this device
+  await autoSyncWorkspaceFromCloud();
   return getStoredSheetsToken();
 }
 
 export async function publishSheetsTokenToCloud(
-  _token: string,
-  _expiresInSec: number,
-  _email: string,
-  _spreadsheetId?: string,
-  _spreadsheetTitle?: string,
-  _spreadsheetUrl?: string
+  token: string,
+  expiresInSec: number = 3600,
+  email: string = ALLOWED_SHEETS_OWNER_EMAIL,
+  spreadsheetId?: string,
+  spreadsheetTitle?: string,
+  spreadsheetUrl?: string
 ): Promise<void> {
-  // Disabled: Clean device-only authorization without cloud token exposure
+  await publishWorkspaceTokensToFirestore({
+    sheetsToken: token,
+    expiresInSec,
+    email,
+    spreadsheetId,
+    spreadsheetTitle,
+    spreadsheetUrl
+  });
 }
 
 /**
