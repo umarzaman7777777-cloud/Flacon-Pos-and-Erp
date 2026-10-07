@@ -124,6 +124,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                     Job Work
                   </span>
                 )}
+                {transaction.batchId && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30">
+                    Batch: {transaction.batchId}
+                  </span>
+                )}
+                {transaction.trackingNumber && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                    Trk: {transaction.trackingNumber}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-[var(--text-dim)] flex items-center gap-2 mt-0.5">
                 <span>{transaction.date}</span>
@@ -290,7 +300,23 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                   {items.map((it, idx) => (
                     <tr key={idx} className="hover:bg-[var(--panel)] transition">
                       <td className="px-3.5 py-2.5 text-[var(--text-dim)]">{idx + 1}</td>
-                      <td className="px-3.5 py-2.5 font-bold text-[var(--text)] font-sans">{it.name}</td>
+                      <td className="px-3.5 py-2.5 font-bold text-[var(--text)] font-sans">
+                        <div>{it.name}</div>
+                        {(it.batchId || it.trackingNumber) && (
+                          <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono font-normal">
+                            {it.batchId && (
+                              <span className="px-1.5 py-0.5 rounded bg-[var(--yellow)]/10 text-[var(--yellow)] border border-[var(--yellow)]/20">
+                                Batch: {it.batchId}
+                              </span>
+                            )}
+                            {it.trackingNumber && (
+                              <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                                Trk: {it.trackingNumber}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3.5 py-2.5 text-[var(--text-dim)]">{it.size || transaction.sizes || '—'}</td>
                       <td className="px-3.5 py-2.5 text-[var(--text-dim)]">{it.color || transaction.colors || '—'}</td>
                       <td className="px-3.5 py-2.5 text-right font-bold text-[var(--text)]">{it.qty} pcs</td>

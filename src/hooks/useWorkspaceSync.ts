@@ -333,16 +333,61 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
     console.info('[Workspace Sync] App opened: starting automatic authentication & sync...');
     autoSyncNow();
+
+    // Staggered retries for mobile / Android platforms where storage or auth loads asynchronously
+    const retryTimer1 = setTimeout(() => {
+      autoSyncNow();
+    }, 1500);
+
+    const retryTimer2 = setTimeout(() => {
+      autoSyncNow();
+    }, 4000);
+
+    return () => {
+      clearTimeout(retryTimer1);
+      clearTimeout(retryTimer2);
+    };
   }, [autoSyncNow]);
 
-  // Auto-sync whenever user returns to or resumes the app
+  // Auto-sync whenever Firebase Auth user signs in or restores session
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) {
+        console.info('[Workspace Sync] Active Firebase user detected:', user.email);
+        autoSyncNow();
+      }
+    });
+    return () => unsub();
+  }, [autoSyncNow]);
+
+  // Auto-sync whenever workspace sync event is dispatched (tokens refreshed, cloud synced, or deep link received)
+  useEffect(() => {
+    const handleWorkspaceSyncEvent = () => {
+      const sToken = getStoredSheetsToken();
+      const dToken = getStoredDriveToken();
+      if (sToken?.token || dToken?.token) {
+        autoSyncNow();
+      }
+    };
+    window.addEventListener(WORKSPACE_SYNC_EVENT, handleWorkspaceSyncEvent);
+    return () => window.removeEventListener(WORKSPACE_SYNC_EVENT, handleWorkspaceSyncEvent);
+  }, [autoSyncNow]);
+
+  // Auto-sync whenever user returns to or resumes the app (e.g. returning from Google Sign-In or switching apps)
   useEffect(() => {
     const handleAppResume = () => {
       console.info('[Workspace Sync] Window focused / resumed: verifying workspace sync...');
       autoSyncNow();
     };
     window.addEventListener('focus', handleAppResume);
-    return () => window.removeEventListener('focus', handleAppResume);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleAppResume();
+      }
+    });
+    return () => {
+      window.removeEventListener('focus', handleAppResume);
+    };
   }, [autoSyncNow]);
 
   // Debounced auto-sync engine with concurrency locking, maxWait, and cooldown buffer

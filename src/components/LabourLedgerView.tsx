@@ -1,10 +1,28 @@
 import React, { useState } from 'react';
-import { Users, Plus, Trash2, Edit2, Calendar, CheckSquare, Download } from 'lucide-react';
-import { Worker, LabourEntry, AppLanguage, LabourPieceRate } from '../types';
+import {
+  Users,
+  Plus,
+  Trash2,
+  Edit2,
+  Calendar,
+  CheckSquare,
+  Download,
+  Sliders,
+  CreditCard,
+  Image as ImageIcon
+} from 'lucide-react';
+import { Worker, LabourEntry, AppLanguage, LabourPieceRate, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeWorkerLedgerDetails } from '../utils/mathEngine';
+import {
+  buildLedgerExportTableData,
+  getStoredLedgerColumnConfig,
+  saveStoredLedgerColumnConfig
+} from '../utils/ledgerExportHelper';
+import { EditLedgerEntryModal } from './EditLedgerEntryModal';
+import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 
 interface LabourLedgerViewProps {
   workers: Worker[];
@@ -14,6 +32,7 @@ interface LabourLedgerViewProps {
   onDeleteWorker: (name: string) => void;
   onAddLabourEntry: (workerName: string, entry: Omit<LabourEntry, 'id'>) => void;
   onDeleteLabourEntry: (workerName: string, entryId: string) => void;
+  onUpdateLabourEntry?: (workerName: string, entryId: string, updatedData: any) => void;
   onBulkAttendance: (attendanceMap: Record<string, 'present' | 'half' | 'absent' | 'leave'>, date: string) => void;
 }
 
@@ -25,6 +44,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   onDeleteWorker,
   onAddLabourEntry,
   onDeleteLabourEntry,
+  onUpdateLabourEntry,
   onBulkAttendance
 }) => {
   const [selectedWorkerIdx, setSelectedWorkerIdx] = useState<number | null>(null);
@@ -46,6 +66,25 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   const [entryAmount, setEntryAmount] = useState('');
   const [entryNote, setEntryNote] = useState('');
   const [entryDate, setEntryDate] = useState(todayISO());
+
+  // Detailed payment & Studio states
+  const [editingEntry, setEditingEntry] = useState<LabourEntry | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [colConfig, setColConfig] = useState<LedgerColumnConfig>(() =>
+    getStoredLedgerColumnConfig('labour', DEFAULT_LEDGER_COLUMNS)
+  );
+  const [showExtendedPaymentFields, setShowExtendedPaymentFields] = useState(false);
+  const [entryMethod, setEntryMethod] = useState('Cash');
+  const [entryPaidBy, setEntryPaidBy] = useState('');
+  const [entryPaidTo, setEntryPaidTo] = useState('');
+  const [entryBankName, setEntryBankName] = useState('');
+  const [entryAccountNumber, setEntryAccountNumber] = useState('');
+  const [entryChequeNo, setEntryChequeNo] = useState('');
+
+  const handleUpdateColConfig = (newCfg: LedgerColumnConfig) => {
+    setColConfig(newCfg);
+    saveStoredLedgerColumnConfig('labour', newCfg);
+  };
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
@@ -101,71 +140,81 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       note: entryNote.trim() || undefined,
       debit,
       credit,
-      workType: currentWorker.workType
+      workType: currentWorker.workType,
+      method: entryKind !== 'attendance' ? entryMethod : undefined,
+      paidBy: entryPaidBy.trim() || undefined,
+      paidTo: entryPaidTo.trim() || currentWorker.name,
+      bankName: entryBankName.trim() || undefined,
+      accountNumber: entryAccountNumber.trim() || undefined,
+      chequeNo: entryChequeNo.trim() || undefined
     });
 
     setEntryUnits('');
     setEntryAmount('');
     setEntryNote('');
+    setEntryPaidBy('');
+    setEntryPaidTo('');
+    setEntryBankName('');
+    setEntryAccountNumber('');
+    setEntryChequeNo('');
   };
 
-  const handleExportCSV = () => {
+  const handleExportCSV = (cfg?: LedgerColumnConfig) => {
     if (!currentWorker) return;
-    const headers = ['Date', 'Kind', 'Status', 'Units', 'Note', 'Paid (Debit)', 'Earned (Credit)'];
-    const rows = currentWorker.entries.map(e => [
-      e.date,
-      e.kind,
-      e.status || '—',
-      e.units || '—',
-      e.note || '—',
-      e.debit,
-      e.credit
-    ]);
-    downloadCSV(`${currentWorker.name}_Labour_Ledger`, headers, rows);
+    const activeCfg = cfg || colConfig;
+    const tableData = buildLedgerExportTableData(
+      currentWorker.entries.map(e => ({
+        ...e,
+        desc: e.note || e.kind,
+        runningBalance: (e.credit || 0) - (e.debit || 0)
+      })),
+      activeCfg
+    );
+    downloadCSV(`${currentWorker.name}_Labour_Ledger`, tableData.headers, tableData.rows);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = (cfg?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!currentWorker) return;
-    const headers = ['Date', 'Type', 'Status', 'Units', 'Paid', 'Earned'];
-    const rows = currentWorker.entries.map(e => [
-      e.date,
-      e.kind,
-      e.status || '—',
-      e.units ? String(e.units) : '—',
-      fmt(e.debit),
-      fmt(e.credit)
-    ]);
+    const activeCfg = cfg || colConfig;
+    const tableData = buildLedgerExportTableData(
+      currentWorker.entries.map(e => ({
+        ...e,
+        desc: e.note || e.kind,
+        runningBalance: (e.credit || 0) - (e.debit || 0)
+      })),
+      activeCfg
+    );
     openExportModal({
       title: `${currentWorker.name} — Labour Ledger`,
-      headers,
-      rows,
+      headers: tableData.headers,
+      rows: tableData.rows,
       filename: `${currentWorker.name}_Labour_Ledger`,
       companyName,
-      subtitle: 'Fan Accessories · Gujrat',
+      subtitle: exportDocConfig?.subtitle || `${currentWorker.workType} · Wages Account`,
       balanceFooterText: `Net Dues: ${fmt(getWorkerDues(currentWorker))}`,
       defaultFormat: 'pdf',
       initialOrientation: 'landscape'
     });
   };
 
-  const handleExportJPG = () => {
+  const handleExportJPG = (cfg?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!currentWorker) return;
-    const headers = ['Date', 'Type', 'Status', 'Units', 'Paid', 'Earned'];
-    const rows = currentWorker.entries.map(e => [
-      e.date,
-      e.kind,
-      e.status || '—',
-      e.units ? String(e.units) : '—',
-      fmt(e.debit),
-      fmt(e.credit)
-    ]);
+    const activeCfg = cfg || colConfig;
+    const tableData = buildLedgerExportTableData(
+      currentWorker.entries.map(e => ({
+        ...e,
+        desc: e.note || e.kind,
+        runningBalance: (e.credit || 0) - (e.debit || 0)
+      })),
+      activeCfg
+    );
     openExportModal({
       title: `${currentWorker.name} — Labour Ledger`,
-      headers,
-      rows,
+      headers: tableData.headers,
+      rows: tableData.rows,
       filename: `${currentWorker.name}_Labour_Ledger`,
       companyName,
-      subtitle: 'Fan Accessories · Gujrat',
+      subtitle: exportDocConfig?.subtitle || `${currentWorker.workType} · Wages Account`,
       balanceFooterText: `Net Dues: ${fmt(getWorkerDues(currentWorker))}`,
       defaultFormat: 'jpg',
       initialOrientation: 'landscape'
@@ -431,21 +480,30 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleExportCSV}
+                  onClick={() => setIsStudioOpen(true)}
+                  className="px-2.5 py-1 rounded bg-[var(--yellow)]/15 border border-[var(--yellow)]/30 text-[var(--yellow)] hover:bg-[var(--yellow)]/25 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Open Ledger Studio to select export columns & visual layout"
+                >
+                  <Sliders size={12} />
+                  <span>Ledger Studio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)]"
                 >
                   CSV
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportPDF}
+                  onClick={() => handleExportPDF()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)]"
                 >
                   PDF
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportJPG}
+                  onClick={() => handleExportJPG()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--yellow)] hover:bg-[var(--yellow)] hover:text-black transition"
                 >
                   JPG
@@ -453,7 +511,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedWorkerIdx(null)}
-                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]"
+                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
                 >
                   ✕
                 </button>
@@ -526,7 +584,30 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                           {e.note && ` · ${e.note}`}
                         </td>
                         <td className="p-2.5 text-right font-semibold text-[var(--green)]">
-                          {e.debit ? fmt(e.debit) : '—'}
+                          {e.debit ? (
+                            <div>
+                              <div>{fmt(e.debit)}</div>
+                              {e.method && (
+                                <div className="text-[10px] text-[var(--yellow)] font-mono">{e.method}</div>
+                              )}
+                              {(e.paidBy || e.paidTo) && (
+                                <div className="text-[9px] text-[var(--text-dim)] flex items-center justify-end gap-1 flex-wrap">
+                                  {e.paidBy && <span>By: <strong className="text-[var(--text)]">{e.paidBy}</strong></span>}
+                                  {e.paidTo && <span>→ To: <strong className="text-[var(--text)]">{e.paidTo}</strong></span>}
+                                </div>
+                              )}
+                              {e.accountNumber && (
+                                <div className="text-[9px] text-[var(--yellow)] font-mono">
+                                  A/C: {e.accountNumber} {e.bankName && `(${e.bankName})`}
+                                </div>
+                              )}
+                              {e.chequeNo && (
+                                <div className="text-[9px] text-[var(--text-dim)] font-mono">
+                                  Ref: {e.chequeNo}
+                                </div>
+                              )}
+                            </div>
+                          ) : '—'}
                         </td>
                         <td className="p-2.5 text-right font-semibold text-[var(--red)]">
                           {e.credit ? fmt(e.credit) : '—'}
@@ -545,14 +626,25 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                             {e.runningBalance > 0 ? 'Due' : e.runningBalance < 0 ? 'Adv' : ''}
                           </span>
                         </td>
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => onDeleteLabourEntry(currentWorker.name, e.id)}
-                            className="text-red-400 hover:text-red-300 p-1"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingEntry(e)}
+                              className="text-[var(--text-dim)] hover:text-[var(--yellow)] hover:bg-[var(--panel-raised)] p-1 rounded transition cursor-pointer"
+                              title="Edit Entry Details"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteLabourEntry(currentWorker.name, e.id)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1 rounded transition cursor-pointer"
+                              title="Delete Entry"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -563,7 +655,63 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
 
             {/* Quick Add Entry */}
             <form onSubmit={handleAddEntry} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2 text-xs">
-              <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Log Attendance or Payment</div>
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Log Attendance or Payment</div>
+                {entryKind !== 'attendance' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowExtendedPaymentFields(!showExtendedPaymentFields)}
+                    className="text-[10px] text-[var(--yellow)] hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                  >
+                    {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment (By / To / A/C)'}
+                  </button>
+                )}
+              </div>
+
+              {/* Extended Payment Channels when toggled for payment/advance */}
+              {showExtendedPaymentFields && entryKind !== 'attendance' && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+                  <select
+                    value={entryMethod}
+                    onChange={e => setEntryMethod(e.target.value)}
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank Transfer</option>
+                    <option value="Online">Online / EasyPaisa</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={entryPaidBy}
+                    onChange={e => setEntryPaidBy(e.target.value)}
+                    placeholder="Paid By (e.g. Cashier / Owner)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryPaidTo}
+                    onChange={e => setEntryPaidTo(e.target.value)}
+                    placeholder={`Paid To (e.g. ${currentWorker.name})`}
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryBankName}
+                    onChange={e => setEntryBankName(e.target.value)}
+                    placeholder="Bank (e.g. Meezan, HBL)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryAccountNumber}
+                    onChange={e => setEntryAccountNumber(e.target.value)}
+                    placeholder="Account Number / IBAN"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <select
                   value={entryKind}
@@ -620,7 +768,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
 
                 <button
                   type="submit"
-                  className="py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition"
+                  className="py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition cursor-pointer"
                 >
                   Save
                 </button>
@@ -628,6 +776,40 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Worker Ledger Entry Modal */}
+      {editingEntry && currentWorker && (
+        <EditLedgerEntryModal
+          isOpen={!!editingEntry}
+          onClose={() => setEditingEntry(null)}
+          title={`Edit Worker Entry · ${currentWorker.name}`}
+          ledgerName={currentWorker.name}
+          entry={editingEntry}
+          onSave={updated => {
+            if (onUpdateLabourEntry) {
+              onUpdateLabourEntry(currentWorker.name, editingEntry.id, updated);
+            }
+          }}
+        />
+      )}
+
+      {/* Ledger Column & Export Studio Modal */}
+      {isStudioOpen && currentWorker && (
+        <LedgerStudioModal
+          isOpen={isStudioOpen}
+          onClose={() => setIsStudioOpen(false)}
+          ledgerName={currentWorker.name}
+          ledgerSubtitle={`${currentWorker.workType} · Wages & Labour Ledger`}
+          columnConfig={colConfig}
+          onUpdateColumnConfig={handleUpdateColConfig}
+          companyName={companyName}
+          activeBalance={getWorkerDues(currentWorker)}
+          sampleRows={currentWorker.entries}
+          onExportCSV={cfg => handleExportCSV(cfg)}
+          onExportPDF={(cfg, docCfg) => handleExportPDF(cfg, docCfg)}
+          onExportJPG={(cfg, docCfg) => handleExportJPG(cfg, docCfg)}
+        />
       )}
     </div>
   );

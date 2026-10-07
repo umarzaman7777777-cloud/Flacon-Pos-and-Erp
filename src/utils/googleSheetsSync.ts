@@ -626,6 +626,9 @@ export function buildSalesTransactionsValues(transactions: Transaction[]): (stri
     'Items Count',
     'Summary Description',
     'Sizes & Gauges',
+    'Batch ID',
+    'Item Batches',
+    'Tracking Number',
     'Gate Sequence #',
     'Gate Receiver',
     'Terminal Device'
@@ -645,6 +648,9 @@ export function buildSalesTransactionsValues(transactions: Transaction[]): (stri
       .replace(/fan guard/gi, 'fan rod')
       .replace(/[\r\n]+/g, ' '),
     t.sizes || '',
+    t.batchId || '',
+    t.itemBatches || '',
+    t.trackingNumber || '',
     t.gateSequenceNo || (t.gateSequence ? `#${t.gateSequence}` : ''),
     t.gateReceivedBy || '',
     t.device || 'Counter Terminal'
@@ -1221,6 +1227,9 @@ export async function appendTransactionToSheet(
     transaction.itemCount || 1,
     (transaction.itemsSummary || '').replace(/[\r\n]+/g, ' '),
     transaction.sizes || '',
+    transaction.batchId || '',
+    transaction.itemBatches || '',
+    transaction.trackingNumber || '',
     transaction.gateSequenceNo || (transaction.gateSequence ? `#${transaction.gateSequence}` : ''),
     transaction.gateReceivedBy || '',
     transaction.device || 'Counter Terminal'

@@ -12,15 +12,24 @@ import {
   Upload,
   FileText,
   UserCheck,
-  Hash
+  Hash,
+  Sliders,
+  CreditCard
 } from 'lucide-react';
-import { RawSupplier, RawEntry, AppLanguage, Transaction, GatePassData } from '../types';
+import { RawSupplier, RawEntry, AppLanguage, Transaction, GatePassData, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeSupplierLedgerDetails } from '../utils/mathEngine';
 import { getNextGateSequence, UnifiedGateReceipt } from '../utils/gateSequenceManager';
+import {
+  buildLedgerExportTableData,
+  getStoredLedgerColumnConfig,
+  saveStoredLedgerColumnConfig
+} from '../utils/ledgerExportHelper';
+import { EditLedgerEntryModal } from './EditLedgerEntryModal';
+import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 import { GatePassUploadModal } from './GatePassUploadModal';
 import { GatePassViewerModal } from './GatePassViewerModal';
 import { UnifiedGateReceiptsModal } from './UnifiedGateReceiptsModal';
@@ -35,6 +44,7 @@ interface RawMaterialViewProps {
   onDeleteSupplier: (name: string) => void;
   onAddRawEntry: (supplierName: string, entry: Omit<RawEntry, 'id'>) => void;
   onDeleteRawEntry: (supplierName: string, entryId: string) => void;
+  onUpdateRawEntry?: (supplierName: string, entryId: string, updatedData: any) => void;
   onAttachGatePass?: (supplierName: string, entryId: string, gatePass: GatePassData) => void;
 }
 
@@ -48,6 +58,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
   onDeleteSupplier,
   onAddRawEntry,
   onDeleteRawEntry,
+  onUpdateRawEntry,
   onAttachGatePass
 }) => {
   const [selectedSupplierIdx, setSelectedSupplierIdx] = useState<number | null>(null);
@@ -72,6 +83,24 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
   const [detail, setDetail] = useState('');
   const [receivedBy, setReceivedBy] = useState('Gate Officer: M. Tariq');
   const [date, setDate] = useState(todayISO());
+
+  // Detailed payment & Studio states
+  const [editingEntry, setEditingEntry] = useState<RawEntry | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [colConfig, setColConfig] = useState<LedgerColumnConfig>(() =>
+    getStoredLedgerColumnConfig('raw', DEFAULT_LEDGER_COLUMNS)
+  );
+  const [showExtendedPaymentFields, setShowExtendedPaymentFields] = useState(false);
+  const [entryPaidBy, setEntryPaidBy] = useState('');
+  const [entryPaidTo, setEntryPaidTo] = useState('');
+  const [entryBankName, setEntryBankName] = useState('');
+  const [entryAccountNumber, setEntryAccountNumber] = useState('');
+  const [entryChequeNo, setEntryChequeNo] = useState('');
+
+  const handleUpdateColConfig = (newCfg: LedgerColumnConfig) => {
+    setColConfig(newCfg);
+    saveStoredLedgerColumnConfig('raw', newCfg);
+  };
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
@@ -99,8 +128,13 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
       isReturn,
       debit: dVal,
       credit: cVal,
-      method: dVal > 0 ? method : undefined,
-      detail: dVal > 0 ? detail.trim() : undefined,
+      method: dVal > 0 ? method : (cVal > 0 && method !== 'Cash' ? method : undefined),
+      detail: dVal > 0 ? detail.trim() : (detail.trim() || undefined),
+      paidBy: entryPaidBy.trim() || undefined,
+      paidTo: entryPaidTo.trim() || undefined,
+      bankName: entryBankName.trim() || undefined,
+      accountNumber: entryAccountNumber.trim() || undefined,
+      chequeNo: entryChequeNo.trim() || undefined,
       receivedBy: receivedBy.trim() || 'Gate Officer: M. Tariq',
       gatePost: 'Raw Material Inward Gate'
     });
@@ -112,6 +146,11 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
     setDebit('');
     setCredit('');
     setIsReturn(false);
+    setEntryPaidBy('');
+    setEntryPaidTo('');
+    setEntryBankName('');
+    setEntryAccountNumber('');
+    setEntryChequeNo('');
   };
 
   const currentSupplier = selectedSupplierIdx !== null ? suppliers[selectedSupplierIdx] : null;
@@ -119,63 +158,59 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
     ? currentSupplier.entries.reduce((sum, e) => sum + (e.credit || 0) - (e.debit || 0), 0)
     : 0;
 
-  const handleExportCSV = () => {
+  const handleExportCSV = (cfg?: LedgerColumnConfig) => {
     if (!currentSupplier) return;
-    const headers = ['Date', 'Description', 'Material', 'Weight In (kg)', 'Items In', 'Debit (Paid)', 'Credit (Received)'];
-    const rows = currentSupplier.entries.map(e => [
-      e.date,
-      e.desc,
-      e.stockName || '—',
-      e.weightIn ?? '—',
-      e.itemsIn ?? '—',
-      e.debit,
-      e.credit
-    ]);
-    downloadCSV(`${currentSupplier.name}_Raw_Ledger`, headers, rows);
+    const activeCfg = cfg || colConfig;
+    const tableData = buildLedgerExportTableData(
+      currentSupplier.entries.map(e => ({
+        ...e,
+        runningBalance: (e.credit || 0) - (e.debit || 0)
+      })),
+      activeCfg
+    );
+    downloadCSV(`${currentSupplier.name}_Raw_Ledger`, tableData.headers, tableData.rows);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = (cfg?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!currentSupplier) return;
-    const headers = ['Date', 'Description', 'Material', 'Weight', 'Paid', 'Received'];
-    const rows = currentSupplier.entries.map(e => [
-      e.date,
-      e.desc,
-      e.stockName || '—',
-      e.weightIn ? `${e.weightIn} kg` : '—',
-      fmt(e.debit),
-      fmt(e.credit)
-    ]);
+    const activeCfg = cfg || colConfig;
+    const tableData = buildLedgerExportTableData(
+      currentSupplier.entries.map(e => ({
+        ...e,
+        runningBalance: (e.credit || 0) - (e.debit || 0)
+      })),
+      activeCfg
+    );
     openExportModal({
       title: `${currentSupplier.name} — Raw Material Ledger`,
-      headers,
-      rows,
+      headers: tableData.headers,
+      rows: tableData.rows,
       filename: `${currentSupplier.name}_Raw_Ledger`,
       companyName,
-      subtitle: 'Fan Accessories · Gujrat',
+      subtitle: exportDocConfig?.subtitle || 'Raw Material Supplier Account',
       balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
       defaultFormat: 'pdf',
       initialOrientation: 'landscape'
     });
   };
 
-  const handleExportJPG = () => {
+  const handleExportJPG = (cfg?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!currentSupplier) return;
-    const headers = ['Date', 'Description', 'Material', 'Weight', 'Paid (Debit)', 'Received (Credit)'];
-    const rows = currentSupplier.entries.map(e => [
-      e.date,
-      e.desc,
-      e.stockName || '—',
-      e.weightIn ? `${e.weightIn} kg` : '—',
-      fmt(e.debit),
-      fmt(e.credit)
-    ]);
+    const activeCfg = cfg || colConfig;
+    const tableData = buildLedgerExportTableData(
+      currentSupplier.entries.map(e => ({
+        ...e,
+        runningBalance: (e.credit || 0) - (e.debit || 0)
+      })),
+      activeCfg
+    );
     openExportModal({
       title: `${currentSupplier.name} — Raw Material Ledger`,
-      headers,
-      rows,
+      headers: tableData.headers,
+      rows: tableData.rows,
       filename: `${currentSupplier.name}_Raw_Ledger`,
       companyName,
-      subtitle: 'Raw Material Supply & Inward Ledger',
+      subtitle: exportDocConfig?.subtitle || 'Raw Material Supply & Inward Ledger',
       balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
       defaultFormat: 'jpg',
       initialOrientation: 'landscape'
@@ -325,21 +360,30 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleExportCSV}
+                  onClick={() => setIsStudioOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded bg-[var(--yellow)] hover:bg-amber-400 text-black text-xs font-bold uppercase transition shadow cursor-pointer"
+                  title="Ledger Column & Export Studio"
+                >
+                  <Sliders size={13} />
+                  <span>Ledger Studio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)]"
                 >
                   CSV
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportPDF}
+                  onClick={() => handleExportPDF()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)]"
                 >
                   PDF
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportJPG}
+                  onClick={() => handleExportJPG()}
                   className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500 hover:text-black text-xs font-semibold text-amber-400 transition"
                   title="Export High-Resolution JPG Image"
                 >
@@ -358,7 +402,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedSupplierIdx(null)}
-                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]"
+                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
                 >
                   ✕
                 </button>
@@ -411,6 +455,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                     <th className="p-2.5 text-right">Debit (Paid)</th>
                     <th className="p-2.5 text-right">Credit (Received)</th>
                     <th className="p-2.5 text-right">Running Balance</th>
+                    <th className="p-2.5">Payment Details</th>
                     <th className="p-2.5 text-center">Gate Pass</th>
                     <th className="p-2.5 text-center">Action</th>
                   </tr>
@@ -418,7 +463,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                 <tbody className="divide-y divide-[var(--steel-line)]">
                   {currentSupplier.entries.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-[var(--text-dim)]">
+                      <td colSpan={10} className="text-center py-8 text-[var(--text-dim)]">
                         No delivery entries logged yet.
                       </td>
                     </tr>
@@ -470,6 +515,30 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                             {e.runningBalance > 0 ? 'Payable' : e.runningBalance < 0 ? 'Adv' : ''}
                           </span>
                         </td>
+                        <td className="p-2.5 text-xs">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-[var(--text)]">{e.method || (e.debit > 0 ? 'Cash' : '—')}</span>
+                            {e.bankName && (
+                              <span className="text-[10px] text-[var(--yellow)] font-mono">({e.bankName})</span>
+                            )}
+                          </div>
+                          {(e.paidBy || e.paidTo) && (
+                            <div className="text-[10px] text-[var(--text-dim)] flex items-center gap-1 mt-0.5 flex-wrap">
+                              {e.paidBy && <span>By: <strong className="text-[var(--text)]">{e.paidBy}</strong></span>}
+                              {e.paidTo && <span>→ To: <strong className="text-[var(--text)]">{e.paidTo}</strong></span>}
+                            </div>
+                          )}
+                          {e.accountNumber && (
+                            <div className="text-[10px] text-[var(--yellow)] font-mono mt-0.5">
+                              A/C: {e.accountNumber}
+                            </div>
+                          )}
+                          {(e.chequeNo || e.detail) && (
+                            <div className="text-[9px] text-[var(--text-dim)] mt-0.5">
+                              Ref: {e.chequeNo || e.detail} {e.chequeStatus && `(${e.chequeStatus})`}
+                            </div>
+                          )}
+                        </td>
                         <td className="p-2.5 text-center whitespace-nowrap">
                           {e.gatePass || e.receiptUrl ? (
                             <button
@@ -520,14 +589,25 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                             </button>
                           )}
                         </td>
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => onDeleteRawEntry(currentSupplier.name, e.id)}
-                            className="text-red-400 hover:text-red-300 p-1"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingEntry(e)}
+                              className="text-[var(--text-dim)] hover:text-[var(--yellow)] hover:bg-[var(--panel-raised)] p-1.5 rounded transition cursor-pointer"
+                              title="Edit Entry Details"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteRawEntry(currentSupplier.name, e.id)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded transition cursor-pointer"
+                              title="Delete Entry"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -538,7 +618,17 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
 
             {/* Quick Add Entry Form */}
             <form onSubmit={handleAddEntry} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2 text-xs">
-              <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Add Delivery / Payment Entry</div>
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Add Delivery / Payment Entry</div>
+                <button
+                  type="button"
+                  onClick={() => setShowExtendedPaymentFields(!showExtendedPaymentFields)}
+                  className="text-[10px] text-[var(--yellow)] hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                >
+                  {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment (By / To / A/C)'}
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <input
                   type="text"
@@ -566,6 +656,54 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                   className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
                 />
               </div>
+
+              {/* Extended Payment Channels when toggled */}
+              {showExtendedPaymentFields && (
+                <div className="p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] grid grid-cols-1 sm:grid-cols-3 gap-2 animate-in fade-in duration-150">
+                  <input
+                    type="text"
+                    value={entryPaidBy}
+                    onChange={e => setEntryPaidBy(e.target.value)}
+                    placeholder="Paid By (Sender / Account Holder)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryPaidTo}
+                    onChange={e => setEntryPaidTo(e.target.value)}
+                    placeholder="Paid To (Receiver / Cashier)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryBankName}
+                    onChange={e => setEntryBankName(e.target.value)}
+                    placeholder="Bank Name (e.g. Meezan, HBL)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryAccountNumber}
+                    onChange={e => setEntryAccountNumber(e.target.value)}
+                    placeholder="Account Number / IBAN"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryChequeNo}
+                    onChange={e => setEntryChequeNo(e.target.value)}
+                    placeholder="Cheque # / Trx Reference"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={detail}
+                    onChange={e => setDetail(e.target.value)}
+                    placeholder="Banking Narration / Branch"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 <input
@@ -633,6 +771,40 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Ledger Entry Modal */}
+      {editingEntry && (
+        <EditLedgerEntryModal
+          isOpen={!!editingEntry}
+          onClose={() => setEditingEntry(null)}
+          title={`Edit Supplier Entry · ${currentSupplier?.name || ''}`}
+          ledgerName={currentSupplier?.name || ''}
+          entry={editingEntry}
+          onSave={updated => {
+            if (currentSupplier && onUpdateRawEntry) {
+              onUpdateRawEntry(currentSupplier.name, editingEntry.id, updated);
+            }
+          }}
+        />
+      )}
+
+      {/* Ledger Column & Export Studio Modal */}
+      {isStudioOpen && currentSupplier && (
+        <LedgerStudioModal
+          isOpen={isStudioOpen}
+          onClose={() => setIsStudioOpen(false)}
+          ledgerName={currentSupplier.name}
+          ledgerSubtitle="Raw Material Supplier Account Ledger"
+          columnConfig={colConfig}
+          onUpdateColumnConfig={handleUpdateColConfig}
+          companyName={companyName}
+          activeBalance={currentBalance}
+          sampleRows={currentSupplier.entries}
+          onExportCSV={cfg => handleExportCSV(cfg)}
+          onExportPDF={(cfg, docCfg) => handleExportPDF(cfg, docCfg)}
+          onExportJPG={(cfg, docCfg) => handleExportJPG(cfg, docCfg)}
+        />
       )}
 
       {/* Global Unified Gate Receipts Registry Modal */}

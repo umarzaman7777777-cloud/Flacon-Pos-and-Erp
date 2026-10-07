@@ -18,6 +18,7 @@ export interface UniversalDownloadPayload {
   format?: 'pdf' | 'jpg' | 'png' | 'csv' | 'json' | 'sql' | string;
   rawContent?: string;
   title?: string;
+  targetApp?: 'whatsapp' | 'auto';
 }
 
 // Global active blob URLs to prevent premature garbage collection
@@ -235,6 +236,29 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
       dataUrl = content;
     } else if (content instanceof Blob) {
       dataUrl = await blobToDataUri(content);
+    } else if (payload.blobUrl) {
+      try {
+        const resp = await fetch(payload.blobUrl);
+        const b = await resp.blob();
+        dataUrl = await blobToDataUri(b);
+      } catch (_) {}
+    }
+  }
+
+  // 0. Direct Native WhatsApp Strategy: If explicitly targeting WhatsApp, bypass chooser dialogs and launch WhatsApp directly
+  if (payload.targetApp === 'whatsapp') {
+    try {
+      const textMsg = encodeURIComponent(
+        `*Falcon Rod Maker — Export Archive*\n📄 *File:* ${fileName}\n${
+          payload.title ? `📝 ${payload.title}\n` : ''
+        }Generated from Falcon POS & ERP Terminal`
+      );
+      const waUrl = `whatsapp://send?text=${textMsg}`;
+      await openExternalUrl(waUrl, 'whatsapp');
+      triggerHaptic('success');
+      return { success: true, method: 'whatsapp-direct' };
+    } catch (waErr) {
+      console.warn('Direct WhatsApp launch notice:', waErr);
     }
   }
 
@@ -276,6 +300,14 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
         });
         triggerHaptic('success');
         return { success: true, method: 'web-share-file' };
+      } else {
+        // Fallback to native text share intent (directly shows WhatsApp, Drive, Gmail in Android system share sheet)
+        await navigator.share({
+          title: title || fileName,
+          text: `Falcon Rod Maker — ${title || fileName}\n📄 ${fileName}`
+        });
+        triggerHaptic('success');
+        return { success: true, method: 'web-share-text' };
       }
     } catch (shareErr: any) {
       if (shareErr?.name === 'AbortError') {
@@ -285,15 +317,16 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
     }
   }
 
-  // 3. Fallback: External System Share via Browser / WhatsApp
+  // 3. Fallback: Direct Native WhatsApp Deep Link (whatsapp:// scheme directly opens native app)
   try {
     const textMsg = encodeURIComponent(
       `*Falcon Rod Maker — Export Archive*\n📄 *File:* ${fileName}\n${
         payload.title ? `📝 ${payload.title}\n` : ''
       }Generated from Falcon POS & ERP Terminal`
     );
-    const waUrl = `https://api.whatsapp.com/send?text=${textMsg}`;
-    await openExternalUrl(waUrl);
+    // Directly use whatsapp:// custom scheme so the operating system opens native WhatsApp without an intermediate browser tab
+    const waUrl = `whatsapp://send?text=${textMsg}`;
+    await openExternalUrl(waUrl, 'whatsapp');
     triggerHaptic('click');
     return { success: true, method: 'whatsapp-direct' };
   } catch (_) {

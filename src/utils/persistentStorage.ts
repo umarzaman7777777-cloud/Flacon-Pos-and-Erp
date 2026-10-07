@@ -145,13 +145,28 @@ export async function initPersistentStorage(): Promise<void> {
  */
 export async function autoSyncWorkspaceFromCloud(): Promise<{ driveSynced: boolean; sheetsSynced: boolean }> {
   try {
-    const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
-    const snap = await getDoc(syncDocRef);
-    if (!snap.exists()) {
-      return { driveSynced: false, sheetsSynced: false };
+    // 1. Try dedicated workspace tokens document first, then fall back to workshop multi-terminal doc
+    let tokens: any = null;
+    try {
+      const dedicatedRef = doc(db, 'sync_states', 'falcon_workspace_tokens');
+      const dedicatedSnap = await getDoc(dedicatedRef);
+      if (dedicatedSnap.exists()) {
+        const d = dedicatedSnap.data();
+        tokens = d?.workspace_tokens || d;
+      }
+    } catch (e) {
+      console.debug('[PersistentStorage] Dedicated token doc fetch note:', e);
     }
-    const data = snap.data();
-    const tokens = data?.workspace_tokens;
+
+    if (!tokens || (!tokens.sheetsToken && !tokens.driveToken)) {
+      const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
+      const snap = await getDoc(syncDocRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        tokens = data?.workspace_tokens || data;
+      }
+    }
+
     if (!tokens) {
       return { driveSynced: false, sheetsSynced: false };
     }
@@ -160,11 +175,12 @@ export async function autoSyncWorkspaceFromCloud(): Promise<{ driveSynced: boole
     let sheetsSynced = false;
 
     // Check sheets token
-    if (tokens.sheetsToken) {
+    const sheetsToken = tokens.sheetsToken;
+    if (sheetsToken && typeof sheetsToken === 'string' && !sheetsToken.startsWith('falcon_offline_session_')) {
       const currentToken = getPersistent('falcon_gsheets_token');
       // If current is missing or cloud token is valid, restore it
       if (!currentToken || (tokens.expiresAt && tokens.expiresAt > Date.now())) {
-        await setPersistent('falcon_gsheets_token', tokens.sheetsToken);
+        await setPersistent('falcon_gsheets_token', sheetsToken);
         if (tokens.expiresAt) await setPersistent('falcon_gsheets_expires_at', tokens.expiresAt.toString());
         if (tokens.email) await setPersistent('falcon_gsheets_email', tokens.email);
         sheetsSynced = true;
@@ -183,10 +199,11 @@ export async function autoSyncWorkspaceFromCloud(): Promise<{ driveSynced: boole
     await setPersistent('falcon_gsheets_auto_sync', 'true');
 
     // Check drive token
-    if (tokens.driveToken) {
+    const driveToken = tokens.driveToken;
+    if (driveToken && typeof driveToken === 'string' && !driveToken.startsWith('falcon_offline_session_')) {
       const currentToken = getPersistent('falcon_gdrive_token');
       if (!currentToken || (tokens.expiresAt && tokens.expiresAt > Date.now())) {
-        await setPersistent('falcon_gdrive_token', tokens.driveToken);
+        await setPersistent('falcon_gdrive_token', driveToken);
         if (tokens.expiresAt) await setPersistent('falcon_gdrive_expires_at', tokens.expiresAt.toString());
         if (tokens.email) await setPersistent('falcon_gdrive_email', tokens.email);
         driveSynced = true;
@@ -211,64 +228,72 @@ export async function autoSyncWorkspaceFromCloud(): Promise<{ driveSynced: boole
 }
 
 let cloudListenerUnsub: (() => void) | null = null;
+let dedicatedListenerUnsub: (() => void) | null = null;
 
 export function listenToCloudTokensRealtime(): void {
   if (cloudListenerUnsub) return;
-  try {
-    const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
-    cloudListenerUnsub = onSnapshot(
-      syncDocRef,
-      (snapshot) => {
-        try {
-          if (!snapshot.exists()) return;
-          const tokens = snapshot.data()?.workspace_tokens;
-          if (!tokens) return;
 
-          const localSheetsToken = getPersistent('falcon_gsheets_token');
-          const localDriveToken = getPersistent('falcon_gdrive_token');
+  const handleSnapshot = (snapshot: any) => {
+    try {
+      if (!snapshot || !snapshot.exists()) return;
+      const data = snapshot.data();
+      const tokens = data?.workspace_tokens || data;
+      if (!tokens) return;
 
-          let hasChanges = false;
-          if (tokens.sheetsToken && tokens.sheetsToken !== localSheetsToken) {
-            setPersistent('falcon_gsheets_token', tokens.sheetsToken);
-            if (tokens.expiresAt) setPersistent('falcon_gsheets_expires_at', tokens.expiresAt.toString());
-            if (tokens.email) setPersistent('falcon_gsheets_email', tokens.email);
-            hasChanges = true;
-          }
+      const localSheetsToken = getPersistent('falcon_gsheets_token');
+      const localDriveToken = getPersistent('falcon_gdrive_token');
 
-          if (tokens.driveToken && tokens.driveToken !== localDriveToken) {
-            setPersistent('falcon_gdrive_token', tokens.driveToken);
-            if (tokens.expiresAt) setPersistent('falcon_gdrive_expires_at', tokens.expiresAt.toString());
-            if (tokens.email) setPersistent('falcon_gdrive_email', tokens.email);
-            hasChanges = true;
-          }
-
-          if (tokens.spreadsheetId && tokens.spreadsheetId !== getPersistent('falcon_gsheets_spreadsheet_id')) {
-            setPersistent('falcon_gsheets_spreadsheet_id', tokens.spreadsheetId);
-            hasChanges = true;
-          }
-          if (tokens.spreadsheetTitle) {
-            setPersistent('falcon_gsheets_spreadsheet_title', tokens.spreadsheetTitle);
-          }
-          if (tokens.spreadsheetUrl) {
-            setPersistent('falcon_gsheets_spreadsheet_url', tokens.spreadsheetUrl);
-          }
-          if (tokens.driveFolderId && tokens.driveFolderId !== getPersistent('falcon_gdrive_folder_id')) {
-            setPersistent('falcon_gdrive_folder_id', tokens.driveFolderId);
-            hasChanges = true;
-          }
-
-          if (hasChanges) {
-            notifyWorkspaceSyncUpdated();
-            console.info('[PersistentStorage] Realtime cloud update: Google Workspace credentials synchronized.');
-          }
-        } catch (e) {
-          console.debug('[PersistentStorage] Token snapshot error:', e);
-        }
-      },
-      (err) => {
-        console.debug('[PersistentStorage] Token snapshot listener note:', err);
+      let hasChanges = false;
+      const incomingSheetsToken = tokens.sheetsToken;
+      if (incomingSheetsToken && typeof incomingSheetsToken === 'string' && incomingSheetsToken !== localSheetsToken) {
+        setPersistent('falcon_gsheets_token', incomingSheetsToken);
+        if (tokens.expiresAt) setPersistent('falcon_gsheets_expires_at', tokens.expiresAt.toString());
+        if (tokens.email) setPersistent('falcon_gsheets_email', tokens.email);
+        hasChanges = true;
       }
-    );
+
+      const incomingDriveToken = tokens.driveToken;
+      if (incomingDriveToken && typeof incomingDriveToken === 'string' && incomingDriveToken !== localDriveToken) {
+        setPersistent('falcon_gdrive_token', incomingDriveToken);
+        if (tokens.expiresAt) setPersistent('falcon_gdrive_expires_at', tokens.expiresAt.toString());
+        if (tokens.email) setPersistent('falcon_gdrive_email', tokens.email);
+        hasChanges = true;
+      }
+
+      if (tokens.spreadsheetId && tokens.spreadsheetId !== getPersistent('falcon_gsheets_spreadsheet_id')) {
+        setPersistent('falcon_gsheets_spreadsheet_id', tokens.spreadsheetId);
+        hasChanges = true;
+      }
+      if (tokens.spreadsheetTitle) {
+        setPersistent('falcon_gsheets_spreadsheet_title', tokens.spreadsheetTitle);
+      }
+      if (tokens.spreadsheetUrl) {
+        setPersistent('falcon_gsheets_spreadsheet_url', tokens.spreadsheetUrl);
+      }
+      if (tokens.driveFolderId && tokens.driveFolderId !== getPersistent('falcon_gdrive_folder_id')) {
+        setPersistent('falcon_gdrive_folder_id', tokens.driveFolderId);
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        notifyWorkspaceSyncUpdated();
+        console.info('[PersistentStorage] Realtime cloud update: Google Workspace credentials synchronized.');
+      }
+    } catch (e) {
+      console.debug('[PersistentStorage] Token snapshot error:', e);
+    }
+  };
+
+  try {
+    const dedicatedRef = doc(db, 'sync_states', 'falcon_workspace_tokens');
+    dedicatedListenerUnsub = onSnapshot(dedicatedRef, handleSnapshot, (err) => {
+      console.debug('[PersistentStorage] Dedicated token listener note:', err);
+    });
+
+    const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
+    cloudListenerUnsub = onSnapshot(syncDocRef, handleSnapshot, (err) => {
+      console.debug('[PersistentStorage] Workshop token listener note:', err);
+    });
   } catch (e) {
     console.debug('[PersistentStorage] Token listener setup note:', e);
   }
@@ -290,22 +315,41 @@ export async function publishWorkspaceTokensToFirestore(tokens: {
   try {
     const validDuration = (tokens.expiresInSec && tokens.expiresInSec > 0) ? tokens.expiresInSec : 3600;
     const expiresAt = Date.now() + (validDuration * 1000);
-    const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
 
-    const updatePayload: Record<string, any> = {
-      'workspace_tokens.lastUpdated': new Date().toISOString(),
-      'workspace_tokens.expiresAt': expiresAt
+    const tokenPayload: Record<string, any> = {
+      lastUpdated: new Date().toISOString(),
+      expiresAt,
+      email: tokens.email || 'umarzaman7777777@gmail.com'
     };
+    if (tokens.sheetsToken) tokenPayload.sheetsToken = tokens.sheetsToken;
+    if (tokens.driveToken) tokenPayload.driveToken = tokens.driveToken;
+    if (tokens.spreadsheetId) tokenPayload.spreadsheetId = tokens.spreadsheetId;
+    if (tokens.spreadsheetTitle) tokenPayload.spreadsheetTitle = tokens.spreadsheetTitle;
+    if (tokens.spreadsheetUrl) tokenPayload.spreadsheetUrl = tokens.spreadsheetUrl;
+    if (tokens.driveFolderId) tokenPayload.driveFolderId = tokens.driveFolderId;
 
-    if (tokens.sheetsToken) updatePayload['workspace_tokens.sheetsToken'] = tokens.sheetsToken;
-    if (tokens.driveToken) updatePayload['workspace_tokens.driveToken'] = tokens.driveToken;
-    if (tokens.email) updatePayload['workspace_tokens.email'] = tokens.email;
-    if (tokens.spreadsheetId) updatePayload['workspace_tokens.spreadsheetId'] = tokens.spreadsheetId;
-    if (tokens.spreadsheetTitle) updatePayload['workspace_tokens.spreadsheetTitle'] = tokens.spreadsheetTitle;
-    if (tokens.spreadsheetUrl) updatePayload['workspace_tokens.spreadsheetUrl'] = tokens.spreadsheetUrl;
-    if (tokens.driveFolderId) updatePayload['workspace_tokens.driveFolderId'] = tokens.driveFolderId;
+    // 1. Write to dedicated tokens vault
+    const dedicatedRef = doc(db, 'sync_states', 'falcon_workspace_tokens');
+    await setDoc(dedicatedRef, {
+      ...tokenPayload,
+      workspace_tokens: tokenPayload
+    }, { merge: true });
 
-    await setDoc(syncDocRef, updatePayload, { merge: true });
+    // 2. Also dual-write to primary workshop document
+    const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
+    const workshopUpdatePayload: Record<string, any> = {
+      'workspace_tokens.lastUpdated': tokenPayload.lastUpdated,
+      'workspace_tokens.expiresAt': tokenPayload.expiresAt,
+      'workspace_tokens.email': tokenPayload.email
+    };
+    if (tokens.sheetsToken) workshopUpdatePayload['workspace_tokens.sheetsToken'] = tokens.sheetsToken;
+    if (tokens.driveToken) workshopUpdatePayload['workspace_tokens.driveToken'] = tokens.driveToken;
+    if (tokens.spreadsheetId) workshopUpdatePayload['workspace_tokens.spreadsheetId'] = tokens.spreadsheetId;
+    if (tokens.spreadsheetTitle) workshopUpdatePayload['workspace_tokens.spreadsheetTitle'] = tokens.spreadsheetTitle;
+    if (tokens.spreadsheetUrl) workshopUpdatePayload['workspace_tokens.spreadsheetUrl'] = tokens.spreadsheetUrl;
+    if (tokens.driveFolderId) workshopUpdatePayload['workspace_tokens.driveFolderId'] = tokens.driveFolderId;
+
+    await setDoc(syncDocRef, workshopUpdatePayload, { merge: true });
     console.info('[PersistentStorage] Google Workspace credentials saved to Firestore cloud sync.');
   } catch (e) {
     console.warn('[PersistentStorage] Could not write tokens to Firestore:', e);

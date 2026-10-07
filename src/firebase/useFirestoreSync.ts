@@ -130,7 +130,7 @@ export function useFirestoreSync(
         version: latestItem.version
       };
 
-      await setDoc(doc(db, 'sync_states', 'falcon_workshop'), payload);
+      await setDoc(doc(db, 'sync_states', 'falcon_workshop'), payload, { merge: true });
 
       // Successfully pushed queued items
       saveOfflineQueue([]);
@@ -273,8 +273,8 @@ export function useFirestoreSync(
       const gmailDoc = doc(db, 'sync_states', 'gmail_umarzaman7777777_gmail_com');
       
       await Promise.allSettled([
-        setDoc(primaryDoc, payload),
-        setDoc(gmailDoc, payload)
+        setDoc(primaryDoc, payload, { merge: true }),
+        setDoc(gmailDoc, payload, { merge: true })
       ]);
 
       // If there were any previous queued items, we can clear them now since this state encompasses all changes

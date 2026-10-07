@@ -18,6 +18,8 @@ export interface ParsedItemRow {
   total: number;
   size?: string;
   color?: string;
+  batchId?: string;
+  trackingNumber?: string;
 }
 
 export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
@@ -32,6 +34,8 @@ export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
   }) : [];
   const sizeParts = txn.sizes ? txn.sizes.split(/[,;]/).map(s => s.trim()) : [];
   const colorParts = txn.colors ? txn.colors.split(/[,;]/).map(s => s.trim()) : [];
+  const batchParts = txn.itemBatches ? txn.itemBatches.split(/[,;]/).map(s => s.trim()) : [];
+  const trackingParts = txn.itemTrackingNumbers ? txn.itemTrackingNumbers.split(/[,;]/).map(s => s.trim()) : [];
 
   const sanitizeName = (rawName: string) => {
     return rawName
@@ -57,7 +61,9 @@ export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
       rate: txn.total / (txn.itemCount || 1),
       total: txn.total,
       size: txn.sizes && txn.sizes !== '-' ? txn.sizes : undefined,
-      color: txn.colors && txn.colors !== '-' ? txn.colors : undefined
+      color: txn.colors && txn.colors !== '-' ? txn.colors : undefined,
+      batchId: batchParts[0] || txn.batchId,
+      trackingNumber: trackingParts[0] || txn.trackingNumber
     }];
   }
 
@@ -98,7 +104,9 @@ export function parseTransactionItems(txn: Transaction): ParsedItemRow[] {
       rate,
       total,
       size: cleanSize,
-      color: cleanColor
+      color: cleanColor,
+      batchId: batchParts[index] || (parts.length === 1 ? txn.batchId : undefined),
+      trackingNumber: trackingParts[index] || (parts.length === 1 ? txn.trackingNumber : undefined)
     };
   });
 }
@@ -794,6 +802,11 @@ export function printStyledTransactionDocument({
           <td>${i + 1}</td>
           <td>
             <strong>${item.name}</strong>
+            ${item.batchId || item.trackingNumber ? `
+              <div style="font-size: 8.5px; color: #DFA000; font-family: 'IBM Plex Mono', monospace; margin-top: 2px;">
+                ${item.batchId ? `Batch: ${item.batchId}` : ''} ${item.trackingNumber ? `· Trk: ${item.trackingNumber}` : ''}
+              </div>
+            ` : ''}
           </td>
           <td>${item.size || '-'}</td>
           <td>${item.color || '-'}</td>

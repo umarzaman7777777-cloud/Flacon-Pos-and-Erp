@@ -18,13 +18,22 @@ import {
   CustomerLedgerAccount,
   CustomerLedgerEntry,
   CustomLedger,
-  AppLanguage
+  AppLanguage,
+  LedgerColumnConfig,
+  ExportDocumentConfig
 } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeCustomerLedgerDetails } from '../utils/mathEngine';
+import {
+  buildLedgerExportTableData,
+  getStoredLedgerColumnConfig,
+  saveStoredLedgerColumnConfig
+} from '../utils/ledgerExportHelper';
+import { EditLedgerEntryModal } from './EditLedgerEntryModal';
+import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 
 interface FactoriesViewProps {
   factories: Factory[];
@@ -38,6 +47,7 @@ interface FactoriesViewProps {
   onDeleteFactory: (name: string) => void;
   onAddLedgerEntry: (factoryName: string, entry: Omit<CustomerLedgerEntry, 'id'>) => void;
   onDeleteLedgerEntry: (factoryName: string, entryId: string) => void;
+  onUpdateLedgerEntry?: (factoryName: string, entryId: string, updatedData: Partial<CustomerLedgerEntry>) => void;
   onAddCustomLedger: (name: string) => void;
   onOpenCustomLedgerDetail: (cl: CustomLedger) => void;
 }
@@ -54,6 +64,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   onDeleteFactory,
   onAddLedgerEntry,
   onDeleteLedgerEntry,
+  onUpdateLedgerEntry,
   onAddCustomLedger,
   onOpenCustomLedgerDetail
 }) => {
@@ -69,9 +80,25 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   const [entryDebit, setEntryDebit] = useState('');
   const [entryCredit, setEntryCredit] = useState('');
   const [entryMethod, setEntryMethod] = useState('Cash');
+  const [entryPaidBy, setEntryPaidBy] = useState('');
+  const [entryPaidTo, setEntryPaidTo] = useState('');
+  const [entryAccountNumber, setEntryAccountNumber] = useState('');
+  const [entryBankName, setEntryBankName] = useState('');
+  const [entryChequeNo, setEntryChequeNo] = useState('');
   const [entryDetail, setEntryDetail] = useState('');
   const [entryTax, setEntryTax] = useState('0');
   const [entryDate, setEntryDate] = useState(todayISO());
+  const [showExtendedPaymentFields, setShowExtendedPaymentFields] = useState(false);
+
+  // Column Customizer & Studio State
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<CustomerLedgerEntry | null>(null);
+  const [colConfig, setColConfig] = useState<LedgerColumnConfig>(() => getStoredLedgerColumnConfig('customer', DEFAULT_LEDGER_COLUMNS));
+
+  const handleUpdateColConfig = (newCfg: LedgerColumnConfig) => {
+    setColConfig(newCfg);
+    saveStoredLedgerColumnConfig('customer', newCfg);
+  };
 
   // Add Custom Ledger Dialog
   const [customLedgerModalOpen, setCustomLedgerModalOpen] = useState(false);
@@ -132,7 +159,12 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
       desc: entryDesc.trim() || 'Adjustment entry',
       debit,
       credit,
-      method: credit > 0 ? entryMethod : undefined,
+      method: credit > 0 || entryMethod !== 'Cash' ? entryMethod : undefined,
+      paidBy: entryPaidBy.trim() || undefined,
+      paidTo: entryPaidTo.trim() || undefined,
+      accountNumber: entryAccountNumber.trim() || undefined,
+      bankName: entryBankName.trim() || undefined,
+      chequeNo: entryChequeNo.trim() || undefined,
       detail: entryDetail.trim() || undefined,
       taxPercent: taxPercent > 0 ? taxPercent : undefined,
       taxAmt: taxAmt > 0 ? taxAmt : undefined
@@ -142,6 +174,11 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
     setEntryDebit('');
     setEntryCredit('');
     setEntryDetail('');
+    setEntryPaidBy('');
+    setEntryPaidTo('');
+    setEntryAccountNumber('');
+    setEntryBankName('');
+    setEntryChequeNo('');
   };
 
   const activeAccount = customerLedgers.find(cl => cl.name === selectedLedgerFactory);
@@ -149,34 +186,22 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
     ? activeAccount.entries.reduce((s, e) => s + (e.debit || 0) - (e.credit || 0), 0)
     : 0;
 
-  const handleExportLedgerCSV = () => {
+  const handleExportLedgerCSV = (customCols?: LedgerColumnConfig) => {
     if (!activeAccount) return;
-    const headers = ['Date', 'Description', 'Debit (Billed)', 'Credit (Received)', 'Method', 'Tax (Rs)'];
-    const rows = activeAccount.entries.map(e => [
-      e.date,
-      e.desc,
-      e.debit,
-      e.credit,
-      e.method || '—',
-      e.taxAmt || 0
-    ]);
+    const effectiveCols = customCols || colConfig;
+    const details = computeCustomerLedgerDetails(activeAccount.entries);
+    const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
     const footer = `\r\nTotal Balance Due: ${fmt(activeBalance)}\r\nEnglish: ${amountInWordsEnglish(
       activeBalance
     )}\r\nUrdu: ${amountInWordsUrdu(activeBalance)}`;
     downloadCSV(`${activeAccount.name}_Ledger`, headers, rows, footer);
   };
 
-  const handleExportLedgerPDF = () => {
+  const handleExportLedgerPDF = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!activeAccount) return;
-    const headers = ['Date', 'Description', 'Debit', 'Credit', 'Method', 'Tax'];
-    const rows = activeAccount.entries.map(e => [
-      e.date,
-      e.desc,
-      fmt(e.debit),
-      fmt(e.credit),
-      e.method || '—',
-      e.taxAmt ? fmt(e.taxAmt) : '—'
-    ]);
+    const effectiveCols = customCols || colConfig;
+    const details = computeCustomerLedgerDetails(activeAccount.entries);
+    const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
     openExportModal({
       title: `${activeAccount.name} — Customer Ledger`,
       headers,
@@ -186,21 +211,16 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
       subtitle: 'Fan Accessories · Gujrat',
       balanceFooterText: `Net Balance: ${fmt(activeBalance)} (${amountInWordsEnglish(activeBalance)})`,
       defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
+      initialOrientation: exportDocConfig?.orientation || 'landscape',
+      initialPaperSize: exportDocConfig?.paperSize || 'a4'
     });
   };
 
-  const handleExportLedgerJPG = () => {
+  const handleExportLedgerJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!activeAccount) return;
-    const headers = ['Date', 'Description', 'Debit (Billed)', 'Credit (Received)', 'Method', 'Tax'];
-    const rows = (activeAccount.entries || []).map(e => [
-      e.date,
-      e.desc,
-      fmt(e.debit),
-      fmt(e.credit),
-      e.method || '—',
-      e.taxAmt ? fmt(e.taxAmt) : '—'
-    ]);
+    const effectiveCols = customCols || colConfig;
+    const details = computeCustomerLedgerDetails(activeAccount.entries);
+    const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
     openExportModal({
       title: `${activeAccount.name} — Customer Ledger`,
       headers,
@@ -210,7 +230,8 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
       subtitle: 'Authorized Factory Customer Ledger Account',
       balanceFooterText: `Net Balance: ${fmt(activeBalance)} (${activeBalance > 0 ? 'Receivable' : activeBalance < 0 ? 'Advance' : 'Settled'})`,
       defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
+      initialOrientation: exportDocConfig?.orientation || 'landscape',
+      initialPaperSize: exportDocConfig?.paperSize || 'a4'
     });
   };
 
@@ -445,23 +466,24 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleExportLedgerCSV}
-                  className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition"
+                  onClick={() => handleExportLedgerCSV()}
+                  className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition cursor-pointer"
+                  title="Export Filtered CSV"
                 >
                   CSV
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportLedgerPDF}
-                  className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-red-500 hover:text-red-400 text-xs font-semibold text-[var(--text-dim)] transition"
+                  onClick={() => handleExportLedgerPDF()}
+                  className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-red-500 hover:text-red-400 text-xs font-semibold text-[var(--text-dim)] transition cursor-pointer"
                   title="Configure & Export Customized PDF"
                 >
                   PDF
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportLedgerJPG}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500 hover:text-black text-xs font-semibold text-amber-400 transition"
+                  onClick={() => handleExportLedgerJPG()}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500 hover:text-black text-xs font-semibold text-amber-400 transition cursor-pointer"
                   title="Configure & Export High-Resolution JPG Image"
                 >
                   <ImageIcon size={12} />
@@ -469,9 +491,9 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportLedgerPDF}
-                  className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--yellow)] transition"
-                  title="Open Document Export Studio (Header colors, fonts, styles, page sizes)"
+                  onClick={() => setIsStudioOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-[var(--yellow)]/15 border border-[var(--yellow)]/40 hover:bg-[var(--yellow)] hover:text-black text-xs font-bold text-[var(--yellow)] transition cursor-pointer"
+                  title="Open Ledger Studio (Column Checklist, Theme, Layout & Exports)"
                 >
                   <Sliders size={12} />
                   <span>Style Studio</span>
@@ -479,7 +501,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectLedgerFactory(null)}
-                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]"
+                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
                 >
                   ✕
                 </button>
@@ -533,66 +555,117 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
             {/* Entries Table */}
             <div className="flex-1 overflow-y-auto min-h-[160px] border border-[var(--steel-line)] rounded-lg">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
+                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
                   <tr>
-                    <th className="p-2.5">Date</th>
-                    <th className="p-2.5">Description</th>
-                    <th className="p-2.5 text-right">Debit (Due)</th>
-                    <th className="p-2.5 text-right">Credit (Paid)</th>
-                    <th className="p-2.5 text-right">Running Balance</th>
-                    <th className="p-2.5">Method</th>
+                    {colConfig.showDate && <th className="p-2.5">Date</th>}
+                    {colConfig.showTime && <th className="p-2.5">Time</th>}
+                    {colConfig.showDesc && <th className="p-2.5">Description</th>}
+                    {colConfig.showDebit && <th className="p-2.5 text-right">Debit (Due)</th>}
+                    {colConfig.showCredit && <th className="p-2.5 text-right">Credit (Paid)</th>}
+                    {colConfig.showBalance && <th className="p-2.5 text-right">Running Balance</th>}
+                    {colConfig.showMethod && <th className="p-2.5">Method & Payment Details</th>}
+                    {colConfig.showTax && <th className="p-2.5 text-right">Tax</th>}
                     <th className="p-2.5 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--steel-line)]">
                   {!activeAccount || activeAccount.entries.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-[var(--text-dim)]">
+                      <td colSpan={10} className="text-center py-8 text-[var(--text-dim)]">
                         No ledger entries recorded yet.
                       </td>
                     </tr>
                   ) : (
                     computeCustomerLedgerDetails(activeAccount.entries).entriesWithBalance.map(e => (
-                      <tr key={e.id} className="hover:bg-[var(--panel-raised)]/50">
-                        <td className="p-2.5 whitespace-nowrap">{e.date}</td>
-                        <td className="p-2.5">
-                          <div>{e.desc}</div>
-                          {e.taxAmt && (
-                            <div className="text-[10px] text-[var(--yellow)]">
-                              Tax ({e.taxPercent}%): {fmt(e.taxAmt)}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-2.5 text-right font-semibold text-[var(--red)]">
-                          {e.debit ? fmt(e.debit) : '—'}
-                        </td>
-                        <td className="p-2.5 text-right font-semibold text-[var(--green)]">
-                          {e.credit ? fmt(e.credit) : '—'}
-                        </td>
-                        <td
-                          className={`p-2.5 text-right font-bold ${
-                            e.runningBalance > 0
-                              ? 'text-[var(--red)]'
-                              : e.runningBalance < 0
-                              ? 'text-[var(--green)]'
-                              : 'text-gray-400'
-                          }`}
-                        >
-                          {fmt(Math.abs(e.runningBalance))}
-                          <span className="text-[9px] font-normal ml-0.5">
-                            {e.runningBalance > 0 ? 'Dr' : e.runningBalance < 0 ? 'Cr' : ''}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-[var(--text-dim)]">{e.method || '—'}</td>
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => onDeleteLedgerEntry(selectedLedgerFactory, e.id)}
-                            className="text-red-400 hover:text-red-300 p-1"
-                            title="Delete Entry"
+                      <tr key={e.id} className="hover:bg-[var(--panel-raised)]/50 transition">
+                        {colConfig.showDate && <td className="p-2.5 whitespace-nowrap">{e.date}</td>}
+                        {colConfig.showTime && <td className="p-2.5 whitespace-nowrap text-[10px] text-[var(--text-dim)] font-mono">{e.time || '--:--'}</td>}
+                        {colConfig.showDesc && (
+                          <td className="p-2.5">
+                            <div className="font-sans text-[var(--text)] font-semibold">{e.desc}</div>
+                            {e.taxAmt && (
+                              <div className="text-[10px] text-[var(--yellow)]">
+                                Tax ({e.taxPercent}%): {fmt(e.taxAmt)}
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {colConfig.showDebit && (
+                          <td className="p-2.5 text-right font-semibold text-[var(--red)]">
+                            {e.debit ? fmt(e.debit) : '—'}
+                          </td>
+                        )}
+                        {colConfig.showCredit && (
+                          <td className="p-2.5 text-right font-semibold text-[var(--green)]">
+                            {e.credit ? fmt(e.credit) : '—'}
+                          </td>
+                        )}
+                        {colConfig.showBalance && (
+                          <td
+                            className={`p-2.5 text-right font-bold ${
+                              e.runningBalance > 0
+                                ? 'text-[var(--red)]'
+                                : e.runningBalance < 0
+                                ? 'text-[var(--green)]'
+                                : 'text-gray-400'
+                            }`}
                           >
-                            <Trash2 size={12} />
-                          </button>
+                            {fmt(Math.abs(e.runningBalance))}
+                            <span className="text-[9px] font-normal ml-0.5">
+                              {e.runningBalance > 0 ? 'Dr' : e.runningBalance < 0 ? 'Cr' : ''}
+                            </span>
+                          </td>
+                        )}
+                        {colConfig.showMethod && (
+                          <td className="p-2.5 text-xs">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-[var(--text)]">{e.method || (e.credit > 0 ? 'Cash' : '—')}</span>
+                              {e.bankName && (
+                                <span className="text-[10px] text-[var(--yellow)] font-mono">({e.bankName})</span>
+                              )}
+                            </div>
+                            {(e.paidBy || e.paidTo) && (
+                              <div className="text-[10px] text-[var(--text-dim)] flex items-center gap-1 mt-0.5 flex-wrap">
+                                {e.paidBy && <span>By: <strong className="text-[var(--text)]">{e.paidBy}</strong></span>}
+                                {e.paidTo && <span>→ To: <strong className="text-[var(--text)]">{e.paidTo}</strong></span>}
+                              </div>
+                            )}
+                            {e.accountNumber && (
+                              <div className="text-[10px] text-[var(--yellow)] font-mono mt-0.5">
+                                A/C: {e.accountNumber}
+                              </div>
+                            )}
+                            {(e.chequeNo || e.detail) && (
+                              <div className="text-[9px] text-[var(--text-dim)] mt-0.5">
+                                Ref: {e.chequeNo || e.detail} {e.chequeStatus && `(${e.chequeStatus})`}
+                              </div>
+                            )}
+                          </td>
+                        )}
+                        {colConfig.showTax && (
+                          <td className="p-2.5 text-right text-[var(--text-dim)]">
+                            {e.taxAmt ? fmt(e.taxAmt) : '—'}
+                          </td>
+                        )}
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingEntry(e)}
+                              className="text-[var(--text-dim)] hover:text-[var(--yellow)] hover:bg-[var(--panel-raised)] p-1.5 rounded transition cursor-pointer"
+                              title="Edit Entry Details"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteLedgerEntry(selectedLedgerFactory, e.id)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded transition cursor-pointer"
+                              title="Delete Entry"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -603,17 +676,27 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
 
             {/* Quick Add Entry Form */}
             <form onSubmit={handleAddEntrySubmit} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2 text-xs">
-              <div className="font-bold text-xs uppercase text-[var(--yellow)] flex items-center gap-1.5">
-                <Plus size={13} />
-                <span>Add Ledger Entry</span>
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-xs uppercase text-[var(--yellow)] flex items-center gap-1.5">
+                  <Plus size={13} />
+                  <span>Add Ledger Entry</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowExtendedPaymentFields(!showExtendedPaymentFields)}
+                  className="text-[10px] text-[var(--yellow)] hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                >
+                  {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment (By / To / A/C)'}
+                </button>
               </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <input
                   type="text"
                   required
                   value={entryDesc}
                   onChange={e => setEntryDesc(e.target.value)}
-                  placeholder="Description (e.g. Cash received / Additional charges)"
+                  placeholder="Description (e.g. Order #0005 / Cash Deposit)"
                   className="sm:col-span-2 bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none"
                 />
                 <input
@@ -622,7 +705,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                   value={entryDebit}
                   onChange={e => setEntryDebit(e.target.value)}
                   placeholder="Debit (Rs)"
-                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1.5 text-xs text-[var(--text)] focus:outline-none"
+                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none"
                 />
                 <input
                   type="number"
@@ -630,27 +713,76 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                   value={entryCredit}
                   onChange={e => setEntryCredit(e.target.value)}
                   placeholder="Credit (Rs)"
-                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1.5 text-xs text-[var(--text)] focus:outline-none"
+                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-none"
                 />
               </div>
+
+              {/* Extended Payment Channels when toggled */}
+              {showExtendedPaymentFields && (
+                <div className="p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] grid grid-cols-1 sm:grid-cols-3 gap-2 animate-in fade-in duration-150">
+                  <input
+                    type="text"
+                    value={entryPaidBy}
+                    onChange={e => setEntryPaidBy(e.target.value)}
+                    placeholder="Paid By (Sender / Account Holder)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryPaidTo}
+                    onChange={e => setEntryPaidTo(e.target.value)}
+                    placeholder="Paid To (Receiver / Cashier)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryBankName}
+                    onChange={e => setEntryBankName(e.target.value)}
+                    placeholder="Bank Name (e.g. Meezan, HBL)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryAccountNumber}
+                    onChange={e => setEntryAccountNumber(e.target.value)}
+                    placeholder="Account Number / IBAN"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryChequeNo}
+                    onChange={e => setEntryChequeNo(e.target.value)}
+                    placeholder="Cheque # / Trx Reference"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryDetail}
+                    onChange={e => setEntryDetail(e.target.value)}
+                    placeholder="Banking Narration / Branch"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                </div>
+              )}
 
               <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
                 <div className="flex items-center gap-2">
                   <select
                     value={entryMethod}
                     onChange={e => setEntryMethod(e.target.value)}
-                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)] cursor-pointer"
                   >
                     <option value="Cash">Cash</option>
-                    <option value="Bank">Bank</option>
-                    <option value="Online">Online</option>
+                    <option value="Online">Online Transfer</option>
+                    <option value="Bank">Bank Transfer</option>
                     <option value="Cheque">Cheque</option>
+                    <option value="JazzCash / EasyPaisa">JazzCash / EasyPaisa</option>
                   </select>
 
                   <select
                     value={entryTax}
                     onChange={e => setEntryTax(e.target.value)}
-                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)] cursor-pointer"
                   >
                     <option value="0">0% Tax</option>
                     <option value="18">18% GST</option>
@@ -659,7 +791,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
 
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition"
+                  className="px-4 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition cursor-pointer"
                 >
                   Save Entry
                 </button>
@@ -667,6 +799,40 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Ledger Entry Modal */}
+      {editingEntry && (
+        <EditLedgerEntryModal
+          isOpen={!!editingEntry}
+          onClose={() => setEditingEntry(null)}
+          title={`Edit Ledger Entry · ${selectedLedgerFactory || ''}`}
+          ledgerName={selectedLedgerFactory || ''}
+          entry={editingEntry}
+          onSave={updated => {
+            if (selectedLedgerFactory && onUpdateLedgerEntry) {
+              onUpdateLedgerEntry(selectedLedgerFactory, editingEntry.id, updated as any);
+            }
+          }}
+        />
+      )}
+
+      {/* Ledger Column & Export Studio Modal */}
+      {isStudioOpen && activeAccount && (
+        <LedgerStudioModal
+          isOpen={isStudioOpen}
+          onClose={() => setIsStudioOpen(false)}
+          ledgerName={selectedLedgerFactory || ''}
+          ledgerSubtitle="Authorized Customer Factory Ledger Account"
+          columnConfig={colConfig}
+          onUpdateColumnConfig={handleUpdateColConfig}
+          companyName={companyName}
+          activeBalance={activeBalance}
+          sampleRows={activeAccount.entries}
+          onExportCSV={cfg => handleExportLedgerCSV(cfg)}
+          onExportPDF={(cfg, docCfg) => handleExportLedgerPDF(cfg, docCfg)}
+          onExportJPG={(cfg, docCfg) => handleExportLedgerJPG(cfg, docCfg)}
+        />
       )}
 
       {/* Add Custom Ledger Dialog */}

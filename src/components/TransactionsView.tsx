@@ -774,7 +774,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                                   <tbody className="divide-y divide-[var(--steel-line)]/40">
                                     {parsedItems.map((it, idx) => (
                                       <tr key={idx}>
-                                        <td className="px-3 py-1.5 font-bold text-[var(--text)] font-sans">{it.name}</td>
+                                        <td className="px-3 py-1.5 font-bold text-[var(--text)] font-sans">
+                                          <div>{it.name}</div>
+                                          {(it.batchId || it.trackingNumber) && (
+                                            <div className="flex items-center gap-1.5 mt-0.5 text-[9px] font-mono font-normal">
+                                              {it.batchId && (
+                                                <span className="px-1 py-0.2 rounded bg-[var(--yellow)]/10 text-[var(--yellow)] border border-[var(--yellow)]/20">
+                                                  Batch: {it.batchId}
+                                                </span>
+                                              )}
+                                              {it.trackingNumber && (
+                                                <span className="px-1 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                                                  Trk: {it.trackingNumber}
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </td>
                                         <td className="px-3 py-1.5 text-[var(--text-dim)]">
                                           {[it.size || txn.sizes, it.color || txn.colors].filter(Boolean).join(' · ') || '—'}
                                         </td>

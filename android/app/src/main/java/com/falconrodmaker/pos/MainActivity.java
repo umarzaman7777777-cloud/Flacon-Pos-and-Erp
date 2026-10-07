@@ -92,40 +92,39 @@ public class MainActivity extends BridgeActivity {
 
                             popupWebView.setWebViewClient(new WebViewClient() {
                                 @Override
+                                public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                                    super.onPageStarted(view, url, favicon);
+                                    if (url != null && (url.startsWith("whatsapp://") || url.contains("api.whatsapp.com") || url.contains("wa.me")
+                                        || url.contains("accounts.google.com") || url.contains("google.com/o/oauth2")
+                                        || url.contains("docs.google.com/spreadsheets") || url.contains("drive.google.com"))) {
+                                        return;
+                                    }
+                                    if (!authDialog.isShowing() && !MainActivity.this.isFinishing()) {
+                                        try {
+                                            authDialog.show();
+                                        } catch (Exception ignored) {}
+                                    }
+                                }
+
+                                @Override
                                 public boolean shouldOverrideUrlLoading(WebView view, String url) {
                                     if (url == null) return false;
                                     try {
-                                        // 0. WhatsApp App Scheme & Web Links
-                                        if (url.startsWith("whatsapp://")) {
-                                            try {
-                                                Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                                                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                                MainActivity.this.startActivity(waIntent);
-                                                if (authDialog.isShowing()) {
-                                                    authDialog.dismiss();
-                                                }
-                                                return true;
-                                            } catch (Exception notInstalled) {
-                                                try {
-                                                    Intent playStore = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.whatsapp"));
-                                                    playStore.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                                    MainActivity.this.startActivity(playStore);
-                                                    if (authDialog.isShowing()) authDialog.dismiss();
-                                                    return true;
-                                                } catch (Exception ignored) {}
+                                        // 0. WhatsApp App Scheme & Web Links -> Directly Launch Native WhatsApp without popup dialog
+                                        if (url.startsWith("whatsapp://") || url.contains("api.whatsapp.com") || url.contains("wa.me")) {
+                                            if (authDialog.isShowing()) {
+                                                authDialog.dismiss();
                                             }
+                                            return MainActivity.this.launchDirectWhatsApp(url);
                                         }
 
-                                        if (url.contains("api.whatsapp.com") || url.contains("wa.me")) {
-                                            try {
-                                                Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                                                waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                                MainActivity.this.startActivity(waIntent);
-                                                if (authDialog.isShowing()) {
-                                                    authDialog.dismiss();
-                                                }
-                                                return true;
-                                            } catch (Exception ignored) {}
+                                        // 0b. Google OAuth URLs -> Launch via Chrome Custom Tabs to prevent 403 disallowed_useragent!
+                                        if (url.contains("accounts.google.com") || url.contains("google.com/o/oauth2") || url.contains("firebaseapp.com/__/auth/handler")) {
+                                            if (authDialog.isShowing()) {
+                                                authDialog.dismiss();
+                                            }
+                                            MainActivity.this.launchCustomTab(Uri.parse(url));
+                                            return true;
                                         }
 
                                         // 1. Android Intent URLs (intent://... -> launch Google Sheets/Drive app directly)
@@ -156,45 +155,34 @@ public class MainActivity extends BridgeActivity {
 
                                         // 2. Direct Google Sheets URL -> launch native Google Sheets app directly
                                         if (url.contains("docs.google.com/spreadsheets")) {
+                                            if (authDialog.isShowing()) {
+                                                authDialog.dismiss();
+                                            }
                                             Intent docIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                                             docIntent.setPackage("com.google.android.apps.docs.editors.sheets");
                                             docIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                             try {
                                                 MainActivity.this.startActivity(docIntent);
-                                                if (authDialog.isShowing()) {
-                                                    authDialog.dismiss();
-                                                }
                                                 return true;
                                             } catch (Exception e) {
-                                                // Fallback to Drive app or browser
-                                                Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                                                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                                MainActivity.this.startActivity(fallback);
-                                                if (authDialog.isShowing()) {
-                                                    authDialog.dismiss();
-                                                }
+                                                MainActivity.this.launchCustomTab(Uri.parse(url));
                                                 return true;
                                             }
                                         }
 
                                         // 3. Direct Google Drive URL -> launch native Google Drive app directly
                                         if (url.contains("drive.google.com")) {
+                                            if (authDialog.isShowing()) {
+                                                authDialog.dismiss();
+                                            }
                                             Intent driveIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                                             driveIntent.setPackage("com.google.android.apps.docs");
                                             driveIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                             try {
                                                 MainActivity.this.startActivity(driveIntent);
-                                                if (authDialog.isShowing()) {
-                                                    authDialog.dismiss();
-                                                }
                                                 return true;
                                             } catch (Exception e) {
-                                                Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                                                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                                MainActivity.this.startActivity(fallback);
-                                                if (authDialog.isShowing()) {
-                                                    authDialog.dismiss();
-                                                }
+                                                MainActivity.this.launchCustomTab(Uri.parse(url));
                                                 return true;
                                             }
                                         }
@@ -206,7 +194,6 @@ public class MainActivity extends BridgeActivity {
                             });
 
                             authDialog.setContentView(popupWebView);
-                            authDialog.show();
 
                             WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
                             transport.setWebView(popupWebView);
@@ -222,6 +209,72 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    public void launchCustomTab(Uri uri) {
+        try {
+            CustomTabsIntent customTabs = new CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .setUrlBarHidingEnabled(true)
+                .build();
+            customTabs.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            customTabs.intent.setPackage("com.android.chrome");
+            customTabs.launchUrl(this, uri);
+        } catch (Exception chromeNotFound) {
+            try {
+                CustomTabsIntent genericCustomTabs = new CustomTabsIntent.Builder()
+                    .setShowTitle(true)
+                    .build();
+                genericCustomTabs.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                genericCustomTabs.launchUrl(this, uri);
+            } catch (Exception genericFail) {
+                Intent web = new Intent(Intent.ACTION_VIEW, uri);
+                web.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                this.startActivity(web);
+            }
+        }
+    }
+
+    public boolean launchDirectWhatsApp(String url) {
+        if (url == null) return false;
+        try {
+            Uri waUri = Uri.parse(url);
+            String textParam = null;
+            String phoneParam = null;
+            try {
+                textParam = waUri.getQueryParameter("text");
+                phoneParam = waUri.getQueryParameter("phone");
+            } catch (Exception ignored) {}
+
+            // 1. Try whatsapp:// send scheme (directly targeted without intermediate chooser/browser)
+            try {
+                StringBuilder sb = new StringBuilder("whatsapp://send?");
+                if (phoneParam != null && !phoneParam.isEmpty()) sb.append("phone=").append(phoneParam).append("&");
+                if (textParam != null && !textParam.isEmpty()) sb.append("text=").append(Uri.encode(textParam));
+                Uri directWaUri = url.startsWith("whatsapp://") ? waUri : Uri.parse(sb.toString());
+                Intent waView = new Intent(Intent.ACTION_VIEW, directWaUri);
+                waView.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                this.startActivity(waView);
+                return true;
+            } catch (Exception notScheme) {
+                // 2. Try direct package intent to WhatsApp or WhatsApp Business
+                String[] waPkgs = new String[]{"com.whatsapp", "com.whatsapp.w4b"};
+                for (String pkg : waPkgs) {
+                    try {
+                        Intent waIntent = new Intent(Intent.ACTION_SEND);
+                        waIntent.setType("text/plain");
+                        waIntent.setPackage(pkg);
+                        waIntent.putExtra(Intent.EXTRA_TEXT, textParam != null ? textParam : url);
+                        waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        this.startActivity(waIntent);
+                        return true;
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     @Override
@@ -273,8 +326,87 @@ public class MainActivity extends BridgeActivity {
 
                 boolean isSheets = "sheets".equalsIgnoreCase(targetApp) || url.contains("docs.google.com/spreadsheets");
                 boolean isDrive = "drive".equalsIgnoreCase(targetApp) || url.contains("drive.google.com");
+                boolean isWhatsApp = "whatsapp".equalsIgnoreCase(targetApp)
+                    || (url != null && (url.startsWith("whatsapp://") || url.contains("api.whatsapp.com") || url.contains("wa.me")));
 
-                if (isSheets) {
+                if (isWhatsApp) {
+                    String textParam = null;
+                    String phoneParam = null;
+                    try {
+                        textParam = uri.getQueryParameter("text");
+                        phoneParam = uri.getQueryParameter("phone");
+                    } catch (Exception ignored) {}
+
+                    // 1. Try ACTION_SEND targeting native WhatsApp package com.whatsapp
+                    try {
+                        Intent waIntent = new Intent(Intent.ACTION_SEND);
+                        waIntent.setType("text/plain");
+                        waIntent.setPackage("com.whatsapp");
+                        if (textParam != null && !textParam.isEmpty()) {
+                            waIntent.putExtra(Intent.EXTRA_TEXT, textParam);
+                        } else {
+                            waIntent.putExtra(Intent.EXTRA_TEXT, url);
+                        }
+                        waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        getContext().startActivity(waIntent);
+                        call.resolve();
+                        return;
+                    } catch (Exception notRegularWa) {
+                        // 2. Try WhatsApp Business package com.whatsapp.w4b
+                        try {
+                            Intent waBusinessIntent = new Intent(Intent.ACTION_SEND);
+                            waBusinessIntent.setType("text/plain");
+                            waBusinessIntent.setPackage("com.whatsapp.w4b");
+                            if (textParam != null && !textParam.isEmpty()) {
+                                waBusinessIntent.putExtra(Intent.EXTRA_TEXT, textParam);
+                            } else {
+                                waBusinessIntent.putExtra(Intent.EXTRA_TEXT, url);
+                            }
+                            waBusinessIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            getContext().startActivity(waBusinessIntent);
+                            call.resolve();
+                            return;
+                        } catch (Exception notBusinessWa) {
+                            // 3. Try whatsapp:// custom scheme ACTION_VIEW (targets any app registered for whatsapp://)
+                            try {
+                                Uri waSchemeUri;
+                                if (url.startsWith("whatsapp://")) {
+                                    waSchemeUri = uri;
+                                } else {
+                                    StringBuilder sb = new StringBuilder("whatsapp://send?");
+                                    if (phoneParam != null && !phoneParam.isEmpty()) {
+                                        sb.append("phone=").append(phoneParam).append("&");
+                                    }
+                                    if (textParam != null && !textParam.isEmpty()) {
+                                        sb.append("text=").append(Uri.encode(textParam));
+                                    }
+                                    waSchemeUri = Uri.parse(sb.toString());
+                                }
+                                Intent waViewIntent = new Intent(Intent.ACTION_VIEW, waSchemeUri);
+                                waViewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                getContext().startActivity(waViewIntent);
+                                call.resolve();
+                                return;
+                            } catch (Exception waSchemeErr) {
+                                // 4. If WhatsApp is not installed at all, open system share chooser so user can share via any app
+                                try {
+                                    Intent shareChooserIntent = new Intent(Intent.ACTION_SEND);
+                                    shareChooserIntent.setType("text/plain");
+                                    shareChooserIntent.putExtra(Intent.EXTRA_TEXT, textParam != null ? textParam : url);
+                                    Intent chooser = Intent.createChooser(shareChooserIntent, "Share via");
+                                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    getContext().startActivity(chooser);
+                                    call.resolve();
+                                    return;
+                                } catch (Exception chooserErr) {
+                                    launchExplicitCustomTab(uri);
+                                    call.resolve();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                } else if (isSheets) {
                     PackageManager pm = getContext().getPackageManager();
                     // 1. Direct targeted ACTION_VIEW to Google Sheets app
                     try {

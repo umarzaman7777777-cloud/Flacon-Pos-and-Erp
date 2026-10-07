@@ -28,6 +28,10 @@
         "version": {
           "type": "number",
           "description": "Monotonically increasing version counter for conflict prevention"
+        },
+        "workspace_tokens": {
+          "type": "object",
+          "description": "Cloud synchronized Google Workspace OAuth tokens for Google Sheets and Drive"
         }
       },
       "required": ["workspaceId", "updatedAt", "updatedByTerminal", "statePayload", "version"]

@@ -122,6 +122,26 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Wait for Firebase Auth session initialization from local persistence
+ */
+export function waitForFirebaseAuthReady(timeoutMs: number = 3000): Promise<User | null> {
+  return new Promise((resolve) => {
+    if (auth.currentUser) {
+      resolve(auth.currentUser);
+      return;
+    }
+    const timer = setTimeout(() => {
+      resolve(auth.currentUser);
+    }, timeoutMs);
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      clearTimeout(timer);
+      try { unsubscribe(); } catch (_) {}
+      resolve(user);
+    });
+  });
+}
+
+/**
  * Checks for any redirect result when returning from signInWithRedirect
  */
 export async function checkRedirectAuthResult(): Promise<GoogleAuthResult | null> {
@@ -155,23 +175,35 @@ export async function checkRedirectAuthResult(): Promise<GoogleAuthResult | null
 
 /**
  * Automatically authenticates and retrieves an active token on app launch or resume.
- * 1. Checks valid local storage token.
+ * 1. Checks valid local storage and native Capacitor Preferences token.
  * 2. Pulls credentials from Firestore cloud sync (restoring prior session).
- * 3. Restores from active Firebase Auth session.
+ * 3. Checks redirect auth result.
+ * 4. Restores from active Firebase Auth session.
  */
 export async function autoAuthenticateAndGetActiveToken(preferredEmail: string = 'umarzaman7777777@gmail.com'): Promise<string | null> {
-  // 1. Check local stored token with at least 2 minutes validity
-  const currentSheets = getStoredSheetsToken();
+  // Ensure persistent storage (Capacitor Preferences & localStorage) is initialized
+  try {
+    const { initPersistentStorage } = await import('./persistentStorage');
+    await initPersistentStorage();
+  } catch {}
+
+  // 1. Check local stored token
   const now = Date.now();
-  if (currentSheets?.token && currentSheets.expiresAt && (currentSheets.expiresAt - now > 120000)) {
-    return currentSheets.token;
-  }
-  const currentDrive = getStoredDriveToken();
-  if (currentDrive?.token && currentDrive.expiresAt && (currentDrive.expiresAt - now > 120000)) {
-    return currentDrive.token;
+  const currentSheets = getStoredSheetsToken();
+  if (currentSheets?.token && !currentSheets.token.startsWith('falcon_offline_session_')) {
+    if (!currentSheets.expiresAt || currentSheets.expiresAt > now + 30000) {
+      return currentSheets.token;
+    }
   }
 
-  // 2. Check Firestore cloud sync for existing tokens
+  const currentDrive = getStoredDriveToken();
+  if (currentDrive?.token && !currentDrive.token.startsWith('falcon_offline_session_')) {
+    if (!currentDrive.expiresAt || currentDrive.expiresAt > now + 30000) {
+      return currentDrive.token;
+    }
+  }
+
+  // 2. Check Firestore cloud sync for existing tokens across devices
   try {
     const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
     const cloudSyncResult = await autoSyncWorkspaceFromCloud();
@@ -186,20 +218,26 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
     console.debug('[Falcon Auth] Startup cloud sync check:', cloudErr);
   }
 
-  // 3. Check active Firebase Auth user session
-  if (auth.currentUser) {
-    try {
-      await auth.currentUser.getIdToken(true);
-      const restored = getStoredSheetsToken() || getStoredDriveToken();
-      if (restored?.token) {
-        return restored.token;
-      }
-    } catch (fbErr) {
-      console.debug('[Falcon Auth] Firebase session check notice:', fbErr);
+  // 3. Check redirect result (if returning from redirect OAuth on mobile)
+  try {
+    const redir = await checkRedirectAuthResult();
+    if (redir?.accessToken) {
+      return redir.accessToken;
     }
+  } catch {}
+
+  // 4. Wait for Firebase Auth session to finish restoring
+  try {
+    await waitForFirebaseAuthReady(2000);
+    const restored = getStoredSheetsToken() || getStoredDriveToken();
+    if (restored?.token && (!restored.expiresAt || restored.expiresAt > now)) {
+      return restored.token;
+    }
+  } catch (fbErr) {
+    console.debug('[Falcon Auth] Firebase session check notice:', fbErr);
   }
 
-  // 4. Return existing token if present even in grace period
+  // 5. Grace period: Return existing token if present
   if (currentSheets?.token && !currentSheets.token.startsWith('falcon_offline_session_')) {
     return currentSheets.token;
   }
@@ -356,10 +394,17 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
   } catch (popupErr: any) {
     console.warn('[Falcon Auth] Direct sign-in attempt notice:', popupErr?.code || popupErr?.message);
 
-    // 2. Mobile Browser / Popup Blocked Fallback via Firebase Redirect
-    if (popupErr?.code === 'auth/popup-blocked') {
+    // 2. Mobile Browser / Popup Blocked / WebView Fallback via Firebase Redirect
+    const isMobileOrBlocked =
+      popupErr?.code === 'auth/popup-blocked' ||
+      popupErr?.code === 'auth/operation-not-supported-in-this-environment' ||
+      popupErr?.code === 'auth/cancelled-popup-request' ||
+      (popupErr?.message && popupErr.message.toLowerCase().includes('popup')) ||
+      (typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+
+    if (isMobileOrBlocked) {
       try {
-        console.info('[Falcon Auth] Popup blocked; switching to Firebase redirect sign-in flow...');
+        console.info('[Falcon Auth] Mobile/WebView environment: switching to Firebase redirect sign-in flow...');
         await signInWithRedirect(auth, provider);
         return {
           accessToken: '',
@@ -368,7 +413,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
         };
       } catch (redirErr) {
         console.warn('[Falcon Auth] Redirect sign-in notice:', redirErr);
-        throw new Error('Google Sign-In popup was blocked by your browser. Please tap "Allow Popups" or try again directly.');
+        throw new Error('Google Sign-In popup was blocked by your browser. Please tap "Allow Popups" or sign in via Redirect.');
       }
     }
 

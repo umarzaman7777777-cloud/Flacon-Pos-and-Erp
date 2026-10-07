@@ -89,7 +89,8 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
         dataUrl,
         title: `Invoice #${transaction.id} — ${transaction.factory || 'Walk-in'} (Rs ${fmt(transaction.total)})`,
         format: 'jpg',
-        mimeType: 'image/jpeg'
+        mimeType: 'image/jpeg',
+        targetApp: 'whatsapp'
       });
       setShareSuccess(true);
       setTimeout(() => setShareSuccess(false), 2500);
@@ -462,7 +463,23 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
                   {items.map((item, idx) => (
                     <tr key={idx} className="hover:bg-[var(--panel-raised)]/50 transition">
                       <td className="py-2.5 px-3 text-[var(--text-dim)]">{idx + 1}</td>
-                      <td className="py-2.5 px-3 font-semibold text-[var(--text)]">{item.name}</td>
+                      <td className="py-2.5 px-3 font-semibold text-[var(--text)]">
+                        <div>{item.name}</div>
+                        {(item.batchId || item.trackingNumber) && (
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[9px] font-mono font-normal">
+                            {item.batchId && (
+                              <span className="px-1.5 py-0.5 rounded bg-[var(--yellow)]/10 text-[var(--yellow)] border border-[var(--yellow)]/20">
+                                Batch: {item.batchId}
+                              </span>
+                            )}
+                            {item.trackingNumber && (
+                              <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                                Trk: {item.trackingNumber}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-2.5 px-3 text-[var(--text-dim)]">{item.size || '-'}</td>
                       <td className="py-2.5 px-3 text-[var(--text-dim)]">{item.color || '-'}</td>
                       <td className="py-2.5 px-3 text-right font-bold text-[var(--text)]">{item.qty}</td>

@@ -32,6 +32,7 @@ import {
 } from './types';
 import { INITIAL_STATE, INITIAL_PRODUCTS } from './utils/initialData';
 import { todayISO, generateId, fmt } from './utils/helpers';
+import { generateBatchTrackingMetadata } from './utils/batchTrackingGenerator';
 import {
   hapticAddToCart,
   hapticTransactionComplete,
@@ -255,6 +256,17 @@ export const App: React.FC = () => {
                 }
                 if (typeof tx.paid !== 'boolean') {
                   tx.paid = false;
+                  modified = true;
+                }
+
+                // Backfill batchId and itemBatches for consistent tracking segmentation
+                if (!tx.batchId) {
+                  const parts = tx.itemsSummary ? tx.itemsSummary.split(/\s*\+\s*|\n|;/).filter(Boolean) : [];
+                  const meta = generateBatchTrackingMetadata(tx.id || '0001', parts.map(() => ({})), tx.date);
+                  tx.batchId = meta.batchId;
+                  tx.trackingNumber = meta.trackingNumber;
+                  if (!tx.itemBatches) tx.itemBatches = meta.itemBatches;
+                  if (!tx.itemTrackingNumbers) tx.itemTrackingNumbers = meta.itemTrackingNumbers;
                   modified = true;
                 }
 
@@ -592,6 +604,15 @@ export const App: React.FC = () => {
   // Central Google Workspace synchronization (Google Sheets live mirror & Google Drive auto-backups)
   const workspaceSync = useWorkspaceSync(state, terminalId);
 
+  // Auto-sync after returning from mobile redirect authentication
+  useEffect(() => {
+    checkRedirectAuthResult().then(res => {
+      if (res?.accessToken) {
+        workspaceSync.autoSyncNow();
+      }
+    }).catch(() => {});
+  }, [workspaceSync]);
+
   // Connection health verification and PWA background service worker on boot
   useEffect(() => {
     testConnection();
@@ -755,6 +776,10 @@ export const App: React.FC = () => {
       console.warn(`[Falcon ERP] ID collision detected. Auto-adjusted nextTxnId to #${assignedId}`);
     }
 
+    // 5. Generate Batch ID and Tracking Number generator for every transaction items list
+    // Ensures multi-item orders are clearly segmented by batch in transaction metadata
+    const batchMeta = generateBatchTrackingMetadata(assignedId, validLines, safeDate);
+
     const newTxn: Transaction = {
       id: assignedId,
       date: safeDate,
@@ -770,7 +795,11 @@ export const App: React.FC = () => {
       colors: colorsStr,
       sizes: sizesStr,
       confirmed: false,
-      device: 'POS-Terminal'
+      device: 'POS-Terminal',
+      batchId: batchMeta.batchId,
+      trackingNumber: batchMeta.trackingNumber,
+      itemBatches: batchMeta.itemBatches,
+      itemTrackingNumbers: batchMeta.itemTrackingNumbers
     };
 
     console.info('[Falcon ERP] handleCheckoutUnpaid: New transaction created & validated:', {
@@ -782,18 +811,23 @@ export const App: React.FC = () => {
       itemRates: newTxn.itemRates,
       sizes: newTxn.sizes,
       colors: newTxn.colors,
+      batchId: newTxn.batchId,
+      trackingNumber: newTxn.trackingNumber,
+      itemBatches: newTxn.itemBatches,
+      itemTrackingNumbers: newTxn.itemTrackingNumbers,
       lineItemsCount: validLines.length
     });
 
-    // 5. Calculate next order id, e.g. "0005" -> "0006"
+    // 6. Calculate next order id, e.g. "0005" -> "0006"
     const nextNum = parseInt(assignedId, 10) + 1;
     const nextIdStr = String(nextNum).padStart(4, '0');
 
-    // 6. Also append a Debit entry in this factory's customer ledger
+    // 7. Also append a Debit entry in this factory's customer ledger with batch reference
+    const ledgerDesc = `Order #${assignedId} (${summaryStr})${newTxn.batchId ? ` · [${newTxn.batchId}]` : ''}`;
     const updatedCustomerLedgers = prevCustomerLedgersAddDebit(
       state.customerLedgers,
       safeCustomer,
-      `Order #${assignedId} (${summaryStr})`,
+      ledgerDesc,
       totalAmount,
       safeDate
     );
@@ -1211,6 +1245,26 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleUpdateLedgerEntry = (factoryName: string, entryId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        customerLedgers: prev.customerLedgers.map(cl => {
+          if (cl.name === factoryName) {
+            return {
+              ...cl,
+              entries: cl.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
+            };
+          }
+          return cl;
+        })
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
   const handleDeleteLedgerEntry = (factoryName: string, entryId: string) => {
     const targetEntry = state.customerLedgers
       .find(cl => cl.name === factoryName)
@@ -1288,6 +1342,35 @@ export const App: React.FC = () => {
           ? {
               ...prev,
               entries: [...prev.entries, newEntry]
+            }
+          : null
+      );
+    }
+  };
+
+  const handleUpdateCustomLedgerEntry = (ledgerId: string, entryId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        customLedgersList: (prev.customLedgersList || []).map(cl =>
+          cl.id === ledgerId
+            ? {
+                ...cl,
+                entries: cl.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
+              }
+            : cl
+        )
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+    if (selectedCustomLedger?.id === ledgerId) {
+      setSelectedCustomLedger(prev =>
+        prev
+          ? {
+              ...prev,
+              entries: prev.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
             }
           : null
       );
@@ -1432,6 +1515,25 @@ export const App: React.FC = () => {
         painters: prev.painters.map(p =>
           p.name === painterName
             ? { ...p, entries: [...p.entries, { ...entryData, id: generateId('paint') }] }
+            : p
+        )
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
+  const handleUpdatePaintEntry = (painterName: string, entryId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        painters: prev.painters.map(p =>
+          p.name === painterName
+            ? {
+                ...p,
+                entries: p.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
+              }
             : p
         )
       };
@@ -1628,6 +1730,25 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleUpdateRawEntry = (supplierName: string, entryId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        rawSuppliers: prev.rawSuppliers.map(s =>
+          s.name === supplierName
+            ? {
+                ...s,
+                entries: s.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
+              }
+            : s
+        )
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
   const handleDeleteRawEntry = (supplierName: string, entryId: string) => {
     const supplier = (state.rawSuppliers || []).find(s => s.name === supplierName);
     const targetEntry = supplier?.entries.find(e => e.id === entryId);
@@ -1708,6 +1829,25 @@ export const App: React.FC = () => {
         workers: prev.workers.map(w =>
           w.name === workerName
             ? { ...w, entries: [...w.entries, { ...entryData, id: generateId('labour') }] }
+            : w
+        )
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
+  const handleUpdateLabourEntry = (workerName: string, entryId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        workers: prev.workers.map(w =>
+          w.name === workerName
+            ? {
+                ...w,
+                entries: w.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
+              }
             : w
         )
       };
@@ -1839,6 +1979,25 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleUpdateScrapEntry = (buyerName: string, entryId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        scrapBuyers: prev.scrapBuyers.map(b =>
+          b.name === buyerName
+            ? {
+                ...b,
+                entries: b.entries.map(e => (e.id === entryId ? { ...e, ...updatedData } : e))
+              }
+            : b
+        )
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
   const handleDeleteScrapEntry = (buyerName: string, entryId: string) => {
     const buyer = (state.scrapBuyers || []).find(b => b.name === buyerName);
     const targetEntry = buyer?.entries.find(e => e.id === entryId);
@@ -1877,6 +2036,28 @@ export const App: React.FC = () => {
       const newState: AppState = {
         ...prev,
         withdrawals: [{ ...entryData, id: generateId('wdraw') }, ...prev.withdrawals]
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
+  const handleUpdateWithdrawal = (withdrawalId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        withdrawals: prev.withdrawals.map(w =>
+          w.id === withdrawalId
+            ? {
+                ...w,
+                ...updatedData,
+                amount: typeof updatedData.amount === 'number' && updatedData.amount > 0
+                  ? updatedData.amount
+                  : updatedData.debit || updatedData.credit || w.amount
+              }
+            : w
+        )
       };
       pushStateImmediately(newState);
       return newState;
@@ -1987,6 +2168,28 @@ export const App: React.FC = () => {
       const newState: AppState = {
         ...prev,
         expenses: [{ ...expenseData, id: generateId('exp') }, ...prev.expenses]
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
+  const handleUpdateExpense = (expenseId: string, updatedData: any) => {
+    hapticTransactionComplete();
+    setState(prev => {
+      const newState: AppState = {
+        ...prev,
+        expenses: prev.expenses.map(e =>
+          e.id === expenseId
+            ? {
+                ...e,
+                ...updatedData,
+                amount: typeof updatedData.amount === 'number' && updatedData.amount > 0
+                  ? updatedData.amount
+                  : updatedData.debit || updatedData.credit || e.amount
+              }
+            : e
+        )
       };
       pushStateImmediately(newState);
       return newState;
@@ -2399,6 +2602,7 @@ export const App: React.FC = () => {
               onDeleteFactory={handleDeleteFactory}
               onAddLedgerEntry={handleAddLedgerEntry}
               onDeleteLedgerEntry={handleDeleteLedgerEntry}
+              onUpdateLedgerEntry={handleUpdateLedgerEntry}
               onAddCustomLedger={handleAddCustomLedger}
               onOpenCustomLedgerDetail={cl => setSelectedCustomLedger(cl)}
             />
@@ -2413,6 +2617,7 @@ export const App: React.FC = () => {
               onDeletePainter={handleDeletePainter}
               onAddPaintEntry={handleAddPaintEntry}
               onDeletePaintEntry={handleDeletePaintEntry}
+              onUpdatePaintEntry={handleUpdatePaintEntry}
               onToggleChequeStatus={handleToggleChequeStatus}
             />
           )}
@@ -2428,6 +2633,7 @@ export const App: React.FC = () => {
               onDeleteSupplier={handleDeleteSupplier}
               onAddRawEntry={handleAddRawEntry}
               onDeleteRawEntry={handleDeleteRawEntry}
+              onUpdateRawEntry={handleUpdateRawEntry}
               onAttachGatePass={handleAttachRawGatePass}
             />
           )}
@@ -2441,6 +2647,7 @@ export const App: React.FC = () => {
               onDeleteWorker={handleDeleteWorker}
               onAddLabourEntry={handleAddLabourEntry}
               onDeleteLabourEntry={handleDeleteLabourEntry}
+              onUpdateLabourEntry={handleUpdateLabourEntry}
               onBulkAttendance={handleBulkAttendance}
             />
           )}
@@ -2454,6 +2661,7 @@ export const App: React.FC = () => {
               onDeleteBuyer={handleDeleteScrapBuyer}
               onAddScrapEntry={handleAddScrapEntry}
               onDeleteScrapEntry={handleDeleteScrapEntry}
+              onUpdateScrapEntry={handleUpdateScrapEntry}
             />
           )}
 
@@ -2464,6 +2672,7 @@ export const App: React.FC = () => {
               companyName={state.companyName}
               onAddWithdrawal={handleAddWithdrawal}
               onReverseWithdrawal={handleReverseWithdrawal}
+              onUpdateWithdrawal={handleUpdateWithdrawal}
             />
           )}
 
@@ -2501,6 +2710,7 @@ export const App: React.FC = () => {
               companyName={state.companyName}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
+              onUpdateExpense={handleUpdateExpense}
               onAddCategory={handleAddCategory}
             />
           )}
@@ -2622,6 +2832,7 @@ export const App: React.FC = () => {
           onClose={() => setSelectedCustomLedger(null)}
           onAddEntry={handleAddCustomLedgerEntry}
           onDeleteEntry={handleDeleteCustomLedgerEntry}
+          onUpdateEntry={handleUpdateCustomLedgerEntry}
           onUpdateSelfWeightStock={handleUpdateSelfWeightStock}
           onDeleteCustomLedger={handleDeleteCustomLedger}
         />

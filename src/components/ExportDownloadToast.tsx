@@ -120,7 +120,8 @@ export const ExportDownloadToast: React.FC = () => {
         blobUrl: activeExport.blobUrl,
         mimeType: activeExport.mimeType,
         format: activeExport.format,
-        title: activeExport.fileName
+        title: activeExport.fileName,
+        targetApp: 'whatsapp'
       });
       if (res.success) {
         setShared(true);

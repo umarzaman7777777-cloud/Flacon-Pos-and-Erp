@@ -1,10 +1,17 @@
 import React, { useState } from 'react';
-import { Brush, Plus, Trash2, Edit2, Download, CheckCircle, AlertTriangle } from 'lucide-react';
-import { Painter, PaintEntry, AppLanguage } from '../types';
+import { Brush, Plus, Trash2, Edit2, Download, CheckCircle, AlertTriangle, Sliders } from 'lucide-react';
+import { Painter, PaintEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computePainterLedgerDetails } from '../utils/mathEngine';
+import {
+  buildLedgerExportTableData,
+  getStoredLedgerColumnConfig,
+  saveStoredLedgerColumnConfig
+} from '../utils/ledgerExportHelper';
+import { EditLedgerEntryModal } from './EditLedgerEntryModal';
+import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 
 interface PaintLedgerViewProps {
   painters: Painter[];
@@ -14,6 +21,7 @@ interface PaintLedgerViewProps {
   onDeletePainter: (name: string) => void;
   onAddPaintEntry: (painterName: string, entry: Omit<PaintEntry, 'id'>) => void;
   onDeletePaintEntry: (painterName: string, entryId: string) => void;
+  onUpdatePaintEntry?: (painterName: string, entryId: string, updatedData: any) => void;
   onToggleChequeStatus: (painterName: string, entryId: string, status: 'cleared' | 'bounced') => void;
 }
 
@@ -25,6 +33,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   onDeletePainter,
   onAddPaintEntry,
   onDeletePaintEntry,
+  onUpdatePaintEntry,
   onToggleChequeStatus
 }) => {
   const [selectedPainterIdx, setSelectedPainterIdx] = useState<number | null>(null);
@@ -45,6 +54,24 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   const [method, setMethod] = useState('Cash');
   const [detail, setDetail] = useState('');
   const [date, setDate] = useState(todayISO());
+
+  // Detailed payment & Studio states
+  const [editingEntry, setEditingEntry] = useState<PaintEntry | null>(null);
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [colConfig, setColConfig] = useState<LedgerColumnConfig>(() =>
+    getStoredLedgerColumnConfig('paint', DEFAULT_LEDGER_COLUMNS)
+  );
+  const [showExtendedPaymentFields, setShowExtendedPaymentFields] = useState(false);
+  const [entryPaidBy, setEntryPaidBy] = useState('');
+  const [entryPaidTo, setEntryPaidTo] = useState('');
+  const [entryBankName, setEntryBankName] = useState('');
+  const [entryAccountNumber, setEntryAccountNumber] = useState('');
+  const [entryChequeNo, setEntryChequeNo] = useState('');
+
+  const handleUpdateColConfig = (newCfg: LedgerColumnConfig) => {
+    setColConfig(newCfg);
+    saveStoredLedgerColumnConfig('paint', newCfg);
+  };
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
@@ -79,7 +106,12 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
       debit: dVal,
       credit: cVal,
       method: dVal > 0 ? method : undefined,
-      detail: dVal > 0 ? detail.trim() : undefined
+      detail: dVal > 0 ? detail.trim() : undefined,
+      paidBy: entryPaidBy.trim() || undefined,
+      paidTo: entryPaidTo.trim() || undefined,
+      bankName: entryBankName.trim() || undefined,
+      accountNumber: entryAccountNumber.trim() || undefined,
+      chequeNo: entryChequeNo.trim() || undefined
     });
 
     setDesc('');
@@ -88,6 +120,11 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
     setItemCount('');
     setRatePerItem('');
     setIsDamage(false);
+    setEntryPaidBy('');
+    setEntryPaidTo('');
+    setEntryBankName('');
+    setEntryAccountNumber('');
+    setEntryChequeNo('');
   };
 
   const currentPainter = selectedPainterIdx !== null ? painters[selectedPainterIdx] : null;
@@ -95,68 +132,44 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
     ? currentPainter.entries.reduce((s, e) => s + (e.credit || 0) - (e.debit || 0), 0)
     : 0;
 
-  const handleExportCSV = () => {
+  const handleExportCSV = (customCols?: LedgerColumnConfig) => {
     if (!currentPainter) return;
-    const headers = ['Date', 'Description', 'Color', 'Size', 'Count', 'Rate', 'Debit (Paid)', 'Credit (Work)'];
-    const rows = currentPainter.entries.map(e => [
-      e.date,
-      e.desc,
-      e.color || '—',
-      e.itemSize || '—',
-      e.itemCount || '—',
-      e.ratePerItem || '—',
-      e.debit,
-      e.credit
-    ]);
+    const effectiveCols = customCols || colConfig;
+    const details = computePainterLedgerDetails(currentPainter.entries);
+    const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
     downloadCSV(`${currentPainter.name}_Paint_Ledger`, headers, rows);
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!currentPainter) return;
-    const headers = ['Date', 'Description', 'Color', 'Size', 'Count', 'Rate', 'Paid', 'Work'];
-    const rows = currentPainter.entries.map(e => [
-      e.date,
-      e.desc,
-      e.color || '—',
-      e.itemSize || '—',
-      e.itemCount || '—',
-      e.ratePerItem ? fmt(parseFloat(e.ratePerItem)) : '—',
-      fmt(e.debit),
-      fmt(e.credit)
-    ]);
+    const effectiveCols = customCols || colConfig;
+    const details = computePainterLedgerDetails(currentPainter.entries);
+    const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
     openExportModal({
       title: `${currentPainter.name} — Paint Ledger`,
       headers,
       rows,
       filename: `${currentPainter.name}_Paint_Ledger`,
       companyName,
-      subtitle: 'Fan Accessories · Gujrat',
+      subtitle: exportDocConfig?.subtitle || 'Paint & Powder Coating Services',
       balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
       defaultFormat: 'pdf',
       initialOrientation: 'landscape'
     });
   };
 
-  const handleExportJPG = () => {
+  const handleExportJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
     if (!currentPainter) return;
-    const headers = ['Date', 'Description', 'Color', 'Size', 'Count', 'Rate', 'Paid', 'Work'];
-    const rows = currentPainter.entries.map(e => [
-      e.date,
-      e.desc,
-      e.color || '—',
-      e.itemSize || '—',
-      e.itemCount || '—',
-      e.ratePerItem ? fmt(parseFloat(e.ratePerItem)) : '—',
-      fmt(e.debit),
-      fmt(e.credit)
-    ]);
+    const effectiveCols = customCols || colConfig;
+    const details = computePainterLedgerDetails(currentPainter.entries);
+    const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
     openExportModal({
       title: `${currentPainter.name} — Paint Ledger`,
       headers,
       rows,
       filename: `${currentPainter.name}_Paint_Ledger`,
       companyName,
-      subtitle: 'Fan Accessories · Gujrat',
+      subtitle: exportDocConfig?.subtitle || 'Paint & Powder Coating Services',
       balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
       defaultFormat: 'jpg',
       initialOrientation: 'landscape'
@@ -298,21 +311,30 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleExportCSV}
+                  onClick={() => setIsStudioOpen(true)}
+                  className="px-2.5 py-1 rounded bg-[var(--yellow)]/15 border border-[var(--yellow)]/30 text-[var(--yellow)] hover:bg-[var(--yellow)]/25 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  title="Open Ledger Studio to select export columns & visual layout"
+                >
+                  <Sliders size={12} />
+                  <span>Ledger Studio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportCSV()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)]"
                 >
                   CSV
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportPDF}
+                  onClick={() => handleExportPDF()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)]"
                 >
                   PDF
                 </button>
                 <button
                   type="button"
-                  onClick={handleExportJPG}
+                  onClick={() => handleExportJPG()}
                   className="px-2.5 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--yellow)] hover:bg-[var(--yellow)] hover:text-black transition"
                 >
                   JPG
@@ -320,7 +342,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedPainterIdx(null)}
-                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]"
+                  className="p-1.5 rounded-lg border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
                 >
                   ✕
                 </button>
@@ -413,17 +435,43 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
                           </span>
                         </td>
                         <td className="p-2.5 text-[var(--text-dim)]">
-                          {e.method || '—'}
-                          {e.chequeStatus && ` (${e.chequeStatus})`}
+                          <div className="font-semibold text-[var(--text)]">{e.method || '—'}</div>
+                          {(e.paidBy || e.paidTo) && (
+                            <div className="text-[10px] text-[var(--text-dim)] flex items-center gap-1 mt-0.5 flex-wrap">
+                              {e.paidBy && <span>By: <strong className="text-[var(--text)]">{e.paidBy}</strong></span>}
+                              {e.paidTo && <span>→ To: <strong className="text-[var(--text)]">{e.paidTo}</strong></span>}
+                            </div>
+                          )}
+                          {e.accountNumber && (
+                            <div className="text-[10px] text-[var(--yellow)] font-mono mt-0.5">
+                              A/C: {e.accountNumber} {e.bankName && `(${e.bankName})`}
+                            </div>
+                          )}
+                          {(e.chequeNo || e.detail) && (
+                            <div className="text-[9px] text-[var(--text-dim)] mt-0.5">
+                              Ref: {e.chequeNo || e.detail} {e.chequeStatus && `(${e.chequeStatus})`}
+                            </div>
+                          )}
                         </td>
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => onDeletePaintEntry(currentPainter.name, e.id)}
-                            className="text-red-400 hover:text-red-300 p-1"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingEntry(e)}
+                              className="text-[var(--text-dim)] hover:text-[var(--yellow)] hover:bg-[var(--panel-raised)] p-1 rounded transition cursor-pointer"
+                              title="Edit Entry Details"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeletePaintEntry(currentPainter.name, e.id)}
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1 rounded transition cursor-pointer"
+                              title="Delete Entry"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -434,7 +482,61 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
 
             {/* Quick Add Entry Form */}
             <form onSubmit={handleAddEntry} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2 text-xs">
-              <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Add Paint Entry</div>
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Add Paint Entry</div>
+                <button
+                  type="button"
+                  onClick={() => setShowExtendedPaymentFields(!showExtendedPaymentFields)}
+                  className="text-[10px] text-[var(--yellow)] hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                >
+                  {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment (By / To / A/C)'}
+                </button>
+              </div>
+
+              {/* Extended Payment Channels when toggled */}
+              {showExtendedPaymentFields && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+                  <select
+                    value={method}
+                    onChange={e => setMethod(e.target.value)}
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank Transfer</option>
+                    <option value="Online">Online / EasyPaisa</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={entryPaidBy}
+                    onChange={e => setEntryPaidBy(e.target.value)}
+                    placeholder="Paid By (e.g. Workshop)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryPaidTo}
+                    onChange={e => setEntryPaidTo(e.target.value)}
+                    placeholder={`Paid To (e.g. ${currentPainter.name})`}
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryBankName}
+                    onChange={e => setEntryBankName(e.target.value)}
+                    placeholder="Bank (e.g. Meezan, HBL)"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                  <input
+                    type="text"
+                    value={entryAccountNumber}
+                    onChange={e => setEntryAccountNumber(e.target.value)}
+                    placeholder="Account Number / IBAN"
+                    className="bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <input
                   type="text"
@@ -526,7 +628,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
 
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition"
+                  className="px-4 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition cursor-pointer"
                 >
                   Save Entry
                 </button>
@@ -534,6 +636,40 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Edit Paint Ledger Entry Modal */}
+      {editingEntry && currentPainter && (
+        <EditLedgerEntryModal
+          isOpen={!!editingEntry}
+          onClose={() => setEditingEntry(null)}
+          title={`Edit Paint Entry · ${currentPainter.name}`}
+          ledgerName={currentPainter.name}
+          entry={editingEntry}
+          onSave={updated => {
+            if (onUpdatePaintEntry) {
+              onUpdatePaintEntry(currentPainter.name, editingEntry.id, updated);
+            }
+          }}
+        />
+      )}
+
+      {/* Ledger Column & Export Studio Modal */}
+      {isStudioOpen && currentPainter && (
+        <LedgerStudioModal
+          isOpen={isStudioOpen}
+          onClose={() => setIsStudioOpen(false)}
+          ledgerName={currentPainter.name}
+          ledgerSubtitle="Paint & Powder Coating Services Ledger"
+          columnConfig={colConfig}
+          onUpdateColumnConfig={handleUpdateColConfig}
+          companyName={companyName}
+          activeBalance={currentBalance}
+          sampleRows={currentPainter.entries}
+          onExportCSV={cfg => handleExportCSV(cfg)}
+          onExportPDF={(cfg, docCfg) => handleExportPDF(cfg, docCfg)}
+          onExportJPG={(cfg, docCfg) => handleExportJPG(cfg, docCfg)}
+        />
       )}
     </div>
   );

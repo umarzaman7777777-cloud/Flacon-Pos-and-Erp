@@ -226,6 +226,8 @@ export interface CartLine {
   qty: number;
   color?: string | null;
   size?: string | null;
+  batchId?: string;
+  trackingNumber?: string;
 }
 
 export interface CustomerPayment {
@@ -293,12 +295,31 @@ export interface Transaction {
   device?: string;
   isJobWork?: boolean;
   writtenOff?: number;
+  batchId?: string;
+  trackingNumber?: string;
+  itemBatches?: string;
+  itemTrackingNumbers?: string;
 }
 
 export interface Factory {
   name: string;
   location: string;
   contact: string;
+}
+
+export interface LedgerColumnConfig {
+  showDate: boolean;
+  showTime: boolean;
+  showDesc: boolean;
+  showDebit: boolean;
+  showCredit: boolean;
+  showBalance: boolean;
+  showMethod: boolean;
+  showPaidBy: boolean;
+  showPaidTo: boolean;
+  showAccount: boolean;
+  showRef: boolean;
+  showTax: boolean;
 }
 
 export interface CustomerLedgerEntry {
@@ -312,6 +333,11 @@ export interface CustomerLedgerEntry {
   detail?: string;
   receivedBy?: string;
   receivedIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: 'pending' | 'cleared' | 'bounced' | '';
   taxPercent?: number;
@@ -343,6 +369,11 @@ export interface PaintEntry {
   detail?: string;
   receivedBy?: string;
   receivedIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: string;
   receiptUrl?: string;
@@ -376,6 +407,11 @@ export interface RawEntry {
   detail?: string;
   receivedBy?: string;
   receivedIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: string;
   receiptUrl?: string;
@@ -408,6 +444,11 @@ export interface ScrapEntry {
   detail?: string;
   receivedBy?: string;
   receivedIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: string;
   device?: string;
@@ -432,6 +473,11 @@ export interface WithdrawalEntry {
   chequeStatus?: string;
   withdrawnBy?: string;
   withdrawnIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   device?: string;
 }
 
@@ -462,6 +508,11 @@ export interface LabourEntry {
   detail?: string;
   receivedBy?: string;
   receivedIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: string;
   receiptUrl?: string;
@@ -501,6 +552,11 @@ export interface CustomLedgerEntry {
   detail?: string;
   receivedBy?: string;
   receivedIn?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: string;
   itemMethod?: string;
@@ -559,6 +615,15 @@ export interface Expense {
   amount: number;
   method: string;
   detail?: string;
+  paidBy?: string;
+  paidTo?: string;
+  accountNumber?: string;
+  bankName?: string;
+  chequeNo?: string;
+  chequeDate?: string;
+  chequeStatus?: string;
+  taxPercent?: number;
+  taxAmt?: number;
   receiptUrl?: string;
   device?: string;
 }

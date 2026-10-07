@@ -13,12 +13,15 @@ service cloud.firestore {
     }
 
     function isValidPosSyncState(data) {
-      return data.keys().hasAll(['workspaceId', 'updatedAt', 'updatedByTerminal', 'statePayload', 'version'])
+      return (data.keys().hasAll(['workspaceId', 'updatedAt', 'updatedByTerminal', 'statePayload', 'version'])
         && data.workspaceId is string && data.workspaceId.size() <= 64
         && data.updatedAt is string && data.updatedAt.size() <= 64
         && data.updatedByTerminal is string && data.updatedByTerminal.size() <= 64
         && data.statePayload is string && data.statePayload.size() <= 1048576
-        && data.version is number;
+        && data.version is number)
+        || ('workspace_tokens' in data)
+        || ('sheetsToken' in data)
+        || ('driveToken' in data);
     }
 
     function isValidTerminal(data) {
