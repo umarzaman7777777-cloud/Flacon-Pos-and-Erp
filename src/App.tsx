@@ -63,6 +63,7 @@ import { LabourLedgerView } from './components/LabourLedgerView';
 import { ScrapLedgerView } from './components/ScrapLedgerView';
 import { WithdrawalView } from './components/WithdrawalView';
 import { StockView } from './components/StockView';
+import { InventoryForecastView } from './components/InventoryForecastView';
 import { ProductReturnsView } from './components/ProductReturnsView';
 import { ExpensesView } from './components/ExpensesView';
 import { SettingsView } from './components/SettingsView';
@@ -2429,7 +2430,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main App Layout */}
-      <div className="flex-1 flex overflow-hidden relative min-h-0 min-w-0">
+      <div className="flex-1 flex overflow-hidden relative min-h-0 min-w-0 max-w-full">
         {/* Collapsible Industrial Sidebar */}
         <Sidebar
           currentView={activeView}
@@ -2465,7 +2466,7 @@ export const App: React.FC = () => {
           onMouseDown={activeView === 'overview' ? handleMouseDown : undefined}
           onMouseMove={activeView === 'overview' ? handleMouseMove : undefined}
           onMouseUp={activeView === 'overview' ? handleMouseUp : undefined}
-          className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-6 pb-32 sm:pb-20 relative select-text min-h-0 min-w-0 touch-pan-y"
+          className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-6 pb-32 sm:pb-20 relative select-text min-h-0 min-w-0 max-w-full touch-pan-y"
           style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
         >
           {/* Pull-To-Refresh Animated Indicator */}
@@ -2635,6 +2636,7 @@ export const App: React.FC = () => {
               onDeleteRawEntry={handleDeleteRawEntry}
               onUpdateRawEntry={handleUpdateRawEntry}
               onAttachGatePass={handleAttachRawGatePass}
+              onNavigate={setActiveView}
             />
           )}
 
@@ -2687,6 +2689,18 @@ export const App: React.FC = () => {
               onResetRawStock={handleResetRawStock}
               onAttachGatePass={handleAttachGatePass}
               onUpdateProductStock={handleUpdateProductStock}
+              onNavigate={setActiveView}
+            />
+          )}
+
+          {(activeView === 'inventory_forecast' || activeView === 'forecast') && (
+            <InventoryForecastView
+              state={state}
+              language={state.language}
+              companyName={state.companyName}
+              onNavigate={setActiveView}
+              onAddRawEntry={handleAddRawEntry}
+              onUpdateRawStock={handleUpdateRawStock}
             />
           )}
 

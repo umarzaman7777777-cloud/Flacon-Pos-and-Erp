@@ -453,7 +453,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
       {/* Customer Ledger Detail Modal */}
       {selectedLedgerFactory && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4 font-mono">
-          <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-4 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col">
+          <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[94vh] flex flex-col">
             {/* Modal Header with Title and Export Actions */}
             <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-3 flex-wrap gap-2">
               <div>
@@ -463,7 +463,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                 <span className="text-xs text-[var(--text-dim)]">Customer Ledger Detail</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
                   onClick={() => handleExportLedgerCSV()}
@@ -552,9 +552,14 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
               );
             })()}
 
+            {/* Mobile swipe hint */}
+            <div className="sm:hidden flex items-center justify-between text-[10px] text-[var(--text-dim)] py-1 px-1">
+              <span>← Swipe sideways to view full ledger →</span>
+            </div>
+
             {/* Entries Table */}
-            <div className="flex-1 overflow-y-auto min-h-[160px] border border-[var(--steel-line)] rounded-lg">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="flex-1 overflow-auto max-w-full min-h-[160px] border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
+              <table className="w-full text-left text-xs border-collapse min-w-[720px]">
                 <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
                   <tr>
                     {colConfig.showDate && <th className="p-2.5">Date</th>}

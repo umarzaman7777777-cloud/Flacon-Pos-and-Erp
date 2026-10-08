@@ -1046,8 +1046,8 @@ export const GoogleSheetsTab: React.FC<GoogleSheetsTabProps> = ({
           </div>
         ) : filteredPreviewRows.length > 0 ? (
           <div className="border border-[var(--steel-line)] rounded-xl overflow-hidden bg-[var(--panel-raised)]">
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full text-xs text-left">
+            <div className="overflow-x-auto max-h-96 max-w-full ledger-scroll-container">
+              <table className="w-full text-xs text-left min-w-[600px]">
                 {/* Header Row */}
                 <thead className="sticky top-0 bg-[var(--panel)] border-b border-[var(--steel-line)] z-10 shadow-sm">
                   <tr>

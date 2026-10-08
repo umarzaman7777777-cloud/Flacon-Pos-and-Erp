@@ -484,14 +484,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
 
         {/* Search input */}
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
           <input
             type="text"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             placeholder={t('search_orders') || 'Search order #, customer, item...'}
-            className="pl-9 pr-3 py-1.5 rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] text-xs font-mono text-[var(--text)] focus:border-[var(--yellow)] focus:outline-none w-56 sm:w-72"
+            className="pl-9 pr-3 py-1.5 rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] text-xs font-mono text-[var(--text)] focus:border-[var(--yellow)] focus:outline-none w-full sm:w-72"
           />
         </div>
       </div>
@@ -505,9 +505,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       ) : viewMode === 'table' ? (
         /* ==================== CLEAN STRUCTURED TABLE VIEW ==================== */
-        <div className="rounded-xl border border-[var(--steel-line)] overflow-hidden bg-[var(--panel)] shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs divide-y divide-[var(--steel-line)] font-mono">
+        <div className="space-y-1">
+          {/* Mobile swipe hint */}
+          <div className="sm:hidden flex items-center justify-between text-[10px] text-[var(--text-dim)] py-0.5 px-1">
+            <span>← Swipe sideways to view full order ledger →</span>
+          </div>
+          <div className="rounded-xl border border-[var(--steel-line)] overflow-hidden bg-[var(--panel)] shadow-sm">
+            <div className="overflow-x-auto max-w-full ledger-scroll-container">
+              <table className="w-full text-left text-xs divide-y divide-[var(--steel-line)] font-mono min-w-[780px]">
               <thead className="bg-[var(--panel-raised)] text-[10px] uppercase font-bold text-[var(--text-dim)] tracking-wider">
                 <tr>
                   <th className="px-3 py-3 w-8 text-center"></th>
@@ -760,8 +765,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                               </div>
 
                               {/* Nested items table */}
-                              <div className="rounded-lg border border-[var(--steel-line)] bg-[var(--panel)] overflow-hidden">
-                                <table className="w-full text-left text-xs">
+                              <div className="rounded-lg border border-[var(--steel-line)] bg-[var(--panel)] overflow-x-auto max-w-full ledger-scroll-container">
+                                <table className="w-full text-left text-xs min-w-[480px]">
                                   <thead className="bg-[var(--panel-raised)] text-[10px] uppercase text-[var(--text-dim)] border-b border-[var(--steel-line)]">
                                     <tr>
                                       <th className="px-3 py-1.5">Item</th>
@@ -836,7 +841,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </table>
           </div>
         </div>
-      ) : (
+      </div>
+    ) : (
         /* ==================== REFINED VISUAL CARDS VIEW ==================== */
         <div className="space-y-3 font-mono">
           {filteredTxns.map(txn => {

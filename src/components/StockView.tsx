@@ -25,6 +25,7 @@ import {
   Filter,
   ArrowUpRight,
   TrendingDown,
+  TrendingUp,
   X
 } from 'lucide-react';
 import { RawStockItem, Product, Transaction, AppLanguage, GatePassData } from '../types';
@@ -44,6 +45,7 @@ interface StockViewProps {
   onResetRawStock: (name: string) => void;
   onAttachGatePass: (txnId: string, gatePass?: GatePassData) => void;
   onUpdateProductStock?: (productId: number, newStock: number) => void;
+  onNavigate?: (view: any) => void;
 }
 
 export const StockView: React.FC<StockViewProps> = ({
@@ -55,7 +57,8 @@ export const StockView: React.FC<StockViewProps> = ({
   onUpdateRawStock,
   onResetRawStock,
   onAttachGatePass,
-  onUpdateProductStock
+  onUpdateProductStock,
+  onNavigate
 }) => {
   const [activeTab, setActiveTab] = useState<'ready' | 'raw' | 'finished'>('ready');
   const [gatePassSubTab, setGatePassSubTab] = useState<'awaiting' | 'solved'>('awaiting');
@@ -259,9 +262,9 @@ export const StockView: React.FC<StockViewProps> = ({
           <p className="text-xs text-[var(--text-dim)]">{t('stock_sub')}</p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap max-w-full">
           {/* Tab Switcher */}
-          <div className="flex items-center p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-mono">
+          <div className="flex items-center p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-mono max-w-full overflow-x-auto no-scrollbar">
             <button
               type="button"
               id="stock-tab-ready"
@@ -314,6 +317,22 @@ export const StockView: React.FC<StockViewProps> = ({
                 </span>
               )}
             </button>
+
+            {onNavigate && (
+              <button
+                type="button"
+                id="stock-tab-forecast"
+                onClick={() => onNavigate('inventory_forecast')}
+                className="px-3 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 text-amber-400 hover:bg-amber-400/10 border border-amber-400/30 bg-amber-500/5 cursor-pointer"
+                title="Open Predictive Raw Material Inventory Forecast & Reorder Points"
+              >
+                <TrendingUp size={13} className="text-amber-400" />
+                <span>Inventory Forecast</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono font-bold">
+                  ROP
+                </span>
+              </button>
+            )}
           </div>
 
           {/* User-Defined Threshold Button */}

@@ -97,10 +97,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 sm:p-5 backdrop-blur-xs font-mono overflow-y-auto">
-      <div className="relative w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden my-auto animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-2 sm:p-5 backdrop-blur-xs font-mono overflow-y-auto">
+      <div className="relative w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[94vh] overflow-hidden my-auto animate-in fade-in duration-150">
         {/* Top Header Bar */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--steel-line)] bg-[var(--panel-raised)] shrink-0">
+        <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 border-b border-[var(--steel-line)] bg-[var(--panel-raised)] shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-[var(--yellow)]/15 border border-[var(--yellow)]/30 text-[var(--yellow)]">
               <Package size={20} />
@@ -283,8 +283,8 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto max-w-full ledger-scroll-container">
+              <table className="w-full text-left text-xs min-w-[560px]">
                 <thead>
                   <tr className="border-b border-[var(--steel-line)] text-[10px] uppercase font-bold text-[var(--text-dim)] bg-[var(--panel-raised)]">
                     <th className="px-3.5 py-2 w-8">#</th>

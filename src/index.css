@@ -308,3 +308,20 @@ html[data-theme="light"] .blueprint-bg::before {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--steel);
 }
+
+/* Hide scrollbar for clean horizontal mobile touch scroll strips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Touch-friendly responsive ledger table scroll container */
+.ledger-scroll-container {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}

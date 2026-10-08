@@ -390,9 +390,14 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
         ))}
       </div>
 
+      {/* Mobile swipe hint */}
+      <div className="sm:hidden flex items-center justify-between text-[10px] text-[var(--text-dim)] pb-1 px-1">
+        <span>← Swipe sideways to view full ledger →</span>
+      </div>
+
       {/* Expenses Table */}
-      <div className="border border-[var(--steel-line)] rounded-xl overflow-hidden bg-[var(--panel)]">
-        <table className="w-full text-left text-xs border-collapse">
+      <div className="border border-[var(--steel-line)] rounded-xl overflow-x-auto max-w-full bg-[var(--panel)] ledger-scroll-container">
+        <table className="w-full text-left text-xs border-collapse min-w-[640px]">
           <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
             <tr>
               <th className="p-3">Date</th>

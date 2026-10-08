@@ -19,6 +19,8 @@ export type AppView =
   | 'scrapledger'
   | 'withdrawal'
   | 'stock'
+  | 'inventory_forecast'
+  | 'forecast'
   | 'returns'
   | 'visual_studio'
   | 'backup'

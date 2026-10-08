@@ -448,6 +448,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {renderBilingual('Stock Inventory', 'تیار مال اسٹاک')}
             </button>
 
+            <button
+              type="button"
+              id="sidebar-nav-inventory-forecast"
+              onClick={() => handleNavClick('inventory_forecast')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                currentView === 'inventory_forecast' || currentView === 'forecast'
+                  ? 'bg-[var(--yellow)] text-black shadow'
+                  : 'text-[var(--text-dim)] hover:bg-[var(--panel-raised)] hover:text-[var(--text)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <TrendingUp size={16} className="shrink-0 text-amber-400" />
+                {renderBilingual('Inventory Forecast', 'پیش گوئی اسٹاک')}
+              </div>
+              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold bg-amber-500/20 text-amber-300">
+                ROP
+              </span>
+            </button>
+
             {onOpenGateReceipts && (
               <button
                 type="button"

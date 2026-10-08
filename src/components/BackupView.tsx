@@ -1816,8 +1816,8 @@ export const BackupView: React.FC<BackupViewProps> = ({
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-[var(--steel-line)]">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="overflow-x-auto max-w-full rounded-xl border border-[var(--steel-line)] ledger-scroll-container">
+                <table className="w-full text-left text-xs border-collapse min-w-[560px]">
                   <thead>
                     <tr className="bg-[var(--panel-raised)] border-b border-[var(--steel-line)] text-[var(--text-dim)]">
                       <th className="p-3">Backup File Name</th>
@@ -2144,8 +2144,8 @@ export const BackupView: React.FC<BackupViewProps> = ({
               </div>
 
               {/* Columns Table */}
-              <div className="border border-[var(--steel-line)] rounded-lg overflow-hidden">
-                <table className="w-full text-left text-xs">
+              <div className="border border-[var(--steel-line)] rounded-lg overflow-x-auto max-w-full ledger-scroll-container">
+                <table className="w-full text-left text-xs min-w-[320px]">
                   <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px]">
                     <tr>
                       <th className="py-2 px-3 border-b border-[var(--steel-line)]">Column</th>

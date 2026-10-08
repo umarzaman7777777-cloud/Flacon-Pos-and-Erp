@@ -83,6 +83,7 @@ import { auth, googleProvider, db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { performUniversalGoogleSignIn } from '../utils/googleAuthHelper';
 import {
   calculateDatabaseMetrics,
   generateSyncDiagnosticReport,
@@ -407,7 +408,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setGoogleLoading(true);
     setGoogleMsg(null);
     try {
-      const { performUniversalGoogleSignIn } = await import('../utils/googleAuthHelper');
       const res = await performUniversalGoogleSignIn({
         preferredEmail: currentUser?.email || 'umarzaman7777777@gmail.com'
       });

@@ -164,12 +164,12 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
   const paperSpec = PAPER_SIZE_SPECS[pageSetup.paperSize] || PAPER_SIZE_SPECS.a4;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-5 font-mono">
-      <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-5 font-mono">
+      <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-150">
         
         {/* Modal Top Bar */}
-        <div className="p-4 bg-[var(--panel-raised)] border-b border-[var(--steel-line)] flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
+        <div className="p-3 sm:p-4 bg-[var(--panel-raised)] border-b border-[var(--steel-line)] flex items-center justify-between flex-wrap gap-2.5">
+          <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[var(--yellow)]/15 border border-[var(--yellow)]/30 flex items-center justify-center text-[var(--yellow)]">
               <FileText size={18} />
             </div>
@@ -194,7 +194,7 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={() => setIsPageSetupOpen(true)}
@@ -328,10 +328,10 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
         </div>
 
         {/* Formatted Invoice Preview Scrollable Container */}
-        <div className="overflow-y-auto p-4 sm:p-6 space-y-5 text-xs bg-[var(--bg)]">
+        <div className="overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5 text-xs bg-[var(--bg)]">
           
           {/* Paper / Sheet Container */}
-          <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl shadow-lg p-5 sm:p-8 space-y-6">
+          <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl shadow-lg p-3 sm:p-8 space-y-5">
             
             {/* Hazard Stripe Header */}
             <div className="hazard-bar rounded-sm" />
@@ -446,8 +446,8 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
             </div>
 
             {/* Line Items Table */}
-            <div className="border border-[var(--steel-line)] rounded-xl overflow-hidden">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="border border-[var(--steel-line)] rounded-xl overflow-x-auto max-w-full ledger-scroll-container">
+              <table className="w-full text-left border-collapse text-xs min-w-[560px]">
                 <thead>
                   <tr className="bg-[var(--panel-raised)] border-b border-[var(--steel-line)] text-[10px] font-bold text-[var(--yellow)] uppercase tracking-wider">
                     <th className="py-2.5 px-3 w-8">#</th>

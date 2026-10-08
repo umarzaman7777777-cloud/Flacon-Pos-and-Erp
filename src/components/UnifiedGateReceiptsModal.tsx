@@ -262,8 +262,12 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div>
+              <div className="sm:hidden flex items-center justify-between text-[10px] text-[var(--text-dim)] pb-1 px-1">
+                <span>← Swipe sideways to view all gate receipts columns →</span>
+              </div>
+              <div className="overflow-x-auto max-w-full ledger-scroll-container">
+                <table className="w-full text-left text-xs border-collapse min-w-[760px]">
                 <thead>
                   <tr className="border-b border-[var(--steel-line)] text-[10px] uppercase text-[var(--text-dim)] font-bold">
                     <th className="py-2.5 px-3">Gate Sequence #</th>
@@ -367,8 +371,9 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+      </div>
 
         {/* Footer info bar */}
         <div className="p-3 border-t border-[var(--steel-line)] bg-[var(--panel-raised)] flex items-center justify-between text-xs text-[var(--text-dim)] shrink-0">

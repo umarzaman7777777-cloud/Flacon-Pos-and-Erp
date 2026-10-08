@@ -1698,13 +1698,21 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               {renderBilingual('Scrap Buyers (Kabaar)', 'سکریپ خریدار')}
               <span className="font-semibold">{state.scrapBuyers.length}</span>
             </div>
-            <div className="border-t border-[var(--steel-line)] pt-3">
+            <div className="border-t border-[var(--steel-line)] pt-3 space-y-2">
               <button
                 type="button"
                 onClick={() => onNavigate('stock')}
                 className="w-full py-2 rounded-lg bg-[var(--panel-raised)] hover:border-[var(--yellow)] border border-[var(--steel-line)] text-xs text-[var(--text-dim)] hover:text-[var(--text)] transition text-center"
               >
                 Check Stock Levels (اسٹاک چیک کریں) →
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('inventory_forecast')}
+                className="w-full py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-bold text-amber-300 transition text-center flex items-center justify-center gap-1.5"
+              >
+                <span>Inventory Forecast & Reorder Prediction (پیش گوئی اسٹاک)</span>
+                <span>⚡</span>
               </button>
             </div>
           </div>
