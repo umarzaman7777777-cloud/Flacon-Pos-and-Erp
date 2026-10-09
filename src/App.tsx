@@ -671,27 +671,40 @@ export const App: React.FC = () => {
   // ----------------------------------------------------
   // CART HANDLERS (POS & Invoicing)
   // ----------------------------------------------------
-  const handleAddToCart = (product: Product, color?: string, size?: string) => {
+  const handleAddToCart = (product: Product, color?: string, size?: string, initialQty: number = 1) => {
     hapticAddToCart();
+    const effectiveColor = color !== undefined ? color : (product.color || null);
+    const effectiveSize = size !== undefined ? size : (product.size || null);
     setState(prev => {
       const existingIdx = prev.cart.findIndex(
-        l => l.id === product.id && l.color === color && l.size === size
+        l => l.id === product.id && l.color === effectiveColor && l.size === effectiveSize
       );
       if (existingIdx >= 0) {
         const updated = [...prev.cart];
-        updated[existingIdx].qty += 1;
+        updated[existingIdx].qty += initialQty;
         return { ...prev, cart: updated };
       } else {
         const newLine: CartLine = {
           id: product.id,
           name: product.name,
           price: product.price,
-          qty: 1,
-          color,
-          size
+          qty: initialQty,
+          color: effectiveColor,
+          size: effectiveSize,
+          weight: product.weight
         };
         return { ...prev, cart: [...prev.cart, newLine] };
       }
+    });
+  };
+
+  const handleSetCartQty = (id: number, qty: number) => {
+    hapticQuantityChange();
+    setState(prev => {
+      const updated = prev.cart
+        .map(item => (item.id === id ? { ...item, qty: Math.max(0, qty) } : item))
+        .filter(item => item.qty > 0);
+      return { ...prev, cart: updated };
     });
   };
 
@@ -2466,7 +2479,7 @@ export const App: React.FC = () => {
           onMouseDown={activeView === 'overview' ? handleMouseDown : undefined}
           onMouseMove={activeView === 'overview' ? handleMouseMove : undefined}
           onMouseUp={activeView === 'overview' ? handleMouseUp : undefined}
-          className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-6 pb-32 sm:pb-20 relative select-text min-h-0 min-w-0 max-w-full touch-pan-y"
+          className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 lg:p-6 pb-36 sm:pb-24 pb-safe relative select-text min-h-0 min-w-0 max-w-full touch-pan-y"
           style={{ WebkitOverflowScrolling: 'touch', overscrollBehaviorY: 'contain' }}
         >
           {/* Pull-To-Refresh Animated Indicator */}
@@ -2550,6 +2563,7 @@ export const App: React.FC = () => {
                 nextTxnId={state.nextTxnId}
                 language={state.language}
                 onUpdateQty={handleUpdateCartQty}
+                onSetQty={handleSetCartQty}
                 onRemoveLine={handleRemoveCartLine}
                 onClearCart={handleClearCart}
                 onCheckoutUnpaid={handleCheckoutUnpaid}

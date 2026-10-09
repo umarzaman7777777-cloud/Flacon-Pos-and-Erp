@@ -106,7 +106,7 @@ export const PrintPageSetupModal: React.FC<PrintPageSetupModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 font-mono">
-      <div className="w-full max-w-4xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="w-full max-w-4xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
         {/* Header Bar */}
         <div className="px-5 py-4 bg-[var(--panel-raised)] border-b border-[var(--steel-line)] flex items-center justify-between flex-wrap gap-3">

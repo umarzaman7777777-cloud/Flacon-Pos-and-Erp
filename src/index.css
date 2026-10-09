@@ -325,3 +325,61 @@ html[data-theme="light"] .blueprint-bg::before {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
 }
+
+/* Mobile viewport and Android containment rules */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+  touch-action: manipulation;
+}
+
+/* Explicitly enforce word-break on long text elements across entire application */
+p, span, h1, h2, h3, h4, h5, h6, label, td, th, a, button, li, input, textarea {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Prevent image/media blowout */
+img, svg, video, canvas {
+  max-width: 100%;
+}
+
+/* Safe area padding support for Android & iOS edge-to-edge / navigation handles */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Prevent any horizontal blowout on mobile */
+@media (max-width: 640px) {
+  /* Prevent inputs and selects from overflowing container bounds */
+  input, select, textarea {
+    max-width: 100%;
+  }
+}
+
+/* Touch-friendly range slider thumb enhancements */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 3px solid #1c1f22;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  touch-action: pan-x;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f59e0b;
+  border: 3px solid #1c1f22;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}

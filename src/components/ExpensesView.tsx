@@ -165,7 +165,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 font-mono">
+    <div className="space-y-6 font-mono max-w-full overflow-x-hidden break-words">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>
@@ -522,7 +522,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       {/* Add Category Modal */}
       {newCatModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-3 font-sans">Add Expense Category</h3>
             <label className="block text-[10px] text-[var(--text-dim)] uppercase mb-1">Category Name</label>
             <input

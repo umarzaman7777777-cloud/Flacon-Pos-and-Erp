@@ -72,7 +72,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/75 p-4 pt-16 sm:pt-24 font-mono">
-      <div className="w-full max-w-2xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+      <div className="w-full max-w-2xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         {/* Search input header */}
         <div className="p-4 border-b border-[var(--steel-line)] flex items-center gap-3 bg-[var(--panel-raised)]">
           <Search size={20} className="text-[var(--yellow)] shrink-0" />

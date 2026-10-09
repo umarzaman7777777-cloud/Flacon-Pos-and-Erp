@@ -228,6 +228,7 @@ export interface CartLine {
   qty: number;
   color?: string | null;
   size?: string | null;
+  weight?: string | null;
   batchId?: string;
   trackingNumber?: string;
 }

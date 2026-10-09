@@ -228,7 +228,7 @@ export const VoiceModal: React.FC<VoiceModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 font-mono">
-      <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-6 shadow-2xl flex flex-col items-center text-center">
+      <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-6 shadow-2xl flex flex-col items-center text-center">
         {/* Header */}
         <div className="flex items-center justify-between w-full border-b border-[var(--steel-line)] pb-3 mb-4 font-sans">
           <div className="flex items-center gap-2">

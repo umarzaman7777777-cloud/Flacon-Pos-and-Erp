@@ -622,7 +622,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-5xl font-sans pb-12">
+    <div className="space-y-6 max-w-5xl max-w-full overflow-x-hidden break-words font-sans pb-12">
       {/* Header */}
       <div className="border-b border-[var(--steel-line)] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -1976,7 +1976,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
           {/* PREVIEW BACKUP MODAL */}
           {previewDriveFile && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+              <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl max-w-3xl w-full max-w-full overflow-x-hidden break-words max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
                 <div className="p-4 border-b border-[var(--steel-line)] flex items-center justify-between bg-[var(--panel-raised)]">
                   <div className="flex items-center gap-2">
                     <FileText size={16} className="text-sky-400" />

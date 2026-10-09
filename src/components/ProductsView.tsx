@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, CheckCircle, XCircle, Search, ShieldAlert } from 'lucide-react';
+import { Plus, Edit2, Trash2, CheckCircle, XCircle, Search, ShieldAlert, SlidersHorizontal, Scale, ShoppingCart } from 'lucide-react';
 import { Product, AppLanguage, RecipeItem } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt } from '../utils/helpers';
+import { TouchRangeSlider } from './TouchRangeSlider';
 
 interface ProductsViewProps {
   products: Product[];
@@ -12,7 +13,7 @@ interface ProductsViewProps {
   productColors: string[];
   productSizes: string[];
   productWeights: string[];
-  onAddToCart: (product: Product) => void;
+  onAddToCart: (product: Product, color?: string, size?: string, initialQty?: number) => void;
   onSaveProduct: (product: Product) => void;
   onDeleteProduct: (id: number) => void;
 }
@@ -32,6 +33,8 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [quantityModalProduct, setQuantityModalProduct] = useState<Product | null>(null);
+  const [selectedQtyForProduct, setSelectedQtyForProduct] = useState(10);
 
   // Form State
   const [name, setName] = useState('');
@@ -140,7 +143,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-full overflow-x-hidden break-words">
       {/* Category header & Search */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -190,8 +193,20 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
                   <button
                     type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setQuantityModalProduct(p);
+                      setSelectedQtyForProduct(10);
+                    }}
+                    className="p-1 rounded bg-[var(--panel-raised)] hover:text-amber-400 border border-[var(--steel-line)] text-zinc-400 transition cursor-pointer"
+                    title="Select quantity & weight with touch slider"
+                  >
+                    <SlidersHorizontal size={11} />
+                  </button>
+                  <button
+                    type="button"
                     onClick={e => handleOpenEdit(p, e)}
-                    className="p-1 rounded bg-[var(--panel-raised)] hover:text-[var(--yellow)] border border-[var(--steel-line)] transition"
+                    className="p-1 rounded bg-[var(--panel-raised)] hover:text-[var(--yellow)] border border-[var(--steel-line)] transition cursor-pointer"
                     title="Edit"
                   >
                     <Edit2 size={11} />
@@ -327,6 +342,23 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                     placeholder="1.2 kg"
                     className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2 py-2 text-xs text-[var(--text)]"
                   />
+                  {/* Touch-Friendly Weight Presets for Mobile */}
+                  <div className="flex items-center gap-1 flex-wrap mt-1.5">
+                    {['0.6 kg', '0.8 kg', '1.0 kg', '1.2 kg', '1.5 kg', '1.8 kg', '2.0 kg', '2.5 kg'].map(preset => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setWeight(preset)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-mono border transition cursor-pointer touch-manipulation ${
+                          weight === preset
+                            ? 'bg-amber-500 text-black border-amber-500 font-bold'
+                            : 'bg-[var(--panel)] border-[var(--steel-line)] text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -401,6 +433,102 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Touch-Friendly Quick Quantity & Weight POS Modal */}
+      {quantityModalProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 font-mono animate-in fade-in duration-150">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-[var(--steel-line)] pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <ShoppingCart size={20} />
+                </div>
+                <div>
+                  <h3 className="font-serif font-black text-base text-[var(--text)] line-clamp-1">
+                    {quantityModalProduct.name}
+                  </h3>
+                  <div className="text-xs text-[var(--text-dim)] flex items-center gap-2 flex-wrap">
+                    <span>{fmt(quantityModalProduct.price)} / unit</span>
+                    {quantityModalProduct.size && <span>• {quantityModalProduct.size}</span>}
+                    {quantityModalProduct.weight && (
+                      <span className="text-amber-400 flex items-center gap-0.5">
+                        <Scale size={11} />
+                        {quantityModalProduct.weight}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setQuantityModalProduct(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Touch Range Slider */}
+            <TouchRangeSlider
+              value={selectedQtyForProduct}
+              min={1}
+              max={150}
+              step={1}
+              unit="pcs"
+              label="Select Rod Order Quantity"
+              onChange={val => setSelectedQtyForProduct(val)}
+              presets={[1, 5, 10, 15, 20, 25, 50, 100]}
+              secondaryInfo={
+                (() => {
+                  const numWeight = quantityModalProduct.weight ? parseFloat(quantityModalProduct.weight.replace(/[^\d.]/g, '')) || 0 : 0;
+                  return numWeight > 0
+                    ? `Estimated Weight: ${(selectedQtyForProduct * numWeight).toFixed(1)} kg • Order Subtotal: ${fmt(quantityModalProduct.price * selectedQtyForProduct)}`
+                    : `Order Subtotal: ${fmt(quantityModalProduct.price * selectedQtyForProduct)}`;
+                })()
+              }
+              colorScheme="amber"
+            />
+
+            {/* Total Summary & Add Button */}
+            <div className="pt-2 border-t border-[var(--steel-line)] space-y-2.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-[var(--text-dim)]">Cart Add Total:</span>
+                <span className="font-bold text-base text-[var(--yellow)]">
+                  {fmt(quantityModalProduct.price * selectedQtyForProduct)}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setQuantityModalProduct(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--steel-line)] text-xs text-[var(--text-dim)] hover:text-white transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAddToCart(
+                      quantityModalProduct,
+                      quantityModalProduct.color || undefined,
+                      quantityModalProduct.size || undefined,
+                      selectedQtyForProduct
+                    );
+                    setQuantityModalProduct(null);
+                  }}
+                  className="flex-2 py-2.5 rounded-xl bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow-lg hover:bg-amber-400 active:scale-98 transition flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation"
+                >
+                  <Plus size={14} />
+                  <span>Add {selectedQtyForProduct} pcs to Cart</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

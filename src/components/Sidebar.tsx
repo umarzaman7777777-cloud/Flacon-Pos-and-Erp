@@ -116,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Vertical Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-72 sm:w-80 lg:w-64 bg-[var(--panel)] border-r border-[var(--steel-line)] flex flex-col shrink-0 h-full max-h-[100dvh] transform transition-transform duration-200 ease-in-out ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-72 sm:w-80 lg:w-64 max-w-full overflow-x-hidden break-words bg-[var(--panel)] border-r border-[var(--steel-line)] flex flex-col shrink-0 h-full max-h-[100dvh] transform transition-transform duration-200 ease-in-out ${
           isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >

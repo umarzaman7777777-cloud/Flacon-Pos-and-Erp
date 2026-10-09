@@ -335,7 +335,7 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
   return (
     <div
       id="mobile-device-permissions-card"
-      className="p-4 sm:p-5 rounded-xl bg-gradient-to-b from-[var(--panel-raised)] to-[var(--panel)] border border-[var(--steel-line)] shadow-lg space-y-4"
+      className="p-4 sm:p-5 rounded-xl bg-gradient-to-b from-[var(--panel-raised)] to-[var(--panel)] border border-[var(--steel-line)] shadow-lg space-y-4 max-w-full overflow-x-hidden break-words"
     >
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-[var(--steel-line)]/60">

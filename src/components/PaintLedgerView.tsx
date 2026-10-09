@@ -177,7 +177,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden break-words">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3">
         <div>
@@ -262,7 +262,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
       {/* Add Painter Modal */}
       {addPainterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-3">{t('add_painter')}</h3>
             <label className="block text-[11px] text-[var(--text-dim)] uppercase mb-1">Painter Name</label>
             <input
@@ -302,7 +302,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
       {/* Painter Ledger Detail Modal */}
       {currentPainter && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4 font-mono">
-          <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[94vh] flex flex-col">
+          <div className="w-full max-w-3xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-3 flex-wrap gap-2">
               <div>
                 <h3 className="font-serif font-black text-lg sm:text-xl text-[var(--text)]">{currentPainter.name}</h3>
@@ -389,7 +389,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
             </div>
 
             {/* Entries list */}
-            <div className="flex-1 overflow-auto max-w-full min-h-[160px] border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
+            <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
               <table className="w-full text-left text-xs border-collapse min-w-[650px]">
                 <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
                   <tr>

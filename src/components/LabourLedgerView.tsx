@@ -222,7 +222,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden break-words">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3">
         <div>
@@ -310,7 +310,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       {/* Add Worker Modal */}
       {addWorkerModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-3">{t('add_worker')}</h3>
             <form
               onSubmit={e => {
@@ -404,7 +404,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       {/* Bulk Attendance Modal */}
       {bulkModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-2">{t('mark_attendance')}</h3>
             <div className="mb-3">
               <label className="block text-[11px] text-[var(--text-dim)] uppercase mb-1">{t('entry_date')}</label>
@@ -469,7 +469,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       {/* Individual Worker Ledger Modal */}
       {currentWorker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4 font-mono">
-          <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[94vh] flex flex-col">
+          <div className="w-full max-w-3xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-3 flex-wrap gap-2">
               <div>
                 <h3 className="font-serif font-black text-lg sm:text-xl text-[var(--text)]">{currentWorker.name}</h3>
@@ -558,7 +558,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
             </div>
 
             {/* Entries List */}
-            <div className="flex-1 overflow-auto max-w-full min-h-[160px] border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
+            <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
               <table className="w-full text-left text-xs border-collapse min-w-[660px]">
                 <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
                   <tr>

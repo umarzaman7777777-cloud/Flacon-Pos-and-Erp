@@ -178,7 +178,7 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-2 sm:p-4 font-mono">
-      <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[94vh] flex flex-col">
+      <div className="w-full max-w-3xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-3 flex-wrap gap-2">
           <div>
@@ -284,7 +284,7 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
         </div>
 
         {/* Entries Table */}
-        <div className="flex-1 overflow-auto max-w-full min-h-[160px] border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
+        <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
           <table className="w-full text-left text-xs border-collapse min-w-[580px]">
             <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0">
               <tr>

@@ -463,7 +463,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden break-words">
       {/* Header with Bilingual Brand & Title */}
       <div className="flex items-center justify-between flex-wrap gap-4 border-b border-[var(--steel-line)] pb-4">
         <div className="flex items-center gap-3">

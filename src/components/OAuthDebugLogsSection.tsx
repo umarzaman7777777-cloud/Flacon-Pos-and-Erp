@@ -101,7 +101,7 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
   const unknownGmailCount = logs.filter(l => l.category === 'unknown_gmail_trace' || l.errorCode === 'AUTH_UNKNOWN_GMAIL_TRACE').length;
 
   return (
-    <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-5 shadow-md">
+    <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-5 shadow-md max-w-full overflow-x-hidden break-words">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-4">
         <div className="flex items-center gap-3">

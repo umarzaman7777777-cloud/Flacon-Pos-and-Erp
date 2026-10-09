@@ -165,7 +165,7 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-5 font-mono">
-      <div className="w-full max-w-3xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-150">
+      <div className="w-full max-w-3xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh] animate-in fade-in zoom-in-95 duration-150">
         
         {/* Modal Top Bar */}
         <div className="p-3 sm:p-4 bg-[var(--panel-raised)] border-b border-[var(--steel-line)] flex items-center justify-between flex-wrap gap-2.5">

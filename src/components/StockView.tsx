@@ -34,6 +34,7 @@ import { fmt, downloadCSV, exportTablePDF } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
 import { GatePassUploadModal } from './GatePassUploadModal';
 import { GatePassViewerModal } from './GatePassViewerModal';
+import { TouchRangeSlider } from './TouchRangeSlider';
 
 interface StockViewProps {
   rawStock: RawStockItem[];
@@ -254,7 +255,7 @@ export const StockView: React.FC<StockViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 font-mono">
+    <div className="space-y-6 font-mono max-w-full overflow-x-hidden break-words">
       {/* Header with View Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>
@@ -410,104 +411,38 @@ export const StockView: React.FC<StockViewProps> = ({
 
           {activeTab === 'raw' ? (
             <div className="space-y-3 text-xs font-mono">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-[var(--text-dim)]">Raw Weight Alert Limit:</span>
-                <div className="flex items-center bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => handleSetRawWeightThreshold(rawWeightThreshold - 5)}
-                    className="px-2.5 py-1.5 hover:bg-[var(--steel-line)] text-[var(--text)] transition cursor-pointer"
-                  >
-                    <Minus size={12} />
-                  </button>
-                  <input
-                    type="number"
-                    min="1"
-                    value={rawWeightThreshold}
-                    onChange={e => handleSetRawWeightThreshold(parseInt(e.target.value, 10) || 1)}
-                    className="w-16 text-center py-1 bg-transparent text-[var(--yellow)] font-bold text-sm focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleSetRawWeightThreshold(rawWeightThreshold + 5)}
-                    className="px-2.5 py-1.5 hover:bg-[var(--steel-line)] text-[var(--text)] transition cursor-pointer"
-                  >
-                    <Plus size={12} />
-                  </button>
-                </div>
-                <span className="text-[var(--text-dim)]">kg</span>
-
-                <div className="flex items-center gap-1.5 flex-wrap ml-auto">
-                  <span className="text-[10px] text-[var(--text-dim)] uppercase">Presets:</span>
-                  {[10, 20, 25, 50, 100].map(val => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => handleSetRawWeightThreshold(val)}
-                      className={`px-2 py-1 rounded text-[11px] font-bold border transition cursor-pointer ${
-                        rawWeightThreshold === val
-                          ? 'bg-[var(--yellow)] text-black border-[var(--yellow)]'
-                          : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      {val} kg
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <p className="text-[11px] text-[var(--text-dim)]">
+              <TouchRangeSlider
+                value={rawWeightThreshold}
+                min={5}
+                max={250}
+                step={5}
+                unit="kg"
+                label="Raw Material Weight Alert Limit"
+                onChange={val => handleSetRawWeightThreshold(val)}
+                presets={[10, 20, 25, 50, 75, 100, 150]}
+                colorScheme="amber"
+                secondaryInfo="Raw materials at or below this weight trigger a prominent warning"
+              />
+              <p className="text-[11px] text-[var(--text-dim)] pt-1 border-t border-[var(--steel-line)]/40">
                 Raw materials whose balance falls to or below this weight will trigger a prominent visual warning badge and highlighted border.
               </p>
             </div>
           ) : (
             <div className="space-y-3 text-xs font-mono">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-[var(--text-dim)]">Finished Goods Alert Limit:</span>
-                <div className="flex items-center bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => handleSetFinishedThreshold(finishedThreshold - 5)}
-                    className="px-2.5 py-1.5 hover:bg-[var(--steel-line)] text-[var(--text)] transition cursor-pointer"
-                  >
-                    <Minus size={12} />
-                  </button>
-                  <input
-                    type="number"
-                    min="1"
-                    value={finishedThreshold}
-                    onChange={e => handleSetFinishedThreshold(parseInt(e.target.value, 10) || 1)}
-                    className="w-16 text-center py-1 bg-transparent text-[var(--yellow)] font-bold text-sm focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleSetFinishedThreshold(finishedThreshold + 5)}
-                    className="px-2.5 py-1.5 hover:bg-[var(--steel-line)] text-[var(--text)] transition cursor-pointer"
-                  >
-                    <Plus size={12} />
-                  </button>
-                </div>
-                <span className="text-[var(--text-dim)]">pcs</span>
+              <TouchRangeSlider
+                value={finishedThreshold}
+                min={1}
+                max={100}
+                step={1}
+                unit="pcs"
+                label="Finished Goods Alert Limit"
+                onChange={val => handleSetFinishedThreshold(val)}
+                presets={[5, 10, 15, 20, 25, 50]}
+                colorScheme="amber"
+                secondaryInfo="Finished rods at or below this count trigger low stock alerts"
+              />
 
-                <div className="flex items-center gap-1.5 flex-wrap ml-auto">
-                  <span className="text-[10px] text-[var(--text-dim)] uppercase">Presets:</span>
-                  {[5, 10, 15, 20, 25, 50].map(val => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => handleSetFinishedThreshold(val)}
-                      className={`px-2 py-1 rounded text-[11px] font-bold border transition cursor-pointer ${
-                        finishedThreshold === val
-                          ? 'bg-[var(--yellow)] text-black border-[var(--yellow)]'
-                          : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      {val} pcs
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pt-1 border-t border-[var(--steel-line)]/50">
+              <div className="flex items-center gap-2 pt-2 border-t border-[var(--steel-line)]/50">
                 <label className="flex items-center gap-2 text-xs text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1120,9 +1055,9 @@ export const StockView: React.FC<StockViewProps> = ({
       {/* Quick Restock Modal for Finished Goods */}
       {quickRestockProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 sm:p-6 shadow-2xl space-y-4">
             <div>
-              <h3 className="font-serif font-bold text-base text-[var(--text)] font-sans">
+              <h3 className="font-serif font-bold text-base sm:text-lg text-[var(--text)] font-sans">
                 Restock {quickRestockProduct.name}
               </h3>
               <p className="text-xs text-[var(--text-dim)] mt-0.5">
@@ -1130,47 +1065,37 @@ export const StockView: React.FC<StockViewProps> = ({
               </p>
             </div>
 
-            <form onSubmit={handleApplyQuickRestock} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[10px] text-[var(--text-dim)] uppercase mb-1">Add Quantity (pcs)</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={quickRestockQty}
-                  onChange={e => setQuickRestockQty(e.target.value)}
-                  placeholder="e.g. 25"
-                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-3 py-2 text-sm text-[var(--yellow)] font-bold focus:outline-none focus:border-[var(--yellow)]"
-                  autoFocus
-                />
-              </div>
-
-              {/* Fast presets */}
-              <div className="flex items-center gap-2">
-                {[10, 20, 25, 50, 100].map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setQuickRestockQty(String(n))}
-                    className="flex-1 py-1 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-[10px] text-[var(--text)] transition cursor-pointer"
-                  >
-                    +{n}
-                  </button>
-                ))}
-              </div>
+            <form onSubmit={handleApplyQuickRestock} className="space-y-4 text-xs">
+              <TouchRangeSlider
+                value={parseInt(quickRestockQty, 10) || 10}
+                min={1}
+                max={250}
+                step={1}
+                unit="pcs"
+                label="Add Quantity to Inventory"
+                onChange={val => setQuickRestockQty(String(val))}
+                presets={[10, 20, 25, 50, 100, 200]}
+                secondaryInfo={
+                  quickRestockProduct.weight
+                    ? `Batch Scale Weight: ~${((parseInt(quickRestockQty, 10) || 10) * (parseFloat(quickRestockProduct.weight) || 0)).toFixed(1)} kg (${quickRestockProduct.weight} / pc)`
+                    : undefined
+                }
+                colorScheme="amber"
+              />
 
               <div className="flex gap-2 pt-2 border-t border-[var(--steel-line)]">
                 <button
                   type="button"
                   onClick={() => setQuickRestockProduct(null)}
-                  className="flex-1 py-2 rounded-lg border border-[var(--steel-line)] text-xs text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
+                  className="flex-1 py-2.5 rounded-lg border border-[var(--steel-line)] text-xs text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow cursor-pointer"
+                  className="flex-1 py-2.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow cursor-pointer active:scale-98 transition"
                 >
-                  Add to Stock
+                  Add {quickRestockQty} to Stock
                 </button>
               </div>
             </form>
@@ -1181,9 +1106,9 @@ export const StockView: React.FC<StockViewProps> = ({
       {/* Set Product Custom Threshold Modal */}
       {editingThresholdProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl space-y-4">
             <div>
-              <h3 className="font-serif font-bold text-base text-[var(--text)] font-sans">
+              <h3 className="font-serif font-bold text-base sm:text-lg text-[var(--text)] font-sans">
                 Set Alert Threshold
               </h3>
               <p className="text-xs text-[var(--text-dim)] mt-0.5">
@@ -1191,33 +1116,33 @@ export const StockView: React.FC<StockViewProps> = ({
               </p>
             </div>
 
-            <form onSubmit={handleApplyCustomThreshold} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[10px] text-[var(--text-dim)] uppercase mb-1">Low Stock Limit (pcs)</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={customThresholdInput}
-                  onChange={e => setCustomThresholdInput(e.target.value)}
-                  placeholder="e.g. 15"
-                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-3 py-2 text-sm text-[var(--yellow)] font-bold focus:outline-none focus:border-[var(--yellow)]"
-                  autoFocus
-                />
-              </div>
+            <form onSubmit={handleApplyCustomThreshold} className="space-y-4 text-xs">
+              <TouchRangeSlider
+                value={parseInt(customThresholdInput, 10) || 5}
+                min={1}
+                max={100}
+                step={1}
+                unit="pcs"
+                label="Low Stock Warning Limit"
+                onChange={val => setCustomThresholdInput(String(val))}
+                presets={[3, 5, 10, 15, 20, 25, 50]}
+                secondaryInfo="Alert triggers when shop stock dips below this limit"
+                colorScheme="rose"
+              />
 
               <div className="flex gap-2 pt-2 border-t border-[var(--steel-line)]">
                 <button
                   type="button"
                   onClick={() => setEditingThresholdProduct(null)}
-                  className="flex-1 py-2 rounded-lg border border-[var(--steel-line)] text-xs text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
+                  className="flex-1 py-2.5 rounded-lg border border-[var(--steel-line)] text-xs text-[var(--text-dim)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow cursor-pointer"
+                  className="flex-1 py-2.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow cursor-pointer active:scale-98 transition"
                 >
-                  Save Limit
+                  Save Limit ({customThresholdInput} pcs)
                 </button>
               </div>
             </form>
@@ -1228,51 +1153,56 @@ export const StockView: React.FC<StockViewProps> = ({
       {/* Stock Adjustment Modal */}
       {adjustModalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
-            <h3 className="font-serif font-bold text-base text-[var(--text)] mb-1 font-sans">
-              Adjust {adjustModalItem.name}
-            </h3>
-            <p className="text-xs text-[var(--text-dim)] mb-3">
-              Add positive or negative amounts to update inventory.
-            </p>
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl space-y-4">
+            <div>
+              <h3 className="font-serif font-bold text-base sm:text-lg text-[var(--text)] mb-1 font-sans">
+                Adjust {adjustModalItem.name}
+              </h3>
+              <p className="text-xs text-[var(--text-dim)]">
+                Use the touch range sliders to add or deduct inventory smoothly on mobile.
+              </p>
+            </div>
 
-            <form onSubmit={handleApplyAdjustment} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[10px] text-[var(--text-dim)] uppercase mb-1">Delta Weight (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={adjustWeight}
-                  onChange={e => setAdjustWeight(e.target.value)}
-                  placeholder="e.g. +50 or -15"
-                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-3 py-2 text-xs text-[var(--text)] focus:outline-none focus:border-[var(--yellow)]"
-                />
-              </div>
+            <form onSubmit={handleApplyAdjustment} className="space-y-4 text-xs">
+              <TouchRangeSlider
+                value={parseFloat(adjustWeight) || 0}
+                min={-100}
+                max={100}
+                step={0.5}
+                unit="kg"
+                label="Delta Weight"
+                onChange={val => setAdjustWeight(String(val))}
+                presets={[-50, -25, -10, 0, 10, 25, 50]}
+                colorScheme={(parseFloat(adjustWeight) || 0) >= 0 ? 'emerald' : 'rose'}
+                secondaryInfo="Negative reduces stock, positive adds raw material"
+              />
 
-              <div>
-                <label className="block text-[10px] text-[var(--text-dim)] uppercase mb-1">Delta Items (pcs)</label>
-                <input
-                  type="number"
-                  value={adjustItems}
-                  onChange={e => setAdjustItems(e.target.value)}
-                  placeholder="e.g. +100"
-                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-3 py-2 text-xs text-[var(--text)] focus:outline-none"
-                />
-              </div>
+              <TouchRangeSlider
+                value={parseInt(adjustItems, 10) || 0}
+                min={-100}
+                max={100}
+                step={1}
+                unit="pcs"
+                label="Delta Items"
+                onChange={val => setAdjustItems(String(val))}
+                presets={[-50, -20, 0, 20, 50, 100]}
+                colorScheme={(parseInt(adjustItems, 10) || 0) >= 0 ? 'emerald' : 'rose'}
+                secondaryInfo="Negative deducts pieces, positive adds goods"
+              />
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-2 border-t border-[var(--steel-line)]">
                 <button
                   type="button"
                   onClick={() => setAdjustModalItem(null)}
-                  className="flex-1 py-2 rounded-lg border border-[var(--steel-line)] text-xs text-[var(--text-dim)]"
+                  className="flex-1 py-2.5 rounded-lg border border-[var(--steel-line)] text-xs text-[var(--text-dim)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow"
+                  className="flex-1 py-2.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow active:scale-98 transition"
                 >
-                  Apply
+                  Apply Adjustment
                 </button>
               </div>
             </form>

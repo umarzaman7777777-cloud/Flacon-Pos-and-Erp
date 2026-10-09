@@ -176,7 +176,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     : `Thermal POS Printer (Wired USB): ${printerSettings.wiredPortName || 'USB001'} • ${printerSettings.paperSize.toUpperCase()} • Click to configure printer`;
 
   return (
-    <header className="bg-[var(--panel)] border-b border-[var(--steel-line)] relative select-none">
+    <header className="bg-[var(--panel)] border-b border-[var(--steel-line)] relative select-none max-w-full overflow-x-hidden break-words">
       {/* Row 1: Logo, Factory Name, and Company Details (Sole occupants - Never squeezed or overlapped) */}
       <div className="px-4 sm:px-6 py-2.5 flex items-center border-b border-[var(--steel-line)]/50">
         <button

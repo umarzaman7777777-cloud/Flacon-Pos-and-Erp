@@ -202,7 +202,7 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-5 backdrop-blur-xs font-mono overflow-y-auto">
-      <div className="relative w-full max-w-2xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[94vh] overflow-hidden my-auto animate-in fade-in duration-150">
+      <div className="relative w-full max-w-2xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[94vh] overflow-hidden my-auto animate-in fade-in duration-150">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--steel-line)] bg-[var(--panel-raised)] shrink-0">
           <div className="flex items-center gap-3">

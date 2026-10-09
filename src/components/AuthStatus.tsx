@@ -420,7 +420,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
 
   // Full Rich Component View
   return (
-    <div className={`rounded-2xl transition-all duration-300 ${
+    <div className={`rounded-2xl transition-all duration-300 max-w-full overflow-x-hidden break-words ${
       hasAnyFailure
         ? 'bg-rose-950/20 border-2 border-rose-500/40 shadow-lg shadow-rose-950/20'
         : hasMissing

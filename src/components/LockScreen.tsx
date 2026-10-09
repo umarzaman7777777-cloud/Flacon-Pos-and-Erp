@@ -753,7 +753,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
         >
           <div
-            className={`w-full max-w-[390px] bg-[var(--panel)] border-2 border-amber-400/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-3.5 text-center relative overflow-hidden ${
+            className={`w-full max-w-[390px] max-w-full overflow-x-hidden break-words bg-[var(--panel)] border-2 border-amber-400/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-3.5 text-center relative overflow-hidden ${
               isShaking ? 'animate-shake' : ''
             }`}
           >
@@ -887,7 +887,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           id="sensor-biometric-modal"
           className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
         >
-          <div className="w-full max-w-[400px] bg-[var(--panel)] border-2 border-emerald-400/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 text-center relative overflow-hidden">
+          <div className="w-full max-w-[400px] max-w-full overflow-x-hidden break-words bg-[var(--panel)] border-2 border-emerald-400/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 text-center relative overflow-hidden">
             {/* Top Emerald Ribbon */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-300 to-emerald-500" />
 
@@ -994,7 +994,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           id="gmail-safety-verification-modal"
           className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
         >
-          <div className="w-full max-w-md bg-[var(--panel)] border-2 border-sky-400/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 text-center relative overflow-hidden">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border-2 border-sky-400/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 text-center relative overflow-hidden">
             {/* Top Security Banner Ribbon */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-sky-500 via-amber-400 to-sky-500" />
 
@@ -1266,7 +1266,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       {/* Forgot PIN Modal */}
       {showForgotModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-6 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-serif font-bold text-lg text-[var(--text)]">Reset PIN</h3>
               <button

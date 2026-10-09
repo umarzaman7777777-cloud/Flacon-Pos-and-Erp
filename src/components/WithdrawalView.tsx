@@ -162,7 +162,7 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 font-mono">
+    <div className="space-y-6 font-mono max-w-full overflow-x-hidden break-words">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>

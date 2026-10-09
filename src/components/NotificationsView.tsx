@@ -57,7 +57,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-4xl font-mono">
+    <div className="space-y-6 max-w-4xl max-w-full overflow-x-hidden break-words font-mono">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>
@@ -187,7 +187,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
       {/* Add Inquiry Modal */}
       {addModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-3 font-sans">{t('add_inquiry')}</h3>
             <form onSubmit={handleAddSubmit} className="space-y-3 text-xs">
               <div>

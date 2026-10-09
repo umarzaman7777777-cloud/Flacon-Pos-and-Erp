@@ -247,7 +247,7 @@ export const GatePassUploadModal: React.FC<GatePassUploadModalProps> = ({
     >
       <div
         id="gate-pass-upload-modal-content"
-        className="w-full max-w-xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto"
+        className="w-full max-w-xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col my-auto"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[var(--steel-line)] flex items-center justify-between bg-[var(--panel-raised)]">

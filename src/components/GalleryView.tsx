@@ -1101,7 +1101,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto font-mono text-[var(--text)]">
+    <div className="space-y-6 max-w-7xl max-w-full overflow-x-hidden break-words mx-auto font-mono text-[var(--text)]">
       {/* Top Banner Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--steel-line)] pb-4 font-sans">
         <div className="flex items-start sm:items-center gap-3.5">
@@ -2938,7 +2938,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       {/* Blueprint Detail Inspection Modal */}
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-2xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
             <div className="p-4 bg-[var(--panel-raised)] border-b border-[var(--steel-line)] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -3087,7 +3087,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       {/* Export File High-Resolution Preview Modal */}
       {previewItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-4xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="w-full max-w-4xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             {/* Modal Header */}
             <div className="p-4 bg-[var(--panel-raised)] border-b border-[var(--steel-line)] flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -3277,7 +3277,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       {/* Delete Confirmation Modal */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150 font-sans">
-          <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-red-400">
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
                 <AlertTriangle size={20} />
@@ -3317,7 +3317,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
       {/* Clear All Confirmation Modal */}
       {showClearAllConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150 font-sans">
-          <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 shadow-2xl space-y-4">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 shadow-2xl space-y-4">
             <div className="flex items-center gap-3 text-red-400">
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center">
                 <Trash2 size={20} />

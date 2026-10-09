@@ -275,7 +275,7 @@ export const InventoryForecastView: React.FC<InventoryForecastViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 pb-16">
+    <div className="space-y-6 pb-16 max-w-full overflow-x-hidden break-words">
       {/* Top Banner & Header */}
       <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -1147,7 +1147,7 @@ export const InventoryForecastView: React.FC<InventoryForecastViewProps> = ({
       {/* Modal: Draft Purchase Order / Reorder */}
       {draftingMaterial && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-[var(--panel)] border border-amber-400/40 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative animate-in fade-in zoom-in-95">
+          <div className="bg-[var(--panel)] border border-amber-400/40 rounded-2xl w-full max-w-lg max-w-full overflow-x-hidden break-words p-5 sm:p-6 shadow-2xl relative animate-in fade-in zoom-in-95">
             <button
               type="button"
               onClick={() => setDraftingMaterial(null)}
@@ -1274,7 +1274,7 @@ export const InventoryForecastView: React.FC<InventoryForecastViewProps> = ({
       {/* Modal: Formulas & Methodology Guide */}
       {showFormulaModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl w-full max-w-xl p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--panel)] border border-[var(--border)] rounded-2xl w-full max-w-xl max-w-full overflow-x-hidden break-words p-5 sm:p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               type="button"
               onClick={() => setShowFormulaModal(false)}

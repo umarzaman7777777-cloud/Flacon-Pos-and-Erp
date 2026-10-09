@@ -255,7 +255,7 @@ export const ExportDownloadToast: React.FC = () => {
       {/* In-App Full-Screen Inspector Lightbox Modal */}
       {isInAppPreviewOpen && activeExport.dataUrl && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md p-3 sm:p-5 animate-in fade-in duration-150">
-          <div className="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="w-full max-w-4xl max-w-full overflow-x-hidden break-words bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
             <div className="p-3.5 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-black uppercase bg-amber-500 text-black">

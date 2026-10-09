@@ -602,7 +602,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const currentColor = LOGO_THEME_OPTIONS.find(o => o.id === activeLogoTheme)?.color || '#f59e0b';
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto font-mono pb-12">
+    <div className="space-y-6 max-w-5xl max-w-full overflow-x-hidden break-words mx-auto font-mono pb-12">
       {/* Header Banner */}
       <div className="border-b border-[var(--steel-line)] pb-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3.5">

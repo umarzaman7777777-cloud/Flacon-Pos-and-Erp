@@ -112,7 +112,7 @@ export const GmailCloudVaultModal: React.FC<GmailCloudVaultModalProps> = ({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fade-in">
       <div 
-        className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="bg-[var(--surface)] border border-[var(--border)] rounded-3xl w-full max-w-2xl max-w-full overflow-x-hidden break-words shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
         dir={isUrdu ? 'rtl' : 'ltr'}
       >
         {/* Header */}

@@ -99,7 +99,7 @@ export const MobilePermissionsBanner: React.FC<MobilePermissionsBannerProps> = (
   return (
     <div
       id="mobile-permissions-ambient-banner"
-      className="bg-gradient-to-r from-amber-500/15 via-[var(--panel-raised)] to-amber-500/10 border-b border-amber-500/30 px-3 sm:px-6 py-2 text-xs flex items-center justify-between gap-3 shadow-xs"
+      className="bg-gradient-to-r from-amber-500/15 via-[var(--panel-raised)] to-amber-500/10 border-b border-amber-500/30 px-3 sm:px-6 py-2 text-xs flex items-center justify-between gap-3 shadow-xs max-w-full overflow-x-hidden break-words"
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <div className={`p-1 rounded-full ${isBlocked ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'} shrink-0`}>

@@ -1382,7 +1382,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans">
       <div
-        className="relative w-full max-w-5xl max-h-[94vh] flex flex-col rounded-2xl border border-[var(--steel-line)] bg-[var(--panel)] shadow-2xl overflow-hidden"
+        className="relative w-full max-w-5xl max-w-full overflow-x-hidden break-words max-h-[94vh] flex flex-col rounded-2xl border border-[var(--steel-line)] bg-[var(--panel)] shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Top Header */}

@@ -113,7 +113,7 @@ export const RecycleBinModal: React.FC<RecycleBinModalProps> = ({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-3 sm:p-4 overflow-y-auto animate-fade-in">
       <div 
-        className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
+        className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full max-w-4xl max-w-full overflow-x-hidden break-words shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
         dir={isUrdu ? 'rtl' : 'ltr'}
       >
         {/* Header */}

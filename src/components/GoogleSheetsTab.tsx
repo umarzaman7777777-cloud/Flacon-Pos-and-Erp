@@ -577,7 +577,7 @@ export const GoogleSheetsTab: React.FC<GoogleSheetsTabProps> = ({
   const isConnected = !!tokenInfo?.token;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden break-words">
       {/* SUCCESS / ERROR ALERTS */}
       {syncSuccessMsg && (
         <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-sm flex items-center justify-between font-mono animate-in fade-in duration-200">

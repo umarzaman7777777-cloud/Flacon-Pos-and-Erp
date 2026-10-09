@@ -133,7 +133,7 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
     >
       <div
         id="unified-gate-receipts-modal-content"
-        className="w-full max-w-5xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
+        className="w-full max-w-5xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[var(--steel-line)] flex items-center justify-between bg-[var(--panel-raised)] shrink-0">

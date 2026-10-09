@@ -200,7 +200,7 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-5xl bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[96vh] overflow-hidden">
+      <div className="w-full max-w-5xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[96vh] overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--steel-line)] bg-[var(--panel-raised)]">
           <div className="flex items-center gap-3">

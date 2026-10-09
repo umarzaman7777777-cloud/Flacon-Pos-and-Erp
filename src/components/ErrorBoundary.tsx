@@ -53,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1C1F22] text-[#f8fafc]">
-          <div className="w-full max-w-md bg-[#252A2F] border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center shadow-2xl space-y-4">
+          <div className="w-full max-w-md max-w-full overflow-x-hidden break-words bg-[#252A2F] border border-amber-500/40 rounded-2xl p-6 sm:p-8 text-center shadow-2xl space-y-4">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <ShieldAlert size={32} />
             </div>

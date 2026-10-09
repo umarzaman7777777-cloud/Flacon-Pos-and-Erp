@@ -112,7 +112,7 @@ export const ProductReturnsView: React.FC<ProductReturnsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 font-mono">
+    <div className="space-y-6 font-mono max-w-full overflow-x-hidden break-words">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>
@@ -120,7 +120,7 @@ export const ProductReturnsView: React.FC<ProductReturnsViewProps> = ({
           <p className="text-xs text-[var(--text-dim)]">{t('returns_sub')}</p>
         </div>
 
-        <div className="flex items-center gap-2 font-mono">
+        <div className="flex items-center gap-2 flex-wrap font-mono">
           <button
             type="button"
             onClick={handleExportCSV}
@@ -231,7 +231,7 @@ export const ProductReturnsView: React.FC<ProductReturnsViewProps> = ({
       {/* Log Return Modal */}
       {logModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-3 font-sans">{t('log_return')}</h3>
             <form onSubmit={handleLogSubmit} className="space-y-3 text-xs">
               <div>
@@ -318,7 +318,7 @@ export const ProductReturnsView: React.FC<ProductReturnsViewProps> = ({
       {/* Resolve Return Modal */}
       {resolveModalItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 font-mono">
-          <div className="w-full max-w-sm bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl">
+          <div className="w-full max-w-sm max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-5 shadow-2xl max-h-[92vh] overflow-y-auto">
             <h3 className="font-serif font-bold text-base text-[var(--text)] mb-1 font-sans">Resolve Defect Return</h3>
             <p className="text-xs text-[var(--text-dim)] mb-3">
               {resolveModalItem.productName} ({resolveModalItem.qty} pcs) from {resolveModalItem.factory}
