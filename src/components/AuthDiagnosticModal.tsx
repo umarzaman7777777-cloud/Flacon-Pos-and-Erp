@@ -385,6 +385,20 @@ export const AuthDiagnosticModal: React.FC<AuthDiagnosticModalProps> = ({
                   ))}
                 </div>
 
+                {/* Specific Diagnosis for Image 3: Blank White Screen at gen-lang-client-...firebaseapp.com */}
+                <div className="p-3 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs space-y-1.5 font-sans">
+                  <div className="flex items-center gap-2 font-bold text-rose-300 font-mono">
+                    <AlertTriangle size={15} />
+                    <span>Why firebaseapp.com opens as a Blank White Screen:</span>
+                  </div>
+                  <p className="text-[11px] text-rose-200/90 leading-relaxed font-sans">
+                    On Android Chrome, cross-origin context isolation blocks <code>gen-lang-client-0360687883.firebaseapp.com/__/auth/handler</code> from receiving the popup authorization handshake from the app. This causes the popup to freeze on a blank white screen.
+                  </p>
+                  <p className="text-[11px] text-emerald-300 font-bold font-sans">
+                    ✓ Solution: Use Google Identity Services directly (accounts.google.com) or tap the button below to bypass the blank screen immediately.
+                  </p>
+                </div>
+
                 {onUnlockMaster && (
                   <button
                     type="button"

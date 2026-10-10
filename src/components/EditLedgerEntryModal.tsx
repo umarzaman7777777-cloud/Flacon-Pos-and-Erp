@@ -53,6 +53,10 @@ export interface EditableLedgerEntryData {
   status?: string;
   units?: number;
   note?: string;
+  itemComponents?: string;
+  dutyShift?: string;
+  shifts?: number;
+  dailyWageRate?: number;
 }
 
 interface EditLedgerEntryModalProps {
@@ -121,6 +125,9 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
   const [workType, setWorkType] = useState('');
   const [category, setCategory] = useState('');
   const [withdrawnBy, setWithdrawnBy] = useState('');
+  const [itemComponents, setItemComponents] = useState('');
+  const [dutyShift, setDutyShift] = useState('');
+  const [dailyWageRate, setDailyWageRate] = useState('');
 
   useEffect(() => {
     if (entry && isOpen) {
@@ -149,6 +156,9 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
       setWorkType(entry.workType || '');
       setCategory(entry.category || '');
       setWithdrawnBy(entry.withdrawnBy || '');
+      setItemComponents(entry.itemComponents || '');
+      setDutyShift(entry.dutyShift || '');
+      setDailyWageRate(entry.dailyWageRate !== undefined ? String(entry.dailyWageRate) : '');
     }
   }, [entry, isOpen]);
 
@@ -183,6 +193,7 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
       detail: detail.trim() || undefined,
       size: size.trim() || undefined,
       qty: qty ? parseInt(qty, 10) : undefined,
+      units: qty ? parseInt(qty, 10) : undefined,
       rate: rate ? parseFloat(rate) : undefined,
       color: color.trim() || undefined,
       weightIn: numericWeight,
@@ -192,7 +203,10 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
       itemName: stockName.trim() || undefined,
       workType: workType.trim() || undefined,
       category: category.trim() || undefined,
-      withdrawnBy: withdrawnBy.trim() || undefined
+      withdrawnBy: withdrawnBy.trim() || undefined,
+      itemComponents: itemComponents.trim() || undefined,
+      dutyShift: dutyShift || undefined,
+      dailyWageRate: dailyWageRate ? parseFloat(dailyWageRate) : undefined
     };
 
     hapticTransactionComplete();
@@ -466,8 +480,8 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
             </div>
           </div>
 
-          {/* Optional Ancillary fields if Job-Work / Custom / Paint entry */}
-          {(entry.size !== undefined || entry.qty !== undefined || entry.color !== undefined || entry.weight !== undefined || entry.weightIn !== undefined || entry.itemsIn !== undefined || entry.stockName !== undefined || entry.workType !== undefined || entry.category !== undefined) && (
+          {/* Optional Ancillary fields if Job-Work / Custom / Paint / Labour entry */}
+          {(entry.size !== undefined || entry.qty !== undefined || entry.units !== undefined || entry.rate !== undefined || entry.itemName !== undefined || entry.color !== undefined || entry.weight !== undefined || entry.weightIn !== undefined || entry.itemsIn !== undefined || entry.stockName !== undefined || entry.workType !== undefined || entry.category !== undefined) && (
             <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] space-y-2">
               <div className="text-[11px] font-bold text-[var(--text-dim)] uppercase tracking-wider">
                 Industrial / Inventory Specifications
@@ -567,6 +581,45 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
                       onChange={e => setWorkType(e.target.value)}
                       placeholder="Welding, Assembly"
                       className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-sans"
+                    />
+                  </div>
+                )}
+                {(entry.itemComponents !== undefined || entry.itemName !== undefined || entry.workType !== undefined) && (
+                  <div>
+                    <label className="block text-[10px] text-[var(--text-dim)] mb-1">Item / Work Components</label>
+                    <input
+                      type="text"
+                      value={itemComponents}
+                      onChange={e => setItemComponents(e.target.value)}
+                      placeholder="e.g. Swaged Rods, Press Section"
+                      className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-sans"
+                    />
+                  </div>
+                )}
+                {(entry.dutyShift !== undefined || entry.workType !== undefined) && (
+                  <div>
+                    <label className="block text-[10px] text-[var(--text-dim)] mb-1">Shift / Duty</label>
+                    <select
+                      value={dutyShift}
+                      onChange={e => setDutyShift(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-sans"
+                    >
+                      <option value="">Standard Shift</option>
+                      <option value="full">Full Day (1 Shift)</option>
+                      <option value="half">Half Day (0.5 Shift)</option>
+                      <option value="custom">Custom Hours / Overtime</option>
+                    </select>
+                  </div>
+                )}
+                {(entry.dailyWageRate !== undefined || entry.workType !== undefined) && (
+                  <div>
+                    <label className="block text-[10px] text-[var(--text-dim)] mb-1">Daily Wage Rate (Rs)</label>
+                    <input
+                      type="number"
+                      value={dailyWageRate}
+                      onChange={e => setDailyWageRate(e.target.value)}
+                      placeholder="1600"
+                      className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-mono"
                     />
                   </div>
                 )}

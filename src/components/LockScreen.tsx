@@ -1174,13 +1174,29 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 </div>
 
                 {/* Primary Action Buttons */}
-                <div className="space-y-2 pt-1">
-                  {/* Option A: Google Official Sign-In Popup */}
+                <div className="space-y-2.5 pt-1">
+                  {/* Option A: Fast Owner Verification (Recommended on Mobile to avoid white screens) */}
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
+                    className="w-full py-3 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-black font-bold text-xs font-mono shadow-md transition flex items-center justify-between cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 text-left truncate">
+                      <ShieldCheck size={18} className="shrink-0 text-black" />
+                      <div className="truncate">
+                        <div className="text-[10px] uppercase font-black tracking-wider text-black/80">Recommended on Mobile</div>
+                        <div className="truncate font-bold">Verify Master: {OWNER_GMAIL}</div>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-mono font-bold bg-black/10 px-2 py-0.5 rounded shrink-0 ml-2">Fast 0.1s</span>
+                  </button>
+
+                  {/* Option B: Google Official Sign-In Popup */}
                   <button
                     type="button"
                     disabled={gmailLoading}
                     onClick={handleTriggerGoogleAuth}
-                    className="w-full flex items-center justify-center gap-2.5 bg-white text-gray-800 font-medium py-3 px-4 rounded-xl shadow-md hover:bg-gray-100 active:scale-95 transition text-xs font-mono cursor-pointer disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2.5 bg-white text-gray-800 font-medium py-2.5 px-4 rounded-xl shadow hover:bg-gray-100 active:scale-95 transition text-xs font-mono cursor-pointer disabled:opacity-50"
                   >
                     {gmailLoading ? (
                       <Loader2 size={16} className="animate-spin text-gray-700" />
@@ -1192,17 +1208,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                         <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C40.9 36 44 30.5 44 24c0-1.4-.1-2.4-.4-3.5z" />
                       </svg>
                     )}
-                    <span className="font-bold">Check & Sign In with Google</span>
-                  </button>
-
-                  {/* Option B: Fast Owner Verification */}
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase font-mono shadow transition flex items-center justify-between cursor-pointer"
-                  >
-                    <span className="truncate">Verify Master: {OWNER_GMAIL}</span>
-                    <ShieldCheck size={16} className="shrink-0 ml-1.5" />
+                    <span className="font-bold">Check & Sign In with Google (GIS / Popup)</span>
                   </button>
 
                   {/* Option C: Direct Password Toggle */}

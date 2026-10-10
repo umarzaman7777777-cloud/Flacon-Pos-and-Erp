@@ -2657,6 +2657,7 @@ export const App: React.FC = () => {
           {(activeView === 'labour_ledger' || activeView === 'labourledger') && (
             <LabourLedgerView
               workers={state.workers}
+              products={state.products}
               language={state.language}
               companyName={state.companyName}
               onSaveWorker={handleSaveWorker}

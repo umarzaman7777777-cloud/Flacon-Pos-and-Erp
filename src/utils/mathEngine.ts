@@ -133,6 +133,10 @@ export function computeWorkerLedgerDetails(worker: Worker) {
   let totalEarned = 0;
   let totalPaid = 0;
   let running = 0;
+  let totalItemWages = 0;
+  let totalItemPieces = 0;
+  let totalDailyWages = 0;
+  let totalDailyShifts = 0;
 
   const entries = worker.entries || [];
   const rowsWithBalance: LedgerRowWithBalance<LabourEntry>[] = entries.map(entry => {
@@ -141,6 +145,17 @@ export function computeWorkerLedgerDetails(worker: Worker) {
     totalEarned += c;
     totalPaid += d;
     running += c - d; // positive means workshop owes worker; negative means worker took advance
+
+    if (entry.kind === 'attendance' || c > 0) {
+      if (entry.workMode === 'product' || entry.itemName || entry.productName) {
+        totalItemWages += c;
+        totalItemPieces += Number(entry.units ?? entry.qty ?? 0);
+      } else if (entry.workMode === 'work_type' || entry.workType) {
+        totalDailyWages += c;
+        totalDailyShifts += Number(entry.units ?? (entry.status === 'half' ? 0.5 : 1));
+      }
+    }
+
     return {
       entry,
       runningBalance: running
@@ -156,6 +171,10 @@ export function computeWorkerLedgerDetails(worker: Worker) {
     totalPaid,
     totalDebits: totalPaid,
     totalCredits: totalEarned,
+    totalItemWages,
+    totalItemPieces,
+    totalDailyWages,
+    totalDailyShifts,
     netPayable,
     netBalance: netPayable
   };

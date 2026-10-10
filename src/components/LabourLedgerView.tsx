@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users,
   Plus,
@@ -9,9 +9,14 @@ import {
   Download,
   Sliders,
   CreditCard,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Package,
+  Wrench,
+  CheckCircle2,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
-import { Worker, LabourEntry, AppLanguage, LabourPieceRate, LedgerColumnConfig, ExportDocumentConfig } from '../types';
+import { Worker, LabourEntry, AppLanguage, LabourPieceRate, LedgerColumnConfig, ExportDocumentConfig, Product } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
@@ -26,6 +31,7 @@ import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 
 interface LabourLedgerViewProps {
   workers: Worker[];
+  products?: Product[];
   language: AppLanguage;
   companyName: string;
   onSaveWorker: (worker: Worker) => void;
@@ -36,8 +42,30 @@ interface LabourLedgerViewProps {
   onBulkAttendance: (attendanceMap: Record<string, 'present' | 'half' | 'absent' | 'leave'>, date: string) => void;
 }
 
+const ITEM_COMPONENT_PRESETS = [
+  'Swaged Ends & Cotter Hole',
+  'Pipe Cutting & Punching',
+  'Flange & Collar Welding',
+  'Cotter Pin Hole & Deburring',
+  'Power Press & Stamping',
+  'Full Rod Assembly',
+  'Deluxe Clamp & Rings Set',
+  'Powder Coating & Buffing'
+];
+
+const DAILY_WAGE_COMPONENT_PRESETS = [
+  'Day Shift - Production Line',
+  'Day Shift - Welding Section',
+  'Day Shift - Press & Punching',
+  'Day Shift - Assembly Section',
+  'Night Shift - General Work',
+  'Overtime Duty (Extra Shift)',
+  'Factory Maintenance Duty'
+];
+
 export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   workers,
+  products,
   language,
   companyName,
   onSaveWorker,
@@ -56,16 +84,41 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   // Add worker form
   const [wName, setWName] = useState('');
   const [wType, setWType] = useState('Welding & Assembly');
-  const [wRateType, setWRateType] = useState<'daily' | 'piece' | 'hourly'>('daily');
+  const [wRateType, setWRateType] = useState<'daily' | 'piece' | 'hourly' | 'both'>('daily');
   const [wRate, setWRate] = useState('1500');
 
   // Single Entry Form
   const [entryKind, setEntryKind] = useState<'attendance' | 'payment' | 'advance' | 'loan' | 'damage'>('attendance');
-  const [entryStatus, setEntryStatus] = useState<'present' | 'half' | 'absent' | 'leave'>('present');
-  const [entryUnits, setEntryUnits] = useState('');
+  const [entryDate, setEntryDate] = useState(todayISO());
+
+  // Attendance / Work Sub-mode:
+  // 'product' = Work By Item / Product (pieces completed, item details, auto-detects present)
+  // 'work_type' = Work By Work Type / Duty (e.g. Pipe Cutting & Punching - full day/half day, auto-detects present)
+  // 'non_working' = Mark Absent / Leave (unpaid or approval)
+  const [workMode, setWorkMode] = useState<'product' | 'work_type' | 'non_working'>('product');
+
+  // Work By Item / Product fields
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [customProductName, setCustomProductName] = useState<string>('');
+  const [itemSize, setItemSize] = useState<string>('18 inch');
+  const [itemComponents, setItemComponents] = useState<string>('Swaged Ends & Cotter Hole');
+  const [itemUnits, setItemUnits] = useState<string>('');
+  const [itemRate, setItemRate] = useState<string>('8.5');
+
+  // Work By Daily Wage fields
+  const [selectedWorkType, setSelectedWorkType] = useState<string>('');
+  const [customWorkType, setCustomWorkType] = useState<string>('');
+  const [workShiftDuty, setWorkShiftDuty] = useState<'full' | 'half' | 'custom'>('full');
+  const [workShiftsCount, setWorkShiftsCount] = useState<string>('1');
+  const [workWageAmount, setWorkWageAmount] = useState<string>('1600');
+  const [wageComponents, setWageComponents] = useState<string>('Day Shift - Production Line');
+
+  // Non-working fields
+  const [nonWorkingStatus, setNonWorkingStatus] = useState<'absent' | 'leave'>('absent');
+
+  // Financial values & notes
   const [entryAmount, setEntryAmount] = useState('');
   const [entryNote, setEntryNote] = useState('');
-  const [entryDate, setEntryDate] = useState(todayISO());
 
   // Detailed payment & Studio states
   const [editingEntry, setEditingEntry] = useState<LabourEntry | null>(null);
@@ -89,6 +142,124 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
   const currentWorker = selectedWorkerIdx !== null ? workers[selectedWorkerIdx] : null;
+
+  // Build selectable product options from products prop and worker pieceRates
+  const productOptions = useMemo(() => {
+    const list: Array<{ id: string; name: string; size?: string; defaultRate?: number }> = [];
+
+    // Worker's own piece rates if defined
+    if (currentWorker?.pieceRates && currentWorker.pieceRates.length > 0) {
+      currentWorker.pieceRates.forEach((pr, idx) => {
+        list.push({
+          id: `worker-pr-${idx}`,
+          name: `${currentWorker.workType || 'Custom Rod Work'} (${pr.size})`,
+          size: pr.size,
+          defaultRate: pr.rate
+        });
+      });
+    }
+
+    // Products from inventory
+    if (products && products.length > 0) {
+      products.forEach(p => {
+        list.push({
+          id: `prod-${p.id}`,
+          name: p.name,
+          size: p.size || '18 inch',
+          defaultRate: p.price > 100 ? 10 : p.price
+        });
+      });
+    }
+
+    // Standard Falcon Rod Maker factory products
+    const standardProducts = [
+      { id: 'f-18', name: 'Ceiling-Fan-Rod-18-Deluxe', size: '18 inch', defaultRate: 8.5 },
+      { id: 'f-24', name: 'Ceiling-Fan-Rod-24-Standard', size: '24 inch', defaultRate: 10 },
+      { id: 'f-36', name: 'Ceiling-Fan-Rod-36-Industrial', size: '36 inch', defaultRate: 14 },
+      { id: 'f-12', name: 'Ceiling-Fan-Rod-12-Heavy', size: '12 inch', defaultRate: 6.5 },
+      { id: 'f-48', name: 'Ceiling-Fan-Rod-48-Commercial', size: '48 inch', defaultRate: 18 },
+      { id: 'f-60', name: 'Ceiling-Fan-Rod-60-Custom', size: '60 inch', defaultRate: 22 },
+      { id: 'f-clamp', name: 'Ceiling Fan Clamp Heavy Duty', size: '1 inch', defaultRate: 7 },
+      { id: 'f-rings', name: 'Fan Canopy Rings Set', size: 'Standard', defaultRate: 4 },
+      { id: 'f-swaged', name: 'Swaged Safety Cotter Rod', size: '18 inch', defaultRate: 9 },
+      { id: 'f-custom', name: '+ Custom Product / Item Name', size: '', defaultRate: 10 }
+    ];
+
+    standardProducts.forEach(item => {
+      if (!list.some(l => l.name.toLowerCase() === item.name.toLowerCase())) {
+        list.push(item);
+      }
+    });
+
+    return list;
+  }, [products, currentWorker]);
+
+  // Common workshop operations / work types
+  const workTypeOptions = useMemo(() => {
+    const types = new Set<string>();
+    if (currentWorker?.workType) types.add(currentWorker.workType);
+    types.add('Pipe Cutting & Punching');
+    types.add('Welding & Assembly');
+    types.add('Pipe Threading & Swaging');
+    types.add('Flange & Collar Welding');
+    types.add('Power Press & Stamping');
+    types.add('Deburring & Grinding');
+    types.add('Drilling & Hole Punching');
+    types.add('Packing & Bundling');
+    types.add('Factory General Duty');
+    types.add('+ Other / Custom Work');
+    return Array.from(types);
+  }, [currentWorker?.workType]);
+
+  // Synchronize defaults whenever a worker is opened
+  useEffect(() => {
+    if (currentWorker) {
+      if (currentWorker.rateType === 'piece') {
+        setWorkMode('product');
+        const firstPiece = currentWorker.pieceRates?.[0];
+        if (firstPiece) {
+          setSelectedProductId(`worker-pr-0`);
+          setCustomProductName(`${currentWorker.workType || 'Rod Work'} (${firstPiece.size})`);
+          setItemSize(firstPiece.size || '18 inch');
+          setItemRate(String(firstPiece.rate || 10));
+        } else {
+          setSelectedProductId('f-18');
+          setCustomProductName('Ceiling-Fan-Rod-18-Deluxe');
+          setItemSize('18 inch');
+          setItemRate('8.5');
+        }
+      } else {
+        // Daily or hourly worker
+        setWorkMode('work_type');
+        setSelectedWorkType(currentWorker.workType || 'Pipe Cutting & Punching');
+        setWorkShiftDuty('full');
+        setWorkWageAmount(String(currentWorker.rate || 1600));
+
+        // Pre-set product rate and size in case they switch to By Product
+        setSelectedProductId('f-18');
+        setCustomProductName('Ceiling-Fan-Rod-18-Deluxe');
+        setItemSize('18 inch');
+        setItemRate('8.5');
+      }
+      setItemUnits('');
+      setEntryNote('');
+      setEntryAmount('');
+    }
+  }, [currentWorker?.name]);
+
+  const handleProductSelect = (pId: string) => {
+    setSelectedProductId(pId);
+    if (pId === 'f-custom') {
+      setCustomProductName('');
+      return;
+    }
+    const found = productOptions.find(p => p.id === pId);
+    if (found) {
+      setCustomProductName(found.name);
+      if (found.size) setItemSize(found.size);
+      if (found.defaultRate) setItemRate(String(found.defaultRate));
+    }
+  };
 
   const getWorkerDues = (w: Worker) => {
     return computeWorkerLedgerDetails(w).netPayable;
@@ -115,17 +286,46 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
 
     let debit = 0;
     let credit = 0;
+    let status: 'present' | 'half' | 'absent' | 'leave' | undefined = undefined;
+    let activeWorkType = currentWorker.workType;
+    let activeItemName: string | undefined = undefined;
+    let activeUnits: number | undefined = undefined;
+    let activeRate: number | undefined = undefined;
 
     if (entryKind === 'attendance') {
-      if (currentWorker.rateType === 'daily') {
-        credit = entryStatus === 'present' ? currentWorker.rate : entryStatus === 'half' ? currentWorker.rate / 2 : 0;
-      } else if (currentWorker.rateType === 'piece') {
-        const u = parseFloat(entryUnits) || 0;
-        const r = currentWorker.pieceRates?.[0]?.rate || 10;
+      if (workMode === 'product') {
+        const u = parseFloat(itemUnits) || 0;
+        const r = parseFloat(itemRate) || 0;
         credit = u * r;
+        // AUTOMATICALLY DETECTED AS PRESENT BECAUSE OF WORK ENTRY!
+        status = 'present';
+        activeItemName = selectedProductId === 'f-custom'
+          ? (customProductName.trim() || 'Custom Rod Work')
+          : (customProductName.trim() || (productOptions.find(p => p.id === selectedProductId)?.name || 'Production Item'));
+        activeUnits = u;
+        activeRate = r;
+      } else if (workMode === 'work_type') {
+        const wt = selectedWorkType === '+ Other / Custom Work'
+          ? (customWorkType.trim() || 'Custom Work')
+          : selectedWorkType;
+        activeWorkType = wt;
+
+        const shifts = parseFloat(workShiftsCount) || (workShiftDuty === 'half' ? 0.5 : 1);
+        const dailyRate = parseFloat(workWageAmount) || (currentWorker.rate || 1600);
+        credit = Math.round(shifts * dailyRate);
+
+        if (workShiftDuty === 'half') {
+          status = 'half';
+        } else {
+          // AUTOMATICALLY DETECTED AS PRESENT BECAUSE OF WORK ENTRY!
+          status = 'present';
+        }
+        activeUnits = shifts;
+        activeRate = dailyRate;
       } else {
-        const u = parseFloat(entryUnits) || 0;
-        credit = u * currentWorker.rate;
+        // non_working (Absent or Leave)
+        credit = 0;
+        status = nonWorkingStatus;
       }
     } else {
       debit = parseFloat(entryAmount) || 0;
@@ -135,12 +335,24 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       date: entryDate,
       time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
       kind: entryKind,
-      status: entryKind === 'attendance' ? entryStatus : undefined,
-      units: entryUnits ? parseFloat(entryUnits) : undefined,
+      status: entryKind === 'attendance' ? status : undefined,
+      workMode: entryKind === 'attendance' ? workMode : undefined,
+      itemName: activeItemName,
+      productName: activeItemName,
+      size: entryKind === 'attendance' && workMode === 'product' ? itemSize : undefined,
+      itemComponents: entryKind === 'attendance'
+        ? (workMode === 'product' ? (itemComponents.trim() || undefined) : (wageComponents.trim() || undefined))
+        : undefined,
+      dutyShift: entryKind === 'attendance' && workMode === 'work_type' ? workShiftDuty : undefined,
+      shifts: entryKind === 'attendance' && workMode === 'work_type' ? (parseFloat(workShiftsCount) || (workShiftDuty === 'half' ? 0.5 : 1)) : undefined,
+      dailyWageRate: entryKind === 'attendance' && workMode === 'work_type' ? (parseFloat(workWageAmount) || currentWorker.rate) : undefined,
+      units: activeUnits,
+      qty: activeUnits,
+      rate: activeRate,
       note: entryNote.trim() || undefined,
       debit,
       credit,
-      workType: currentWorker.workType,
+      workType: activeWorkType,
       method: entryKind !== 'attendance' ? entryMethod : undefined,
       paidBy: entryPaidBy.trim() || undefined,
       paidTo: entryPaidTo.trim() || currentWorker.name,
@@ -149,7 +361,8 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       chequeNo: entryChequeNo.trim() || undefined
     });
 
-    setEntryUnits('');
+    // Reset unit inputs
+    setItemUnits('');
     setEntryAmount('');
     setEntryNote('');
     setEntryPaidBy('');
@@ -165,7 +378,18 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
     const tableData = buildLedgerExportTableData(
       currentWorker.entries.map(e => ({
         ...e,
-        desc: e.note || e.kind,
+        desc: e.note || (e.itemName
+          ? `[By Item] ${e.itemName}${e.itemComponents ? ` - ${e.itemComponents}` : ''} (${e.size || ''}) · ${e.units || e.qty || ''} pcs @ Rs ${e.rate || ''}`
+          : e.workType && e.kind === 'attendance'
+          ? `[By Daily Wage] ${e.workType}${e.itemComponents ? ` - ${e.itemComponents}` : ''} (${e.dutyShift === 'half' ? 'Half Day' : `${e.shifts || 1} Shift(s)`})`
+          : e.kind),
+        itemName: e.itemName || e.productName,
+        stockName: e.itemName || e.productName,
+        itemComponents: e.itemComponents,
+        dutyShift: e.dutyShift,
+        shifts: e.shifts,
+        dailyWageRate: e.dailyWageRate,
+        qty: e.units || e.qty,
         runningBalance: (e.credit || 0) - (e.debit || 0)
       })),
       activeCfg
@@ -179,7 +403,18 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
     const tableData = buildLedgerExportTableData(
       currentWorker.entries.map(e => ({
         ...e,
-        desc: e.note || e.kind,
+        desc: e.note || (e.itemName
+          ? `[By Item] ${e.itemName}${e.itemComponents ? ` - ${e.itemComponents}` : ''} (${e.size || ''}) · ${e.units || e.qty || ''} pcs @ Rs ${e.rate || ''}`
+          : e.workType && e.kind === 'attendance'
+          ? `[By Daily Wage] ${e.workType}${e.itemComponents ? ` - ${e.itemComponents}` : ''} (${e.dutyShift === 'half' ? 'Half Day' : `${e.shifts || 1} Shift(s)`})`
+          : e.kind),
+        itemName: e.itemName || e.productName,
+        stockName: e.itemName || e.productName,
+        itemComponents: e.itemComponents,
+        dutyShift: e.dutyShift,
+        shifts: e.shifts,
+        dailyWageRate: e.dailyWageRate,
+        qty: e.units || e.qty,
         runningBalance: (e.credit || 0) - (e.debit || 0)
       })),
       activeCfg
@@ -203,7 +438,18 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
     const tableData = buildLedgerExportTableData(
       currentWorker.entries.map(e => ({
         ...e,
-        desc: e.note || e.kind,
+        desc: e.note || (e.itemName
+          ? `[By Item] ${e.itemName}${e.itemComponents ? ` - ${e.itemComponents}` : ''} (${e.size || ''}) · ${e.units || e.qty || ''} pcs @ Rs ${e.rate || ''}`
+          : e.workType && e.kind === 'attendance'
+          ? `[By Daily Wage] ${e.workType}${e.itemComponents ? ` - ${e.itemComponents}` : ''} (${e.dutyShift === 'half' ? 'Half Day' : `${e.shifts || 1} Shift(s)`})`
+          : e.kind),
+        itemName: e.itemName || e.productName,
+        stockName: e.itemName || e.productName,
+        itemComponents: e.itemComponents,
+        dutyShift: e.dutyShift,
+        shifts: e.shifts,
+        dailyWageRate: e.dailyWageRate,
+        qty: e.units || e.qty,
         runningBalance: (e.credit || 0) - (e.debit || 0)
       })),
       activeCfg
@@ -282,7 +528,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
               <div>
                 <h4 className="font-semibold text-sm text-[var(--text)]">{w.name}</h4>
                 <div className="text-xs text-[var(--text-dim)] font-mono mt-0.5">
-                  {w.workType} · <span className="capitalize">{w.rateType}</span> ({w.rate ? fmt(w.rate) : 'piece-rate'})
+                  {w.workType} · <span className="font-semibold text-[var(--yellow)]">{w.rateType === 'piece' ? 'By Item' : w.rateType === 'daily' ? 'By Daily Wage' : w.rateType === 'both' ? 'By Item & Daily' : w.rateType}</span> ({w.rate ? `Rs ${fmt(w.rate)}` : 'piece-rate'})
                 </div>
               </div>
 
@@ -322,8 +568,8 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                   rateType: wRateType,
                   rate: parseFloat(wRate) || 0,
                   pieceRates:
-                    wRateType === 'piece'
-                      ? [{ size: '18 inch', rate: 10, rodSize: 'R/18"', guardSize: 'R/18"' }]
+                    wRateType === 'piece' || wRateType === 'both'
+                      ? [{ size: '18 inch', rate: parseFloat(wRate) || 10, rodSize: 'R/18"', guardSize: 'R/18"' }]
                       : undefined,
                   entries: []
                 });
@@ -357,19 +603,22 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[11px] text-[var(--text-dim)] uppercase mb-1">{t('rate_type')}</label>
+                  <label className="block text-[11px] text-[var(--text-dim)] uppercase mb-1">Wage Setup</label>
                   <select
                     value={wRateType}
                     onChange={e => setWRateType(e.target.value as any)}
                     className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2 py-2 text-xs text-[var(--text)]"
                   >
-                    <option value="daily">{t('rate_type_daily')}</option>
-                    <option value="piece">{t('rate_type_piece')}</option>
-                    <option value="hourly">{t('rate_type_hourly')}</option>
+                    <option value="daily">By Daily Wage</option>
+                    <option value="piece">By Item / Product</option>
+                    <option value="both">By Item & Daily Wage</option>
+                    <option value="hourly">Hourly Rate</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] text-[var(--text-dim)] uppercase mb-1">{t('rate_rs')}</label>
+                  <label className="block text-[11px] text-[var(--text-dim)] uppercase mb-1">
+                    {wRateType === 'piece' ? 'Item Rate (Rs/pc)' : 'Daily Rate (Rs)'}
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -474,7 +723,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
               <div>
                 <h3 className="font-serif font-black text-lg sm:text-xl text-[var(--text)]">{currentWorker.name}</h3>
                 <span className="text-xs text-[var(--text-dim)]">
-                  {currentWorker.workType} · {currentWorker.rateType} ({fmt(currentWorker.rate)})
+                  {currentWorker.workType} · <span className="font-semibold text-[var(--yellow)]">{currentWorker.rateType === 'piece' ? 'By Item / Product' : currentWorker.rateType === 'daily' ? 'By Daily Wage' : currentWorker.rateType === 'both' ? 'By Item & Daily Wage' : currentWorker.rateType}</span> ({currentWorker.rate ? `Rs ${fmt(currentWorker.rate)}/day` : 'Piece-rate items'})
                 </span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -524,8 +773,12 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
               return (
                 <div className="my-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
-                    <div className="text-[10px] uppercase text-[var(--text-dim)]">Total Wages Earned (Credit)</div>
+                    <div className="text-[10px] uppercase text-[var(--text-dim)] font-bold">Total Wages Earned (Credit)</div>
                     <div className="text-base font-bold text-[var(--red)] mt-0.5">{fmt(details.totalCredits)}</div>
+                    <div className="mt-2 pt-1.5 border-t border-[var(--steel-line)] flex flex-wrap items-center justify-between text-[10px] gap-1">
+                      <span className="text-amber-400 font-bold">📦 By Item: {details.totalItemPieces} pcs ({fmt(details.totalItemWages)})</span>
+                      <span className="text-blue-400 font-bold">💵 Daily: {details.totalDailyShifts} shifts ({fmt(details.totalDailyWages)})</span>
+                    </div>
                   </div>
                   <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
                     <div className="text-[10px] uppercase text-[var(--text-dim)]">Total Paid (Debit)</div>
@@ -584,9 +837,94 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                         <td className="p-2.5 whitespace-nowrap">{e.date}</td>
                         <td className="p-2.5 uppercase text-[10px] font-bold text-[var(--yellow)]">{e.kind}</td>
                         <td className="p-2.5">
-                          {e.status && <span className="capitalize">{e.status}</span>}
-                          {e.units && ` (${e.units} units)`}
-                          {e.note && ` · ${e.note}`}
+                          <div className="space-y-1">
+                            {/* Attendance / Status Badge */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {e.status === 'present' && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  <CheckCircle2 size={10} /> Present
+                                </span>
+                              )}
+                              {e.status === 'half' && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                  <Clock size={10} /> Half Day
+                                </span>
+                              )}
+                              {e.status === 'absent' && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                  ✕ Absent
+                                </span>
+                              )}
+                              {e.status === 'leave' && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                  ✉ Leave
+                                </span>
+                              )}
+                              {e.kind !== 'attendance' && (
+                                <span className="text-[10px] font-mono text-[var(--text-dim)] uppercase">
+                                  {e.kind === 'payment' ? 'Wage Paid' : e.kind}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Line: By Item / Product */}
+                            {(e.itemName || e.productName) ? (
+                              <div className="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5 flex-wrap mt-0.5">
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold tracking-wider">
+                                  📦 BY ITEM
+                                </span>
+                                <span className="text-amber-400 font-bold">{e.itemName || e.productName}</span>
+                                {e.size && (
+                                  <span className="px-1.5 py-0.2 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[10px] font-mono text-[var(--text-dim)]">
+                                    {e.size}
+                                  </span>
+                                )}
+                                {e.itemComponents && (
+                                  <span className="px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] font-mono text-amber-300/90">
+                                    ⚙️ {e.itemComponents}
+                                  </span>
+                                )}
+                                {(e.units !== undefined || e.qty !== undefined) && (
+                                  <span className="font-mono text-emerald-400 font-bold text-[11px]">
+                                    · {e.units ?? e.qty} pcs
+                                  </span>
+                                )}
+                                {e.rate && (
+                                  <span className="font-mono text-[var(--text-dim)] text-[10px]">
+                                    @ Rs {fmt(e.rate)}/pc
+                                  </span>
+                                )}
+                              </div>
+                            ) : (e.workType && e.kind === 'attendance') ? (
+                              /* Line: By Daily Wage */
+                              <div className="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5 flex-wrap mt-0.5">
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[9px] font-mono font-bold tracking-wider">
+                                  💵 BY DAILY WAGE
+                                </span>
+                                <span className="text-blue-300 font-bold">⚙️ {e.workType}</span>
+                                {e.itemComponents && (
+                                  <span className="px-1.5 py-0.2 rounded bg-blue-500/10 border border-blue-500/20 text-[10px] font-mono text-blue-300/90">
+                                    🏢 {e.itemComponents}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-emerald-400 font-mono">
+                                  ({e.dutyShift === 'half' || e.units === 0.5 ? 'Half Day · 0.5 Shift' : e.shifts ? `${e.shifts} Shift(s)` : 'Full Day · 1 Shift'})
+                                </span>
+                                {(e.dailyWageRate || e.rate) && (
+                                  <span className="font-mono text-[var(--text-dim)] text-[10px]">
+                                    @ Rs {fmt(e.dailyWageRate || e.rate)}/day
+                                  </span>
+                                )}
+                              </div>
+                            ) : null}
+
+                            {/* Note */}
+                            {e.note && (
+                              <div className="text-[10px] text-[var(--text-dim)] mt-0.5">
+                                {e.note}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="p-2.5 text-right font-semibold text-[var(--green)]">
                           {e.debit ? (
@@ -658,22 +996,465 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
               </table>
             </div>
 
-            {/* Quick Add Entry */}
-            <form onSubmit={handleAddEntry} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2 text-xs">
-              <div className="flex items-center justify-between">
-                <div className="font-bold text-xs uppercase text-[var(--yellow)]">+ Log Attendance or Payment</div>
-                {entryKind !== 'attendance' && (
+            {/* Quick Add Entry Form */}
+            <form onSubmit={handleAddEntry} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2.5 text-xs">
+              {/* Header: Kind selector & Date & Mode Tabs */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={entryKind}
+                    onChange={e => setEntryKind(e.target.value as any)}
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--yellow)] font-bold rounded-lg px-2.5 py-1 text-xs focus:outline-none cursor-pointer"
+                  >
+                    <option value="attendance">📋 Attendance / Work</option>
+                    <option value="payment">💸 Wages Payment</option>
+                    <option value="advance">💳 Advance</option>
+                    <option value="loan">🤝 Loan</option>
+                    <option value="damage">⚠️ Damage Deduction</option>
+                  </select>
+
+                  <input
+                    type="date"
+                    value={entryDate}
+                    onChange={e => setEntryDate(e.target.value)}
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2 py-1 text-xs text-[var(--text)] font-mono"
+                  />
+                </div>
+
+                {entryKind === 'attendance' ? (
+                  /* Work sub-mode tabs: By Item / Product vs By Daily Wage vs Absent / Leave */
+                  <div className="flex items-center bg-[var(--panel-raised)] p-0.5 rounded-lg border border-[var(--steel-line)] text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setWorkMode('product')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+                        workMode === 'product'
+                          ? 'bg-[var(--yellow)] text-black shadow-xs font-black'
+                          : 'text-[var(--text-dim)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      <Package size={13} />
+                      <span>By Item / Product</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWorkMode('work_type')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+                        workMode === 'work_type'
+                          ? 'bg-[var(--yellow)] text-black shadow-xs font-black'
+                          : 'text-[var(--text-dim)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      <Calendar size={13} />
+                      <span>By Daily Wage</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWorkMode('non_working')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition cursor-pointer ${
+                        workMode === 'non_working'
+                          ? 'bg-red-500 text-white shadow-xs font-black'
+                          : 'text-[var(--text-dim)] hover:text-red-400'
+                      }`}
+                    >
+                      <AlertCircle size={13} />
+                      <span>Absent/Leave</span>
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
                     onClick={() => setShowExtendedPaymentFields(!showExtendedPaymentFields)}
                     className="text-[10px] text-[var(--yellow)] hover:underline flex items-center gap-1 cursor-pointer font-bold"
                   >
-                    {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment (By / To / A/C)'}
+                    {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment Channels (By / To / A/C)'}
                   </button>
                 )}
               </div>
 
-              {/* Extended Payment Channels when toggled for payment/advance */}
+              {/* MODE 1: Work By Item / Product */}
+              {entryKind === 'attendance' && workMode === 'product' && (
+                <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-amber-500/30 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
+                    <span className="font-bold text-amber-400 flex items-center gap-1.5 uppercase tracking-wider text-xs">
+                      <Package size={14} /> Log Work Line By Item / Product
+                    </span>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1 text-[11px] bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                      <CheckCircle2 size={12} /> Auto Attendance: Detected Present (Work Entry)
+                    </span>
+                  </div>
+
+                  {/* Item Components Quick Chips */}
+                  <div>
+                    <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                      Item Components & Operation Details
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {ITEM_COMPONENT_PRESETS.map(preset => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setItemComponents(preset)}
+                          className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer border ${
+                            itemComponents === preset
+                              ? 'bg-[var(--yellow)] text-black border-[var(--yellow)] font-bold'
+                              : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={itemComponents}
+                      onChange={e => setItemComponents(e.target.value)}
+                      placeholder="e.g. Swaged Ends & Cotter Hole, Flange Welding, Power Press Stamping..."
+                      className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-[var(--yellow)] outline-hidden font-sans"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                    {/* Item / Product Selector */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Select Item / Product
+                      </label>
+                      <select
+                        value={selectedProductId}
+                        onChange={e => handleProductSelect(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-[var(--yellow)] outline-hidden cursor-pointer"
+                      >
+                        <option value="">-- Choose Item / Product --</option>
+                        {productOptions.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} {p.size ? `(${p.size})` : ''} {p.defaultRate ? `· Rs ${p.defaultRate}/pc` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Custom Product Name if chosen */}
+                    {(selectedProductId === 'f-custom' || !selectedProductId) && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                          Custom Product / Item Name
+                        </label>
+                        <input
+                          type="text"
+                          value={customProductName}
+                          onChange={e => setCustomProductName(e.target.value)}
+                          placeholder="e.g. Swaged Ceiling Fan Rod 18-inch"
+                          className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-[var(--yellow)] outline-hidden"
+                        />
+                      </div>
+                    )}
+
+                    {/* Size / Dimension */}
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Size / Dimension
+                      </label>
+                      <input
+                        type="text"
+                        value={itemSize}
+                        onChange={e => setItemSize(e.target.value)}
+                        placeholder="e.g. 18 inch, 24 inch"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono focus:border-[var(--yellow)] outline-hidden"
+                      />
+                    </div>
+
+                    {/* Quantity completed */}
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Quantity (Pcs Completed) *
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={itemUnits}
+                        onChange={e => setItemUnits(e.target.value)}
+                        placeholder="e.g. 150"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono font-bold focus:border-emerald-400 outline-hidden"
+                      />
+                    </div>
+
+                    {/* Rate per piece */}
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Rate (Rs / Piece) *
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        required
+                        value={itemRate}
+                        onChange={e => setItemRate(e.target.value)}
+                        placeholder="e.g. 8.5"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono font-bold focus:border-[var(--yellow)] outline-hidden"
+                      />
+                    </div>
+
+                    {/* Calculated Wages */}
+                    <div className="flex flex-col justify-end">
+                      <div className="p-2 rounded-lg bg-[var(--panel)] border border-amber-500/30 text-right">
+                        <div className="text-[9px] text-[var(--text-dim)] uppercase font-bold">
+                          {itemUnits || 0} pcs × Rs {itemRate || 0}
+                        </div>
+                        <div className="text-sm font-black font-mono text-[var(--red)]">
+                          Rs {fmt((parseFloat(itemUnits) || 0) * (parseFloat(itemRate) || 0))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Note & Save */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={entryNote}
+                      onChange={e => setEntryNote(e.target.value)}
+                      placeholder="Item details / batch / punch machine notes (optional)"
+                      className="flex-1 bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-[var(--yellow)] outline-hidden font-sans"
+                    />
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-lg bg-[var(--yellow)] text-black font-black uppercase text-xs shadow hover:bg-amber-400 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                    >
+                      <CheckCircle2 size={13} strokeWidth={2.5} />
+                      <span>Save By Item Entry</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MODE 2: Work By Daily Wage */}
+              {entryKind === 'attendance' && workMode === 'work_type' && (
+                <div className="p-3.5 rounded-xl bg-[var(--panel-raised)] border border-blue-500/30 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between text-[11px] flex-wrap gap-2">
+                    <span className="font-bold text-blue-400 flex items-center gap-1.5 uppercase tracking-wider text-xs">
+                      <Calendar size={14} /> Log Work Line By Daily Wage
+                    </span>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1 text-[11px] bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+                      <CheckCircle2 size={12} /> Auto Attendance: Detected {workShiftDuty === 'half' ? 'Half Day' : 'Present'} (Work Entry)
+                    </span>
+                  </div>
+
+                  {/* Daily Wage / Shift Components Quick Chips */}
+                  <div>
+                    <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                      Daily Wage Shift & Section Components
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {DAILY_WAGE_COMPONENT_PRESETS.map(preset => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setWageComponents(preset)}
+                          className={`px-2 py-0.5 rounded text-[10px] transition cursor-pointer border ${
+                            wageComponents === preset
+                              ? 'bg-blue-500 text-white border-blue-400 font-bold'
+                              : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="text"
+                      value={wageComponents}
+                      onChange={e => setWageComponents(e.target.value)}
+                      placeholder="e.g. Day Shift - Press Section, Night Shift, Assembly Line 1..."
+                      className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-blue-400 outline-hidden font-sans"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                    {/* Work Type selector */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Work Type / Operation
+                      </label>
+                      <select
+                        value={selectedWorkType}
+                        onChange={e => {
+                          setSelectedWorkType(e.target.value);
+                          if (e.target.value !== '+ Other / Custom Work') {
+                            setCustomWorkType('');
+                          }
+                        }}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-blue-400 outline-hidden cursor-pointer"
+                      >
+                        {workTypeOptions.map(wt => (
+                          <option key={wt} value={wt}>
+                            {wt}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Custom Work Type if chosen */}
+                    {selectedWorkType === '+ Other / Custom Work' && (
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                          Custom Work Type Name
+                        </label>
+                        <input
+                          type="text"
+                          value={customWorkType}
+                          onChange={e => setCustomWorkType(e.target.value)}
+                          placeholder="e.g. Swaging & Flange Welding"
+                          className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-blue-400 outline-hidden"
+                        />
+                      </div>
+                    )}
+
+                    {/* Duty Duration Selector */}
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Duty / Shift Duration
+                      </label>
+                      <select
+                        value={workShiftDuty}
+                        onChange={e => {
+                          const val = e.target.value as 'full' | 'half' | 'custom';
+                          setWorkShiftDuty(val);
+                          if (val === 'full') {
+                            setWorkShiftsCount('1');
+                            setWorkWageAmount(String(currentWorker.rate || 1600));
+                          } else if (val === 'half') {
+                            setWorkShiftsCount('0.5');
+                            setWorkWageAmount(String(currentWorker.rate || 1600));
+                          }
+                        }}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-blue-400 outline-hidden cursor-pointer"
+                      >
+                        <option value="full">Full Day Duty (1 Shift - Present)</option>
+                        <option value="half">Half Day Duty (0.5 Shift)</option>
+                        <option value="custom">Custom Shifts / Overtime</option>
+                      </select>
+                    </div>
+
+                    {/* Shifts / Days Count */}
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Shifts / Days Count *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.25"
+                        min="0.25"
+                        required
+                        value={workShiftsCount}
+                        onChange={e => setWorkShiftsCount(e.target.value)}
+                        placeholder="1"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono font-bold focus:border-blue-400 outline-hidden"
+                      />
+                    </div>
+
+                    {/* Wage Rate (Per Day) */}
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Daily Wage Rate (Rs/Day) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        required
+                        value={workWageAmount}
+                        onChange={e => setWorkWageAmount(e.target.value)}
+                        placeholder="1600"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono font-bold focus:border-blue-400 outline-hidden"
+                      />
+                    </div>
+
+                    {/* Calculated Wage Breakdown */}
+                    <div className="flex flex-col justify-end">
+                      <div className="p-2 rounded-lg bg-[var(--panel)] border border-blue-500/30 text-right">
+                        <div className="text-[9px] text-[var(--text-dim)] uppercase font-bold">
+                          {workShiftsCount || 1} shifts × Rs {workWageAmount || 0}
+                        </div>
+                        <div className="text-sm font-black font-mono text-[var(--red)]">
+                          Rs {fmt(Math.round((parseFloat(workShiftsCount) || 1) * (parseFloat(workWageAmount) || 0)))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Note & Save */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={entryNote}
+                      onChange={e => setEntryNote(e.target.value)}
+                      placeholder="Work notes / machine / shift particulars (optional)"
+                      className="flex-1 bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-blue-400 outline-hidden font-sans"
+                    />
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-black uppercase text-xs shadow transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                    >
+                      <CheckCircle2 size={13} strokeWidth={2.5} />
+                      <span>Save Daily Wage Entry</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* MODE 3: Non-Working (Absent / Leave) */}
+              {entryKind === 'attendance' && workMode === 'non_working' && (
+                <div className="p-3 rounded-xl bg-red-950/20 border border-red-500/30 space-y-2.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-red-400 flex items-center gap-1.5 uppercase tracking-wider">
+                      <AlertCircle size={13} /> Mark Non-Working Day (Absent / Leave)
+                    </span>
+                    <span className="text-[var(--text-dim)] text-[10px] font-mono">Wages: Rs 0 (No work logged)</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Attendance Status
+                      </label>
+                      <select
+                        value={nonWorkingStatus}
+                        onChange={e => setNonWorkingStatus(e.target.value as any)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-red-400 outline-hidden"
+                      >
+                        <option value="absent">Absent (Unpaid)</option>
+                        <option value="leave">Leave (Approved)</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] text-[var(--text-dim)] uppercase font-bold mb-1">
+                        Reason / Note (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={entryNote}
+                        onChange={e => setEntryNote(e.target.value)}
+                        placeholder="e.g. Informed absence, sick leave, factory closed..."
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-red-400 outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-lg bg-red-500 text-white font-bold uppercase text-xs shadow hover:bg-red-600 transition cursor-pointer"
+                    >
+                      Save Attendance Record
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Extended Payment Channels when toggled */}
               {showExtendedPaymentFields && entryKind !== 'attendance' && (
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
                   <select
@@ -717,67 +1498,46 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <select
-                  value={entryKind}
-                  onChange={e => setEntryKind(e.target.value as any)}
-                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1.5 text-xs text-[var(--text)]"
-                >
-                  <option value="attendance">Attendance / Work</option>
-                  <option value="payment">Wages Payment</option>
-                  <option value="advance">Advance</option>
-                  <option value="loan">Loan</option>
-                  <option value="damage">Damage Deduction</option>
-                </select>
-
-                {entryKind === 'attendance' ? (
-                  currentWorker.rateType === 'daily' ? (
-                    <select
-                      value={entryStatus}
-                      onChange={e => setEntryStatus(e.target.value as any)}
-                      className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1.5 text-xs text-[var(--text)]"
-                    >
-                      <option value="present">Present (Full Day)</option>
-                      <option value="half">Half Day</option>
-                      <option value="absent">Absent</option>
-                      <option value="leave">Leave</option>
-                    </select>
-                  ) : (
-                    <input
-                      type="number"
-                      min="1"
-                      value={entryUnits}
-                      onChange={e => setEntryUnits(e.target.value)}
-                      placeholder="Units produced"
-                      className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
-                    />
-                  )
-                ) : (
+              {/* Payment / Advance / Loan Form */}
+              {entryKind !== 'attendance' && (
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                   <input
                     type="number"
                     min="1"
+                    required
                     value={entryAmount}
                     onChange={e => setEntryAmount(e.target.value)}
                     placeholder="Amount (Rs)"
-                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono font-bold focus:border-emerald-400 outline-hidden"
                   />
-                )}
 
-                <input
-                  type="text"
-                  value={entryNote}
-                  onChange={e => setEntryNote(e.target.value)}
-                  placeholder="Note (optional)"
-                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded px-2 py-1 text-xs text-[var(--text)]"
-                />
+                  <select
+                    value={entryMethod}
+                    onChange={e => setEntryMethod(e.target.value)}
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono focus:border-[var(--yellow)] outline-hidden cursor-pointer"
+                  >
+                    <option value="Cash">Cash</option>
+                    <option value="Bank">Bank Transfer</option>
+                    <option value="Online">Online / EasyPaisa / JazzCash</option>
+                    <option value="Cheque">Cheque</option>
+                  </select>
 
-                <button
-                  type="submit"
-                  className="py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold uppercase text-xs shadow hover:bg-amber-400 transition cursor-pointer"
-                >
-                  Save
-                </button>
-              </div>
+                  <input
+                    type="text"
+                    value={entryNote}
+                    onChange={e => setEntryNote(e.target.value)}
+                    placeholder="Payment note / reference"
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:border-[var(--yellow)] outline-hidden"
+                  />
+
+                  <button
+                    type="submit"
+                    className="py-1.5 rounded-lg bg-emerald-500 text-black font-black uppercase text-xs shadow hover:bg-emerald-400 transition cursor-pointer"
+                  >
+                    Save Payment
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>

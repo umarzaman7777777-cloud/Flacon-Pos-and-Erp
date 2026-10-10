@@ -500,8 +500,12 @@ export interface LabourEntry {
   time: string;
   kind: 'attendance' | 'payment' | 'advance' | 'loan' | 'damage';
   status?: 'present' | 'half' | 'absent' | 'leave';
+  workMode?: 'product' | 'work_type' | 'non_working' | 'absent' | 'leave';
+  itemName?: string;
+  productName?: string;
   size?: string;
   units?: number;
+  qty?: number;
   rate?: number;
   note?: string;
   debit: number;
@@ -517,7 +521,10 @@ export interface LabourEntry {
   bankName?: string;
   chequeNo?: string;
   chequeDate?: string;
-  chequeStatus?: string;
+  itemComponents?: string;
+  dutyShift?: 'full' | 'half' | 'custom' | string;
+  shifts?: number;
+  dailyWageRate?: number;
   receiptUrl?: string;
   device?: string;
 }
@@ -525,7 +532,7 @@ export interface LabourEntry {
 export interface Worker {
   name: string;
   workType: string;
-  rateType: 'daily' | 'piece' | 'hourly';
+  rateType: 'daily' | 'piece' | 'hourly' | 'both';
   rate: number;
   pieceRates?: LabourPieceRate[];
   startDate?: string;

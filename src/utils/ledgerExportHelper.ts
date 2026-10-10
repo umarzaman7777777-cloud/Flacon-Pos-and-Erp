@@ -30,6 +30,10 @@ export interface StandardLedgerRowItem {
   category?: string;
   withdrawnBy?: string;
   status?: string;
+  itemComponents?: string;
+  dutyShift?: string;
+  shifts?: number;
+  dailyWageRate?: number;
 }
 
 export function buildLedgerExportTableData(
@@ -65,8 +69,10 @@ export function buildLedgerExportTableData(
       let descStr = e.desc || '—';
       const metaParts: (string | null | undefined)[] = [];
       if (e.stockName || e.itemName) metaParts.push(e.stockName || e.itemName);
+      if (e.itemComponents) metaParts.push(e.itemComponents);
       if (e.category) metaParts.push(e.category);
       if (e.workType) metaParts.push(e.workType);
+      if (e.dutyShift) metaParts.push(e.dutyShift === 'full' ? 'Full Day' : e.dutyShift === 'half' ? 'Half Day' : e.dutyShift);
       if (e.status) metaParts.push(e.status);
       if (e.size) metaParts.push(e.size);
       if (e.qty) metaParts.push(`${e.qty} pcs`);
