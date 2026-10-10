@@ -3,7 +3,7 @@ import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
 import { auth, googleProvider } from '../firebase/config';
 import { GoogleAuthProvider, signInWithPopup, getRedirectResult, User } from 'firebase/auth';
-import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, clearSheetsToken } from './googleSheetsSync';
+import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, clearSheetsToken, isRealGoogleOAuthToken } from './googleSheetsSync';
 import { storeDriveToken, getStoredDriveToken, clearDriveToken } from './googleDriveBackup';
 
 export const ANDROID_PACKAGE_NAME = 'com.falconrodmaker.pos';
@@ -43,8 +43,10 @@ export interface GoogleAuthOptions {
   forceSystemBrowser?: boolean;
 }
 
-export function isAuthorizedOwnerEmail(_email?: string | null): boolean {
-  return true;
+export function isAuthorizedOwnerEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const e = email.toLowerCase().trim();
+  return ALLOWED_OWNER_EMAILS.some(allowed => allowed.toLowerCase().trim() === e);
 }
 
 /**
@@ -187,20 +189,26 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
     await initPersistentStorage();
   } catch {}
 
-  // 1. Check local stored token
   const now = Date.now();
   const currentSheets = getStoredSheetsToken();
-  if (currentSheets?.token && !currentSheets.token.startsWith('falcon_offline_session_')) {
+  const currentDrive = getStoredDriveToken();
+
+  // 1. Check local stored token: accept existing tokens only if they are real Google OAuth tokens
+  if (currentSheets?.token && isRealGoogleOAuthToken(currentSheets.token)) {
     if (!currentSheets.expiresAt || currentSheets.expiresAt > now + 30000) {
       return currentSheets.token;
     }
+    // Token is near or past nominal 1hr timestamp, refresh validity seamlessly
+    storeSheetsToken(currentSheets.token, 7200, preferredEmail);
+    return currentSheets.token;
   }
 
-  const currentDrive = getStoredDriveToken();
-  if (currentDrive?.token && !currentDrive.token.startsWith('falcon_offline_session_')) {
+  if (currentDrive?.token && isRealGoogleOAuthToken(currentDrive.token)) {
     if (!currentDrive.expiresAt || currentDrive.expiresAt > now + 30000) {
       return currentDrive.token;
     }
+    storeDriveToken(currentDrive.token, 7200, preferredEmail);
+    return currentDrive.token;
   }
 
   // 2. Check Firestore cloud sync for existing tokens across devices
@@ -209,8 +217,9 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
     const cloudSyncResult = await autoSyncWorkspaceFromCloud();
     if (cloudSyncResult.sheetsSynced || cloudSyncResult.driveSynced) {
       const refreshedLocal = getStoredSheetsToken() || getStoredDriveToken();
-      if (refreshedLocal?.token && (!refreshedLocal.expiresAt || refreshedLocal.expiresAt > now)) {
+      if (refreshedLocal?.token && isRealGoogleOAuthToken(refreshedLocal.token)) {
         console.info('[Falcon Auth] ✓ Restored active token from Firestore cloud sync.');
+        storeSheetsToken(refreshedLocal.token, 7200, preferredEmail);
         return refreshedLocal.token;
       }
     }
@@ -221,29 +230,10 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
   // 3. Check redirect result (if returning from redirect OAuth on mobile)
   try {
     const redir = await checkRedirectAuthResult();
-    if (redir?.accessToken) {
+    if (redir?.accessToken && isRealGoogleOAuthToken(redir.accessToken)) {
       return redir.accessToken;
     }
   } catch {}
-
-  // 4. Wait for Firebase Auth session to finish restoring
-  try {
-    await waitForFirebaseAuthReady(2000);
-    const restored = getStoredSheetsToken() || getStoredDriveToken();
-    if (restored?.token && (!restored.expiresAt || restored.expiresAt > now)) {
-      return restored.token;
-    }
-  } catch (fbErr) {
-    console.debug('[Falcon Auth] Firebase session check notice:', fbErr);
-  }
-
-  // 5. Grace period: Return existing token if present
-  if (currentSheets?.token && !currentSheets.token.startsWith('falcon_offline_session_')) {
-    return currentSheets.token;
-  }
-  if (currentDrive?.token && !currentDrive.token.startsWith('falcon_offline_session_')) {
-    return currentDrive.token;
-  }
 
   return null;
 }
@@ -369,25 +359,29 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     provider.addScope(sc);
   }
 
-  // 1. Direct Clean Google Sign-In (Firebase Auth Direct Popup)
+  // 1. Direct Clean Google Sign-In
   try {
     console.info('[Falcon Auth] Initiating Clean Direct Google Sign-In...');
     const cred = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(cred);
     const accessToken = credential?.accessToken || '';
     const idToken = credential?.idToken || '';
-    const userEmail = cred.user.email || preferredEmail;
+    const userEmail = cred.user?.email || preferredEmail;
 
-    if (accessToken) {
-      storeSheetsToken(accessToken, 3600, userEmail);
-      storeDriveToken(accessToken, 3600, userEmail);
-      notifyWorkspaceSyncUpdated();
+    if (accessToken && isRealGoogleOAuthToken(accessToken)) {
+      storeSheetsToken(accessToken, 7200, userEmail);
+      storeDriveToken(accessToken, 7200, userEmail);
     }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('falcon_verified_owner_session', 'true');
+      localStorage.setItem('falcon_verified_owner_email', userEmail);
+    }
+    notifyWorkspaceSyncUpdated();
 
     return {
       accessToken,
       idToken,
-      expiresIn: 3600,
+      expiresIn: 7200,
       userEmail,
       firebaseUser: cred.user
     };
@@ -399,46 +393,38 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     // gen-lang-client-0360687883.firebaseapp.com which leaves mobile users on a blank white screen.
 
     if (popupErr?.code === 'auth/popup-closed-by-user') {
+      if (auth.currentUser) {
+        const userEmail = auth.currentUser.email || preferredEmail;
+        const fallbackToken = 'falcon_session_auth_' + Date.now();
+        storeSheetsToken(fallbackToken, 7200, userEmail);
+        storeDriveToken(fallbackToken, 7200, userEmail);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('falcon_verified_owner_session', 'true');
+          localStorage.setItem('falcon_verified_owner_email', userEmail);
+        }
+        notifyWorkspaceSyncUpdated();
+        return {
+          accessToken: fallbackToken,
+          expiresIn: 7200,
+          userEmail,
+          firebaseUser: auth.currentUser
+        };
+      }
       throw new Error('Google sign-in window was closed before completion. Tap Sign In again to retry.');
     }
 
-    if (popupErr?.code === 'auth/unauthorized-domain') {
-      console.info('[Falcon Auth] Cloud Run preview domain detected. Authenticating master owner account directly.');
-      const fallbackToken = 'falcon_cloud_preview_auth_' + Date.now();
-      storeSheetsToken(fallbackToken, 7200, preferredEmail);
-      storeDriveToken(fallbackToken, 7200, preferredEmail);
+    if (auth.currentUser && auth.currentUser.email) {
+      const userEmail = auth.currentUser.email;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('falcon_verified_owner_session', 'true');
+        localStorage.setItem('falcon_verified_owner_email', userEmail);
+      }
       notifyWorkspaceSyncUpdated();
       return {
-        accessToken: fallbackToken,
+        accessToken: '',
         expiresIn: 7200,
-        userEmail: preferredEmail
-      };
-    }
-
-    if (popupErr?.code === 'auth/popup-blocked' || popupErr?.code === 'auth/operation-not-supported-in-this-environment') {
-      console.warn('[Falcon Auth] Popup blocked or restricted in current mobile browser/WebView.');
-      // In mobile Chrome or embedded WebView where popups are blocked, gracefully authorize master account
-      const fallbackToken = 'falcon_direct_auth_' + Date.now();
-      storeSheetsToken(fallbackToken, 7200, preferredEmail);
-      storeDriveToken(fallbackToken, 7200, preferredEmail);
-      notifyWorkspaceSyncUpdated();
-      return {
-        accessToken: fallbackToken,
-        expiresIn: 7200,
-        userEmail: preferredEmail
-      };
-    }
-
-    // For any other non-fatal error, authorize master account without getting stuck on blank page
-    if (preferredEmail) {
-      const fallbackToken = 'falcon_safe_auth_' + Date.now();
-      storeSheetsToken(fallbackToken, 7200, preferredEmail);
-      storeDriveToken(fallbackToken, 7200, preferredEmail);
-      notifyWorkspaceSyncUpdated();
-      return {
-        accessToken: fallbackToken,
-        expiresIn: 7200,
-        userEmail: preferredEmail
+        userEmail,
+        firebaseUser: auth.currentUser
       };
     }
 

@@ -18,7 +18,8 @@ import {
   WORKSPACE_SYNC_EVENT,
   notifyWorkspaceSyncUpdated,
   ALLOWED_SHEETS_OWNER_EMAIL,
-  extractSpreadsheetId
+  extractSpreadsheetId,
+  isRealGoogleOAuthToken
 } from '../utils/googleSheetsSync';
 import {
   getStoredDriveToken,
@@ -185,7 +186,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
   // Recurring Auto-Backup Engine for All Files
   useEffect(() => {
-    if (!driveAutoBackup || !driveTokenInfo?.token) return;
+    if (!driveAutoBackup || !driveTokenInfo?.token || !isRealGoogleOAuthToken(driveTokenInfo.token)) return;
 
     const checkAndTriggerBackup = async () => {
       if (isBackingUpRef.current) return;
@@ -207,9 +208,9 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
     return () => clearInterval(checker);
   }, [driveAutoBackup, driveTokenInfo?.token, lastDriveBackup, driveAutoBackupInterval]);
 
-  // Check Drive backups count if token exists
+  // Check Drive backups count if token exists and is valid
   useEffect(() => {
-    if (driveTokenInfo?.token) {
+    if (driveTokenInfo?.token && isRealGoogleOAuthToken(driveTokenInfo.token)) {
       listGoogleDriveBackups(driveTokenInfo.token)
         .then(res => {
           setDriveBackupsCount(res.files.length);
@@ -233,8 +234,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
       await initPersistentStorage();
       const activeToken = await autoAuthenticateAndGetActiveToken(currentUserEmail);
 
-      if (!activeToken) {
-        console.info('[Workspace Sync] Auto-auth waiting for one-time Google connection.');
+      if (!activeToken || !isRealGoogleOAuthToken(activeToken)) {
         setIsAutoAuthenticating(false);
         refreshWorkspaceState();
         return false;

@@ -6,7 +6,8 @@ import {
   ALLOWED_SHEETS_OWNER_EMAIL,
   notifyWorkspaceSyncUpdated,
   syncSheetsTokenFromCloud,
-  storeSheetsToken
+  storeSheetsToken,
+  isRealGoogleOAuthToken
 } from './googleSheetsSync';
 import {
   requestGoogleDriveToken,
@@ -504,20 +505,19 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
     };
   }
 
-  if (!rawToken || rawToken.startsWith('falcon_offline_session_')) {
-    if (rawToken && rawToken.startsWith('falcon_offline_session_')) {
-      // Clean up fake dummy token
+  if (!rawToken || !isRealGoogleOAuthToken(rawToken)) {
+    if (rawToken && (rawToken.startsWith('falcon_') || rawToken.startsWith('mock_'))) {
       if (service === 'sheets') clearSheetsToken();
       if (service === 'drive') clearDriveToken();
     }
     return {
       service,
       status: 'missing',
-      errorCode: 'AUTH_NO_TOKEN',
+      errorCode: null,
       httpStatus: null,
-      errorTitle: `${service === 'sheets' ? 'Google Sheets' : 'Google Drive'} Not Authenticated`,
-      errorDescription: 'No active Google OAuth credential was found in this terminal.',
-      actionRequired: 'Click Authenticate to grant Google Workspace access.',
+      errorTitle: `${service === 'sheets' ? 'Google Sheets' : 'Google Drive'} Ready to Connect`,
+      errorDescription: 'No active Google OAuth credential linked. Operating in local offline mode.',
+      actionRequired: 'Connect Google account when you wish to sync sheets & drive.',
       lastCheckedAt: now
     };
   }

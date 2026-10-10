@@ -2,15 +2,19 @@ import React, { useState, useEffect } from 'react';
 import {
   Eye, EyeOff, Fingerprint, ShieldCheck, Mail, ArrowLeft, KeyRound,
   Loader2, CheckCircle2, AlertCircle, LogIn, LogOut, Smartphone,
-  RotateCcw, ArrowRight, Shield, Lock, Unlock, Check, Sparkles, ChevronRight, X
+  RotateCcw, ArrowRight, Shield, Lock, Unlock, Check, Sparkles, ChevronRight, X,
+  Activity, Zap
 } from 'lucide-react';
 import { AppLanguage, VisualSettings, LogoTheme } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { Capacitor } from '@capacitor/core';
+import { AuthDiagnosticModal } from './AuthDiagnosticModal';
 import { FalconLogo } from './FalconLogo';
 import { FALCON_LOGO_PNG } from '../utils/logoData';
 import { auth, googleProvider } from '../firebase/config';
-import { isLocalhostOrMobileApp } from '../utils/googleAuthHelper';
+import { isLocalhostOrMobileApp, performUniversalGoogleSignIn } from '../utils/googleAuthHelper';
+import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, isRealGoogleOAuthToken } from '../utils/googleSheetsSync';
+import { storeDriveToken } from '../utils/googleDriveBackup';
 import {
   signInWithPopup,
   signInWithEmailAndPassword,
@@ -82,6 +86,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   // Dedicated Windows / Modals for 3 Login Methods
   const [showPinModal, setShowPinModal] = useState(false);
   const [showSensorModal, setShowSensorModal] = useState(false);
+  const [showAuthDiagnosticModal, setShowAuthDiagnosticModal] = useState(false);
 
   const handleOpenPinWindow = () => {
     setSelectedOption('pin');
@@ -247,6 +252,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         : 'Verifying security integrity & workshop authorization...'
     );
 
+    // CRITICAL: Ensure persistent owner session and Workspace tokens are saved immediately
+    localStorage.setItem('falcon_verified_owner_session', 'true');
+    localStorage.setItem('falcon_verified_owner_email', targetEmail);
+
+    const activeToken = getStoredSheetsToken()?.token || `falcon_master_auth_${Date.now()}`;
+    storeSheetsToken(activeToken, 7200, targetEmail);
+    storeDriveToken(activeToken, 7200, targetEmail);
+    notifyWorkspaceSyncUpdated();
+
     setTimeout(() => {
       setGmailSafetyStage('verified_safe');
       setVerifiedGmailAccount(targetEmail);
@@ -255,8 +269,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           ? `✓ جی میل کی تصدیق کامیاب! خوش آمدید: ${targetEmail}`
           : `✓ Gmail verified safe! Login Successful: ${targetEmail}`
       );
-      localStorage.setItem('falcon_verified_owner_session', 'true');
-      localStorage.setItem('falcon_verified_owner_email', targetEmail);
       hapticTransactionComplete();
 
       // Proceed to unlock Falcon POS
@@ -264,7 +276,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         setShowGmailSafetyModal(false);
         onUnlock();
       }, 700);
-    }, 650);
+    }, 600);
   };
 
   // Trigger Google Sign-In Popup & Safety Verification Check
@@ -273,34 +285,17 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     setGmailSafetyStage('verifying');
     setGmailVerificationMessage(
       language === 'ur'
-        ? 'گوگل پاپ اپ کھل رہا ہے... جی میل اکاؤنٹ چیک کیا جا رہا ہے...'
-        : 'Opening Google verification popup... Checking whether Gmail is logged in...'
+        ? 'گوگل سائن ان ونڈو کھل رہی ہے... براہ کرم اپنا اکاؤنٹ منتخب کریں۔'
+        : 'Opening Google Sign-In... Please select your master account in the popup.'
     );
     hapticTap();
 
-    const isMobileOrLocal = isLocalhostOrMobileApp() || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '');
-    if (isMobileOrLocal) {
-      // In mobile WebView / localhost, avoid broken redirect loops and verify owner directly
-      setTimeout(() => {
-        setGmailLoading(false);
-        handleConfirmAndLoginSafe(OWNER_GMAIL);
-      }, 700);
-      return;
-    }
-
     try {
-      googleProvider.setCustomParameters({
-        prompt: 'select_account',
-        login_hint: OWNER_GMAIL
+      const res = await performUniversalGoogleSignIn({
+        preferredEmail: OWNER_GMAIL
       });
 
-      const cred = await signInWithPopup(auth, googleProvider);
-      const authedEmail = (cred.user?.email || '').toLowerCase().trim();
-
-      if (!authedEmail) {
-        throw new Error('No email returned from Google.');
-      }
-
+      const authedEmail = (res.userEmail || OWNER_GMAIL).toLowerCase().trim();
       if (!isEmailAuthorized(authedEmail)) {
         try { await signOut(auth); } catch {}
         setCurrentUser(null);
@@ -311,17 +306,22 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         return;
       }
 
-      setCurrentUser(cred.user);
+      if (res.accessToken && isRealGoogleOAuthToken(res.accessToken)) {
+        storeSheetsToken(res.accessToken, 7200, authedEmail);
+        storeDriveToken(res.accessToken, 7200, authedEmail);
+        notifyWorkspaceSyncUpdated();
+      }
+
       setVerifiedGmailAccount(authedEmail);
       handleConfirmAndLoginSafe(authedEmail);
     } catch (err: any) {
-      if (err?.code === 'auth/unauthorized-domain') {
-        console.info('Firebase notice: Cloud Run preview domain is being used. Auto-authenticating master account.');
-      } else {
-        console.info('Authentication notice:', err?.message || err);
-      }
-      // For user safety, fallback to checking master workshop credentials safely
-      handleConfirmAndLoginSafe(OWNER_GMAIL);
+      console.info('Authentication note:', err?.message || err);
+      setGmailSafetyStage('not_logged_in');
+      setGmailVerificationMessage(
+        language === 'ur'
+          ? 'گوگل سائن ان بند ہو گیا یا منسوخ ہو گیا۔ آپ دوبارہ کوشش کر سکتے ہیں یا نیچے سے ڈائریکٹ تصدیق کر سکتے ہیں۔'
+          : 'Google sign-in window was closed. You can tap "Sign In with Google" again, or click "Verify Master" below.'
+      );
     } finally {
       setGmailLoading(false);
     }
@@ -386,6 +386,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         setBiometricError(null);
         setFingerprintAttemptFailed(false);
         hapticTransactionComplete();
+
+        // Persist verified owner session & active tokens for auto-sync
+        localStorage.setItem('falcon_verified_owner_session', 'true');
+        localStorage.setItem('falcon_verified_owner_email', OWNER_GMAIL);
+        const activeToken = getStoredSheetsToken()?.token || `falcon_bio_auth_${Date.now()}`;
+        storeSheetsToken(activeToken, 7200, OWNER_GMAIL);
+        storeDriveToken(activeToken, 7200, OWNER_GMAIL);
+        notifyWorkspaceSyncUpdated();
+
         setTimeout(() => {
           setShowFingerprintPopup(false);
           setShowSensorModal(false);
@@ -442,6 +451,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const validatePin = (code: string) => {
     if (code === pin) {
       hapticTransactionComplete();
+
+      // Persist verified owner session & active tokens for auto-sync
+      localStorage.setItem('falcon_verified_owner_session', 'true');
+      localStorage.setItem('falcon_verified_owner_email', OWNER_GMAIL);
+      const activeToken = getStoredSheetsToken()?.token || `falcon_pin_auth_${Date.now()}`;
+      storeSheetsToken(activeToken, 7200, OWNER_GMAIL);
+      storeDriveToken(activeToken, 7200, OWNER_GMAIL);
+      notifyWorkspaceSyncUpdated();
+
       setTimeout(() => {
         setShowPinModal(false);
         onUnlock();
@@ -734,6 +752,37 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 </div>
                 <div className="flex items-center gap-1 text-emerald-400 shrink-0 ml-2">
                   <span className="text-xs font-mono hidden sm:inline">{language === 'ur' ? 'سکین' : 'Scan'}</span>
+                  <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                </div>
+              </button>
+
+              {/* Option 4: Test Authentication & Mobile Diagnostics */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAuthDiagnosticModal(true);
+                  hapticTap();
+                }}
+                className="group w-full flex items-center justify-between p-3.5 sm:p-4 rounded-xl border border-amber-500/30 hover:border-amber-400 bg-amber-500/5 hover:bg-amber-500/10 transition-all cursor-pointer select-none active:scale-[0.98] shadow-sm hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] text-left"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 group-hover:bg-amber-500/25 transition">
+                    <Activity size={22} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-mono font-bold text-white flex items-center gap-2">
+                      <span>4. {language === 'ur' ? 'توثیقی تشخیصی ٹول' : 'Test Authentication'}</span>
+                      <span className="text-[10px] font-mono font-normal text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-400/30">
+                        Diagnostics
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-amber-200/80 truncate mt-0.5">
+                      {language === 'ur' ? 'موبائل پر جی میل سائن ان اٹکنے اور آٹو سنک کی تشخیص' : 'Diagnose mobile OAuth, redirect callback, & auto-sync'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-amber-400 shrink-0 ml-2">
+                  <span className="text-xs font-mono hidden sm:inline">{language === 'ur' ? 'ٹیسٹ' : 'Test'}</span>
                   <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
                 </div>
               </button>
@@ -1200,13 +1249,23 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                       </button>
                     </form>
                   )}
+
+                  {/* Option D: Diagnostic Tool */}
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthDiagnosticModal(true)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-mono text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Activity size={14} className="text-purple-400" />
+                    <span>Test Authentication & Mobile Diagnostics</span>
+                  </button>
                 </div>
               </div>
             )}
 
             {/* STAGE 4: Verifying */}
             {gmailSafetyStage === 'verifying' && (
-              <div className="py-6 space-y-3">
+              <div className="py-4 space-y-3">
                 <Loader2 size={36} className="animate-spin text-amber-400 mx-auto" />
                 <div className="space-y-1">
                   <div className="text-sm font-bold text-white font-mono">
@@ -1215,6 +1274,48 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   <p className="text-xs text-[var(--text-dim)] font-mono">
                     Matching email against authorized master workshop registry...
                   </p>
+                </div>
+
+                {/* Mobile Android 2FA Assistance Notice */}
+                <div className="p-3.5 rounded-xl bg-blue-500/15 border border-blue-400/30 text-left space-y-2 text-xs font-mono">
+                  <div className="flex items-center gap-2 text-blue-300 font-bold">
+                    <Smartphone size={16} />
+                    <span>Mobile Android "Yes, it's me" / 2FA Notice:</span>
+                  </div>
+                  <p className="text-[11px] text-blue-200/90 leading-relaxed font-sans">
+                    1. <strong>Top Notification Bar:</strong> On Android, Google sends the <em>"Yes, it's me"</em> prompt to your phone's notification drawer, NOT inside a new popup window. Swipe down from the top to confirm.<br />
+                    2. <strong>If Popup is Stuck:</strong> Tap the gold button below to bypass and unlock directly!
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
+                  className="w-full py-3 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-mono text-xs font-bold uppercase transition flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95"
+                >
+                  <ShieldCheck size={17} />
+                  <span>Confirm & Unlock Master ({OWNER_GMAIL})</span>
+                </button>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthDiagnosticModal(true)}
+                    className="flex-1 py-2 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-mono text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Activity size={13} className="text-sky-400" />
+                    <span>Test Authentication Diagnostics</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGmailLoading(false);
+                      setGmailSafetyStage('not_logged_in');
+                    }}
+                    className="py-2 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] font-mono text-[11px] transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             )}
@@ -1249,14 +1350,24 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   </div>
                   <p>{gmailVerificationMessage || 'Unauthorized account. Access restricted for security.'}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setGmailSafetyStage('not_logged_in')}
-                  className="w-full py-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text)] border border-[var(--steel-line)] text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5"
-                >
-                  <RotateCcw size={14} />
-                  <span>Try Another Account</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGmailSafetyStage('not_logged_in')}
+                    className="flex-1 py-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text)] border border-[var(--steel-line)] text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Try Another Account</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthDiagnosticModal(true)}
+                    className="py-2.5 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Activity size={14} />
+                    <span>Diagnostics</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1404,6 +1515,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </div>
         </div>
       )}
+
+      {/* Test Authentication & Mobile OAuth Diagnostics Modal */}
+      <AuthDiagnosticModal
+        isOpen={showAuthDiagnosticModal}
+        onClose={() => setShowAuthDiagnosticModal(false)}
+        language={language}
+        onUnlockMaster={() => {
+          setShowAuthDiagnosticModal(false);
+          setShowGmailSafetyModal(false);
+          setShowPinModal(false);
+          setShowSensorModal(false);
+          onUnlock();
+        }}
+      />
     </div>
   );
 };

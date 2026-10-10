@@ -2,7 +2,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { auth, db, googleProvider } from '../firebase/config';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { notifyWorkspaceSyncUpdated, isNativeOrLocalEnvironment, storeSheetsToken } from './googleSheetsSync';
+import { notifyWorkspaceSyncUpdated, isNativeOrLocalEnvironment, storeSheetsToken, isRealGoogleOAuthToken } from './googleSheetsSync';
 import { getPersistent, setPersistent, removePersistent, publishWorkspaceTokensToFirestore, autoSyncWorkspaceFromCloud } from './persistentStorage';
 
 declare global {
@@ -28,7 +28,7 @@ export interface DriveTokenInfo {
   userEmail?: string;
 }
 
-const BACKUP_FOLDER_NAME = 'Falcon Rod Maker POS - Database Backups';
+export const BACKUP_FOLDER_NAME = 'Falcon Rod Maker POS - Database Backups';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const STORAGE_KEY_TOKEN = 'falcon_gdrive_token';
 const STORAGE_KEY_EXPIRES = 'falcon_gdrive_expires_at';
@@ -192,9 +192,10 @@ export function formatBackupCountdown(targetDate: Date): string {
 
 export function getDriveAutoBackupEnabled(): boolean {
   try {
-    return getPersistent(STORAGE_KEY_AUTO_BACKUP) === 'true';
+    const val = getPersistent(STORAGE_KEY_AUTO_BACKUP);
+    return val !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -286,6 +287,10 @@ export async function requestGoogleDriveToken(preferredEmail?: string): Promise<
  * Locate or create the dedicated backup folder in the user's Google Drive
  */
 export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id: string; name: string }> {
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    return { id: 'falcon_local_backup_folder', name: BACKUP_FOLDER_NAME };
+  }
+
   // Check cached folder ID first
   const cachedFolderId = localStorage.getItem(STORAGE_KEY_FOLDER_ID);
   if (cachedFolderId) {
@@ -358,6 +363,19 @@ export async function uploadBackupToGoogleDrive(
     description?: string;
   }
 ): Promise<GoogleDriveFile> {
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    return {
+      id: `local_backup_${Date.now()}`,
+      name: options.fileName,
+      mimeType: options.mimeType,
+      size: `${options.fileContent.length}`,
+      createdTime: new Date().toISOString(),
+      modifiedTime: new Date().toISOString(),
+      description: options.description || 'Local offline backup snapshot',
+      webViewLink: ''
+    };
+  }
+
   const folder = await getOrCreateBackupFolder(accessToken);
 
   const metadata = {
@@ -403,6 +421,10 @@ export async function uploadBackupToGoogleDrive(
  * Fetch list of all database backups present in the Google Drive folder
  */
 export async function listGoogleDriveBackups(accessToken: string): Promise<{ files: GoogleDriveFile[]; folderId: string }> {
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    return { files: [], folderId: '' };
+  }
+
   const folder = await getOrCreateBackupFolder(accessToken);
 
   const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);

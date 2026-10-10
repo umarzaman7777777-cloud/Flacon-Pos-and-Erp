@@ -12,7 +12,7 @@ export interface OAuthDebugLogEntry {
   timestamp: string; // ISO string
   formattedTime: string; // Local human-readable time
   service: 'sheets' | 'drive' | 'general';
-  category: 'token_exchange' | 'scope_validation' | 'api_probe' | 'origin_mismatch' | 'unknown_gmail_trace' | 'network' | 'user_cancelled';
+  category: 'token_exchange' | 'scope_validation' | 'api_probe' | 'origin_mismatch' | 'unknown_gmail_trace' | 'network' | 'user_cancelled' | 'redirect_callback' | 'sync_engine';
   severity: 'error' | 'warn' | 'info';
   errorCode: string;
   httpStatus?: number | null;

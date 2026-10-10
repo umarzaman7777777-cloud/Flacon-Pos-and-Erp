@@ -12,7 +12,9 @@ import {
   ExternalLink,
   RefreshCw,
   Search,
-  Filter
+  Filter,
+  Activity,
+  Zap
 } from 'lucide-react';
 import {
   OAuthDebugLogEntry,
@@ -22,6 +24,7 @@ import {
   OAUTH_LOG_EVENT
 } from '../utils/oauthDebugLogger';
 import { AppLanguage } from '../types';
+import { AuthDiagnosticModal } from './AuthDiagnosticModal';
 
 interface OAuthDebugLogsSectionProps {
   language?: AppLanguage;
@@ -38,6 +41,7 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [isDiagnosticModalOpen, setIsDiagnosticModalOpen] = useState(false);
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -80,7 +84,7 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
     URL.revokeObjectURL(url);
   };
 
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = logs.filter((log: OAuthDebugLogEntry) => {
     if (filterService !== 'all' && log.service !== filterService) {
       return false;
     }
@@ -98,7 +102,7 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
     return true;
   });
 
-  const unknownGmailCount = logs.filter(l => l.category === 'unknown_gmail_trace' || l.errorCode === 'AUTH_UNKNOWN_GMAIL_TRACE').length;
+  const unknownGmailCount = logs.filter((l: OAuthDebugLogEntry) => l.category === 'unknown_gmail_trace' || l.errorCode === 'AUTH_UNKNOWN_GMAIL_TRACE').length;
 
   return (
     <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-5 shadow-md max-w-full overflow-x-hidden break-words">
@@ -132,6 +136,16 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
 
         {/* Global Actions */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsDiagnosticModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+            title="Launch live interactive OAuth and mobile authentication diagnostic suite"
+          >
+            <Zap size={13} className="text-amber-400" />
+            <span>Test Authentication</span>
+          </button>
+
           <button
             type="button"
             onClick={handleCopyAll}
@@ -227,7 +241,7 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
             </p>
           </div>
         ) : (
-          filteredLogs.map(log => {
+          filteredLogs.map((log: OAuthDebugLogEntry) => {
             const isExpanded = expandedLogId === log.id;
             const isUnknownGmail = log.category === 'unknown_gmail_trace' || log.errorCode === 'AUTH_UNKNOWN_GMAIL_TRACE';
 
@@ -335,6 +349,12 @@ export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
           })
         )}
       </div>
+
+      <AuthDiagnosticModal
+        isOpen={isDiagnosticModalOpen}
+        onClose={() => setIsDiagnosticModalOpen(false)}
+        language={language}
+      />
     </div>
   );
 };

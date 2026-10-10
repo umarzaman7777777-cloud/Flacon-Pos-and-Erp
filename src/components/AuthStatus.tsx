@@ -16,9 +16,11 @@ import {
   Cloud,
   CheckCircle2,
   Clock,
-  Sparkles
+  Sparkles,
+  Zap
 } from 'lucide-react';
 import { AppLanguage } from '../types';
+import { AuthDiagnosticModal } from './AuthDiagnosticModal';
 import {
   WorkspaceServiceType,
   OAuthVerificationResult,
@@ -67,6 +69,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [showManualToken, setShowManualToken] = useState(false);
   const [manualTokenInput, setManualTokenInput] = useState('');
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
 
   useEffect(() => {
     const handleLogUpdate = () => {
@@ -486,8 +489,18 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           </div>
         </div>
 
-        {/* RE-CHECK BUTTON */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end sm:self-center">
+        {/* RE-CHECK & DIAGNOSTIC BUTTONS */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end sm:self-center flex-wrap">
+          <button
+            type="button"
+            onClick={() => setShowDiagnosticModal(true)}
+            className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+            title="Launch live interactive OAuth, redirect callback, and auto-sync diagnostics"
+          >
+            <Zap size={12} className="text-amber-400" />
+            <span>Test Authentication</span>
+          </button>
+
           <button
             type="button"
             onClick={() => runRealtimeVerification(service, true)}
@@ -939,6 +952,12 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           </div>
         </div>
       )}
+
+      <AuthDiagnosticModal
+        isOpen={showDiagnosticModal}
+        onClose={() => setShowDiagnosticModal(false)}
+        language={language}
+      />
     </div>
   );
 };

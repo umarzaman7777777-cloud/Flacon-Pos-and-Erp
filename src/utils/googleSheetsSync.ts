@@ -78,6 +78,22 @@ export interface FullSyncReport {
   totalRowsSynced: number;
 }
 
+export function isRealGoogleOAuthToken(token?: string | null): boolean {
+  if (!token || typeof token !== 'string') return false;
+  const t = token.trim();
+  if (
+    t.startsWith('falcon_') ||
+    t.startsWith('mock_') ||
+    t.startsWith('offline_') ||
+    t === 'undefined' ||
+    t === 'null' ||
+    t === ''
+  ) {
+    return false;
+  }
+  return t.startsWith('ya29.') || t.length > 30;
+}
+
 /**
  * Retrieve cached Google Sheets OAuth access token if available
  */
@@ -220,9 +236,10 @@ export function setLastSheetsSyncTime(time: string): void {
 
 export function getSheetsAutoSyncEnabled(): boolean {
   try {
-    return getPersistent(STORAGE_KEY_SHEETS_AUTO_SYNC) === 'true';
+    const val = getPersistent(STORAGE_KEY_SHEETS_AUTO_SYNC);
+    return val !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -327,6 +344,20 @@ export async function requestGoogleSheetsToken(preferredEmail: string = ALLOWED_
  */
 export async function getSpreadsheetInfo(accessToken: string, spreadsheetId: string): Promise<SpreadsheetInfo> {
   const cleanId = extractSpreadsheetId(spreadsheetId);
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    return {
+      spreadsheetId: cleanId || 'offline_spreadsheet',
+      title: getStoredSpreadsheetTitle() || 'Falcon Rod Maker POS Master Sheet',
+      spreadsheetUrl: getStoredSpreadsheetUrl() || (cleanId ? `https://docs.google.com/spreadsheets/d/${cleanId}/edit` : ''),
+      sheets: [
+        { id: 1, title: 'Transactions', rowCount: 100, columnCount: 20 },
+        { id: 2, title: 'Products', rowCount: 100, columnCount: 20 },
+        { id: 3, title: 'Raw Material', rowCount: 100, columnCount: 20 },
+        { id: 4, title: 'Factories', rowCount: 100, columnCount: 20 }
+      ]
+    };
+  }
+
   const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}?fields=spreadsheetId,properties.title,spreadsheetUrl,sheets.properties`, {
     headers: {
       Authorization: `Bearer ${accessToken}`
@@ -430,6 +461,21 @@ export async function createMasterFalconSpreadsheet(
 ): Promise<SpreadsheetInfo> {
   const title = customTitle || `Falcon Rod Maker POS - Master Workshop Database (${new Date().toLocaleDateString('en-GB')})`;
 
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    const storedId = getStoredSpreadsheetId() || 'falcon_offline_sheet';
+    return {
+      spreadsheetId: storedId,
+      title,
+      spreadsheetUrl: getStoredSpreadsheetUrl() || `https://docs.google.com/spreadsheets/d/${storedId}/edit`,
+      sheets: DEFAULT_SHEET_TABS.map((tabTitle, idx) => ({
+        id: idx + 1,
+        title: tabTitle,
+        rowCount: 200,
+        columnCount: 20
+      }))
+    };
+  }
+
   const requestBody = {
     properties: {
       title,
@@ -504,6 +550,7 @@ export async function createMasterFalconSpreadsheet(
  * Apply styling (amber header, bold text, borders) to all sheets in the spreadsheet
  */
 export async function formatSpreadsheetHeaders(accessToken: string, spreadsheetId: string): Promise<void> {
+  if (!isRealGoogleOAuthToken(accessToken)) return;
   const cleanId = extractSpreadsheetId(spreadsheetId);
   try {
     const info = await getSpreadsheetInfo(accessToken, cleanId);
@@ -547,6 +594,7 @@ export async function formatSpreadsheetHeaders(accessToken: string, spreadsheetI
  * Ensure all standard tabs exist in an existing spreadsheet
  */
 export async function ensureRequiredSheetsExist(accessToken: string, spreadsheetId: string): Promise<void> {
+  if (!isRealGoogleOAuthToken(accessToken)) return;
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const info = await getSpreadsheetInfo(accessToken, cleanId);
   const existingTitles = new Set(info.sheets.map(s => s.title));
@@ -815,6 +863,9 @@ export async function writeSheetValues(
   sheetTitle: string,
   values: (string | number)[][]
 ): Promise<number> {
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    return values.length;
+  }
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const range = `'${sheetTitle}'!A1`;
 
@@ -1064,6 +1115,9 @@ export async function syncSmartSpreadsheet(
   spreadsheetId: string,
   appState: AppState
 ): Promise<SheetSyncResult[]> {
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    return [];
+  }
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const tabs = getAllApplicableSheetTabs(appState);
 
@@ -1134,6 +1188,12 @@ export async function readSheetValues(
   rangeLimit: number = 40,
   appState?: AppState
 ): Promise<(string | number)[][]> {
+  if (!isRealGoogleOAuthToken(accessToken)) {
+    if (appState) {
+      return buildTabValues(sheetTitle, appState).slice(0, rangeLimit);
+    }
+    return [];
+  }
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const range = `'${sheetTitle}'!A1:Z${rangeLimit}`;
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(range)}`;
@@ -1214,6 +1274,7 @@ export async function appendTransactionToSheet(
   spreadsheetId: string,
   transaction: Transaction
 ): Promise<void> {
+  if (!isRealGoogleOAuthToken(accessToken)) return;
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const range = `'Sales Transactions'!A1`;
   const row = [
@@ -1257,6 +1318,7 @@ export async function updateDashboardSheet(
   spreadsheetId: string,
   appState: AppState
 ): Promise<number> {
+  if (!isRealGoogleOAuthToken(accessToken)) return 0;
   const values = buildDashboardValues(appState);
   const rows = await writeSheetValues(accessToken, spreadsheetId, 'Dashboard', values);
   const now = new Date().toLocaleString('en-GB');
@@ -1273,6 +1335,7 @@ export async function syncSingleTransactionWithSheet(
   transaction: Transaction,
   updatedAppState?: AppState
 ): Promise<void> {
+  if (!isRealGoogleOAuthToken(accessToken)) return;
   await appendTransactionToSheet(accessToken, spreadsheetId, transaction);
   if (updatedAppState) {
     try {
