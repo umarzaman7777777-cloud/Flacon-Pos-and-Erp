@@ -186,6 +186,68 @@ export function generateSQLDump(appState: AppState, userEmail?: string, projectI
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Table: labour_workers & labour_entries
+  // ---------------------------------------------------------------------
+  sql += `-- ---------------------------------------------------------------------\n`;
+  sql += `-- Table: labour_workers\n`;
+  sql += `-- ---------------------------------------------------------------------\n`;
+  sql += `CREATE TABLE IF NOT EXISTS labour_workers (\n`;
+  sql += `  name VARCHAR(255) PRIMARY KEY,\n`;
+  sql += `  work_type VARCHAR(100),\n`;
+  sql += `  rate_type VARCHAR(50),\n`;
+  sql += `  rate DECIMAL(10, 2) DEFAULT 0.00\n`;
+  sql += `);\n\n`;
+
+  if (Array.isArray(appState.workers) && appState.workers.length > 0) {
+    sql += `INSERT INTO labour_workers (name, work_type, rate_type, rate) VALUES\n`;
+    const wRows = appState.workers.map(w =>
+      `  (${sqlEscape(w.name)}, ${sqlEscape(w.workType)}, ${sqlEscape(w.rateType)}, ${w.rate || 0})`
+    );
+    sql += wRows.join(',\n') + ';\n\n';
+  }
+
+  sql += `-- ---------------------------------------------------------------------\n`;
+  sql += `-- Table: labour_entries (By Item & By Daily Wage)\n`;
+  sql += `-- ---------------------------------------------------------------------\n`;
+  sql += `CREATE TABLE IF NOT EXISTS labour_entries (\n`;
+  sql += `  id VARCHAR(64) PRIMARY KEY,\n`;
+  sql += `  worker_name VARCHAR(255) NOT NULL,\n`;
+  sql += `  entry_date VARCHAR(20),\n`;
+  sql += `  kind VARCHAR(50),\n`;
+  sql += `  status VARCHAR(50),\n`;
+  sql += `  item_name VARCHAR(255),\n`;
+  sql += `  size VARCHAR(50),\n`;
+  sql += `  item_components TEXT,\n`;
+  sql += `  work_type VARCHAR(100),\n`;
+  sql += `  duty_shift VARCHAR(50),\n`;
+  sql += `  shifts DECIMAL(10, 2),\n`;
+  sql += `  units DECIMAL(10, 2),\n`;
+  sql += `  rate DECIMAL(10, 2),\n`;
+  sql += `  daily_wage_rate DECIMAL(10, 2),\n`;
+  sql += `  debit DECIMAL(12, 2) DEFAULT 0.00,\n`;
+  sql += `  credit DECIMAL(12, 2) DEFAULT 0.00,\n`;
+  sql += `  note TEXT\n`;
+  sql += `);\n\n`;
+
+  if (Array.isArray(appState.workers)) {
+    const allLabourRows: string[] = [];
+    appState.workers.forEach(w => {
+      if (Array.isArray(w.entries)) {
+        w.entries.forEach(e => {
+          allLabourRows.push(
+            `  (${sqlEscape(e.id)}, ${sqlEscape(w.name)}, ${sqlEscape(e.date)}, ${sqlEscape(e.kind)}, ${sqlEscape(e.status)}, ${sqlEscape(e.itemName || e.productName)}, ${sqlEscape(e.size)}, ${sqlEscape(e.itemComponents)}, ${sqlEscape(e.workType)}, ${sqlEscape(e.dutyShift)}, ${e.shifts ?? 'NULL'}, ${e.units ?? e.qty ?? 'NULL'}, ${e.rate ?? 'NULL'}, ${e.dailyWageRate ?? 'NULL'}, ${e.debit || 0}, ${e.credit || 0}, ${sqlEscape(e.note)})`
+          );
+        });
+      }
+    });
+
+    if (allLabourRows.length > 0) {
+      sql += `INSERT INTO labour_entries (id, worker_name, entry_date, kind, status, item_name, size, item_components, work_type, duty_shift, shifts, units, rate, daily_wage_rate, debit, credit, note) VALUES\n`;
+      sql += allLabourRows.join(',\n') + ';\n\n';
+    }
+  }
+
   sql += `COMMIT;\n`;
   sql += `-- End of Falcon Rod Maker SQL Database Dump\n`;
 
@@ -300,6 +362,39 @@ export function getSQLTableSummaries(appState: AppState): SQLTableSummary[] {
         { name: 'payment_method', type: 'VARCHAR(50)' }
       ],
       sampleSQL: 'SELECT party_name, SUM(debit) - SUM(credit) AS net_balance FROM customer_ledger_entries GROUP BY party_name;'
+    },
+    {
+      tableName: 'labour_workers',
+      rowCount: appState.workers?.length || 0,
+      columns: [
+        { name: 'name', type: 'VARCHAR(255) (PK)' },
+        { name: 'work_type', type: 'VARCHAR(100)' },
+        { name: 'rate_type', type: 'VARCHAR(50)' },
+        { name: 'rate', type: 'DECIMAL(10,2)' }
+      ],
+      sampleSQL: 'SELECT name, work_type, rate_type, rate FROM labour_workers ORDER BY name ASC;'
+    },
+    {
+      tableName: 'labour_entries',
+      rowCount: appState.workers ? appState.workers.reduce((acc, w) => acc + (w.entries?.length || 0), 0) : 0,
+      columns: [
+        { name: 'id', type: 'VARCHAR(64) (PK)' },
+        { name: 'worker_name', type: 'VARCHAR(255)' },
+        { name: 'entry_date', type: 'VARCHAR(20)' },
+        { name: 'kind', type: 'VARCHAR(50)' },
+        { name: 'status', type: 'VARCHAR(50)' },
+        { name: 'item_name', type: 'VARCHAR(255)' },
+        { name: 'item_components', type: 'TEXT' },
+        { name: 'work_type', type: 'VARCHAR(100)' },
+        { name: 'duty_shift', type: 'VARCHAR(50)' },
+        { name: 'shifts', type: 'DECIMAL(10,2)' },
+        { name: 'units', type: 'DECIMAL(10,2)' },
+        { name: 'rate', type: 'DECIMAL(10,2)' },
+        { name: 'daily_wage_rate', type: 'DECIMAL(10,2)' },
+        { name: 'debit', type: 'DECIMAL(12,2)' },
+        { name: 'credit', type: 'DECIMAL(12,2)' }
+      ],
+      sampleSQL: 'SELECT worker_name, entry_date, item_name, work_type, debit, credit FROM labour_entries ORDER BY entry_date DESC LIMIT 10;'
     }
   ];
 }
