@@ -326,7 +326,11 @@ export async function requestGoogleSheetsToken(preferredEmail: string = ALLOWED_
     const authedEmail = authResult.userEmail || preferredEmail || ALLOWED_SHEETS_OWNER_EMAIL;
 
     if (!accessToken) {
-      throw new Error('Google authorization completed. Verifying access credentials...');
+      const fallback = getStoredSheetsToken() || (await import('./googleDriveBackup')).getStoredDriveToken();
+      if (fallback?.token) {
+        return fallback.token;
+      }
+      throw new Error('Google Sheets authorization was not completed. You can tap "Enter Token" or "Quick Connect" to authorize immediately.');
     }
     storeSheetsToken(accessToken, 3600, authedEmail);
     try {

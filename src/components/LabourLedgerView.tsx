@@ -671,23 +671,29 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                 .map(w => (
                   <div key={w.name} className="flex items-center justify-between pt-2">
                     <span className="font-semibold text-xs text-[var(--text)]">{w.name}</span>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1.5 flex-wrap">
                       {(['present', 'half', 'absent', 'leave'] as const).map(st => (
                         <button
                           key={st}
                           type="button"
                           onClick={() => setBulkStatuses(prev => ({ ...prev, [w.name]: st }))}
-                          className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition ${
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1 cursor-pointer select-none ${
                             bulkStatuses[w.name] === st
                               ? st === 'present'
-                                ? 'bg-emerald-500 text-white'
+                                ? 'bg-emerald-600 text-white shadow-xs'
                                 : st === 'half'
-                                ? 'bg-amber-500 text-black'
-                                : 'bg-red-500 text-white'
-                              : 'bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text-dim)]'
+                                ? 'bg-amber-500 text-black shadow-xs'
+                                : st === 'absent'
+                                ? 'bg-rose-600 text-white shadow-xs'
+                                : 'bg-purple-600 text-white shadow-xs'
+                              : 'bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)]'
                           }`}
                         >
-                          {st[0]}
+                          {st === 'present' && <CheckCircle2 size={11} />}
+                          {st === 'half' && <Clock size={11} />}
+                          {st === 'absent' && <AlertCircle size={11} />}
+                          {st === 'leave' && <Calendar size={11} />}
+                          <span>{st === 'present' ? 'Present' : st === 'half' ? 'Half' : st === 'absent' ? 'Absent' : 'Leave'}</span>
                         </button>
                       ))}
                     </div>
@@ -871,7 +877,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                             {(e.itemName || e.productName) ? (
                               <div className="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5 flex-wrap mt-0.5">
                                 <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold tracking-wider">
-                                  📦 BY ITEM
+                                  📦 LINE [BY ITEM]
                                 </span>
                                 <span className="text-amber-400 font-bold">{e.itemName || e.productName}</span>
                                 {e.size && (
@@ -899,7 +905,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                               /* Line: By Daily Wage */
                               <div className="text-[11px] font-semibold text-[var(--text)] flex items-center gap-1.5 flex-wrap mt-0.5">
                                 <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[9px] font-mono font-bold tracking-wider">
-                                  💵 BY DAILY WAGE
+                                  💵 LINE [BY DAILY WAGE]
                                 </span>
                                 <span className="text-blue-300 font-bold">⚙️ {e.workType}</span>
                                 {e.itemComponents && (
@@ -999,69 +1005,54 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
             {/* Quick Add Entry Form */}
             <form onSubmit={handleAddEntry} className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2.5 text-xs">
               {/* Header: Kind selector & Date & Mode Tabs */}
+              {/* Header: Kind & Line selector & Date */}
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <select
-                    value={entryKind}
-                    onChange={e => setEntryKind(e.target.value as any)}
-                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--yellow)] font-bold rounded-lg px-2.5 py-1 text-xs focus:outline-none cursor-pointer"
+                    value={
+                      entryKind === 'attendance'
+                        ? workMode === 'product'
+                          ? 'line_item'
+                          : workMode === 'work_type'
+                          ? 'line_wage'
+                          : 'attendance_leave'
+                        : entryKind
+                    }
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === 'line_item') {
+                        setEntryKind('attendance');
+                        setWorkMode('product');
+                      } else if (val === 'line_wage') {
+                        setEntryKind('attendance');
+                        setWorkMode('work_type');
+                      } else if (val === 'attendance_leave') {
+                        setEntryKind('attendance');
+                        setWorkMode('non_working');
+                      } else {
+                        setEntryKind(val as any);
+                      }
+                    }}
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--yellow)] font-bold rounded-lg px-3 py-1.5 text-xs focus:outline-none cursor-pointer"
                   >
-                    <option value="attendance">📋 Attendance / Work</option>
-                    <option value="payment">💸 Wages Payment</option>
-                    <option value="advance">💳 Advance</option>
-                    <option value="loan">🤝 Loan</option>
-                    <option value="damage">⚠️ Damage Deduction</option>
+                    <option value="line_item">📦 Add Line: By Item (Product / Piece Rate)</option>
+                    <option value="line_wage">💵 Add Line: By Daily Wage (Shift & Work Type)</option>
+                    <option value="attendance_leave">🗓️ Mark Absent / Leave (No Wage)</option>
+                    <option value="payment">💸 Wages Payment (Debit)</option>
+                    <option value="advance">💳 Advance Given (Debit)</option>
+                    <option value="loan">🤝 Loan Given (Debit)</option>
+                    <option value="damage">⚠️ Damage Deduction (Debit)</option>
                   </select>
 
                   <input
                     type="date"
                     value={entryDate}
                     onChange={e => setEntryDate(e.target.value)}
-                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2 py-1 text-xs text-[var(--text)] font-mono"
+                    className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono"
                   />
                 </div>
 
-                {entryKind === 'attendance' ? (
-                  /* Work sub-mode tabs: By Item / Product vs By Daily Wage vs Absent / Leave */
-                  <div className="flex items-center bg-[var(--panel-raised)] p-0.5 rounded-lg border border-[var(--steel-line)] text-xs font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setWorkMode('product')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
-                        workMode === 'product'
-                          ? 'bg-[var(--yellow)] text-black shadow-xs font-black'
-                          : 'text-[var(--text-dim)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      <Package size={13} />
-                      <span>By Item / Product</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setWorkMode('work_type')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
-                        workMode === 'work_type'
-                          ? 'bg-[var(--yellow)] text-black shadow-xs font-black'
-                          : 'text-[var(--text-dim)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      <Calendar size={13} />
-                      <span>By Daily Wage</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setWorkMode('non_working')}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition cursor-pointer ${
-                        workMode === 'non_working'
-                          ? 'bg-red-500 text-white shadow-xs font-black'
-                          : 'text-[var(--text-dim)] hover:text-red-400'
-                      }`}
-                    >
-                      <AlertCircle size={13} />
-                      <span>Absent/Leave</span>
-                    </button>
-                  </div>
-                ) : (
+                {entryKind !== 'attendance' ? (
                   <button
                     type="button"
                     onClick={() => setShowExtendedPaymentFields(!showExtendedPaymentFields)}
@@ -1069,6 +1060,12 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                   >
                     {showExtendedPaymentFields ? 'Hide Payment Channels' : '+ Detailed Payment Channels (By / To / A/C)'}
                   </button>
+                ) : (
+                  <div className="text-[11px] font-mono text-[var(--text-dim)]">
+                    {workMode === 'product' && <span className="text-amber-400 font-bold">Auto-Attendance: Present ✓</span>}
+                    {workMode === 'work_type' && <span className="text-blue-400 font-bold">Auto-Attendance: {workShiftDuty === 'half' ? 'Half Day' : 'Present'} ✓</span>}
+                    {workMode === 'non_working' && <span className="text-rose-400 font-bold">Status: Absent / Leave</span>}
+                  </div>
                 )}
               </div>
 

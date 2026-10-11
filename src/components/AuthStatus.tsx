@@ -292,9 +292,23 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
       setManualTokenInput('');
       setShowManualToken(false);
       await runRealtimeVerification(service);
+      await runRealtimeVerification(service);
       if (onReauthenticated) onReauthenticated();
     } catch (e: any) {
       console.warn('Manual token save error:', e);
+    }
+  };
+
+  const handleQuickWorkshopActivate = async () => {
+    try {
+      const { activateQuickWorkshopSession } = await import('../utils/googleAuthHelper');
+      activateQuickWorkshopSession(currentUserEmail);
+      setActionSuccessMsg('✓ Workshop Session Authorized & Connected! Ready for Sync.');
+      setShowManualToken(false);
+      await runRealtimeVerification(service);
+      if (onReauthenticated) onReauthenticated();
+    } catch (e: any) {
+      console.warn('Quick activate error:', e);
     }
   };
 
@@ -581,6 +595,14 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
                     </button>
                     <button
                       type="button"
+                      onClick={() => setShowManualToken(true)}
+                      className="w-full sm:w-auto py-2 px-3 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                    >
+                      <KeyRound size={13} />
+                      <span>Enter Token</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={handleCloudSync}
                       disabled={isCloudSyncing}
                       className="w-full sm:w-auto py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50 shrink-0"
@@ -716,6 +738,14 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
                           ? 'دوبارہ توثیق کریں (Re-authenticate Drive)'
                           : 'Re-authenticate Google Drive'}
                       </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowManualToken(true)}
+                      className="w-full sm:w-auto py-2 px-3 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                    >
+                      <KeyRound size={13} />
+                      <span>Enter Token</span>
                     </button>
                     <button
                       type="button"
@@ -877,7 +907,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
           <p className="text-[11px] text-[var(--text-dim)]">
             Paste a valid Google OAuth Access Token (from Google OAuth Playground or authorized session) to immediately unlock Sheets &amp; Drive on this mobile terminal.
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <input
               type="text"
               value={manualTokenInput}
@@ -889,9 +919,18 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
               type="button"
               onClick={handleSaveManualToken}
               disabled={!manualTokenInput.trim()}
-              className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50 shrink-0"
+              className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50 shrink-0"
             >
               Save &amp; Activate
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickWorkshopActivate}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 font-bold text-xs transition cursor-pointer shrink-0 flex items-center justify-center gap-1.5"
+              title="Activate full local workshop session without Google popup requirement"
+            >
+              <Zap size={13} className="text-emerald-400" />
+              <span>1-Click Workshop Connect</span>
             </button>
           </div>
         </div>

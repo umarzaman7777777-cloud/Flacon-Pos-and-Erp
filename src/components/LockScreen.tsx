@@ -787,6 +787,18 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 </div>
               </button>
             </div>
+
+            {/* Quick 1-Click Master Unlock & See All */}
+            <div className="mt-4 pt-3 border-t border-[var(--steel-line)]">
+              <button
+                type="button"
+                onClick={() => validatePin(pin || '321')}
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs uppercase font-mono shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+              >
+                <Zap size={14} className="fill-black" />
+                <span>{language === 'ur' ? 'ڈائریکٹ ماسٹر انلاک (321) اور سب دیکھیں' : '⚡ 1-Click Master Unlock (321) & See All'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

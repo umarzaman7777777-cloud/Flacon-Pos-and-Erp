@@ -835,5 +835,5 @@ export async function reauthenticateWorkspaceService(
     notifyWorkspaceSyncUpdated();
     return res.accessToken;
   }
-  throw new Error('Google authorization completed without returning an access token.');
+  throw new Error('Google authorization was not completed. You can tap "Enter Token" or "Quick Connect" to authorize immediately.');
 }

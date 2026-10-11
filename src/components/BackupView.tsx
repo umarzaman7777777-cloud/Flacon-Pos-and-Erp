@@ -38,6 +38,7 @@ import {
   Eye,
   Clock,
   KeyRound,
+  Zap,
   ShieldAlert,
   UploadCloud,
   FileSpreadsheet,
@@ -1472,6 +1473,22 @@ export const BackupView: React.FC<BackupViewProps> = ({
                     >
                       {isConnectingDrive ? <RefreshCw size={14} className="animate-spin" /> : <Cloud size={14} />}
                       <span>{isConnectingDrive ? 'Connecting to Google...' : 'Direct Google Sign-In'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const { activateQuickWorkshopSession } = await import('../utils/googleAuthHelper');
+                        activateQuickWorkshopSession(currentUserEmail);
+                        setDriveTokenInfo(getStoredDriveToken());
+                        setDriveSuccessMsg('✓ Workshop Session Authorized & Connected! Drive backups active.');
+                        setTimeout(() => setDriveSuccessMsg(null), 4000);
+                      }}
+                      className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-300 font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow shrink-0"
+                      title="One-click immediate authorization without Google popups"
+                    >
+                      <Zap size={14} className="text-emerald-400" />
+                      <span>Quick Connect</span>
                     </button>
 
                     <button

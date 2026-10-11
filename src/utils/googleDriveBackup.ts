@@ -273,7 +273,11 @@ export async function requestGoogleDriveToken(preferredEmail?: string): Promise<
     const accessToken = authResult.accessToken;
 
     if (!accessToken) {
-      throw new Error('Google authorization completed. Verifying access credentials...');
+      const fallback = getStoredDriveToken() || (await import('./googleSheetsSync')).getStoredSheetsToken();
+      if (fallback?.token) {
+        return fallback.token;
+      }
+      throw new Error('Google Drive authorization was not completed. You can tap "Enter Token" or "Quick Connect" to authorize immediately.');
     }
     storeDriveToken(accessToken, 3600, email);
     storeSheetsToken(accessToken, 3600, email);

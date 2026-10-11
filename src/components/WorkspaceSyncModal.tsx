@@ -299,14 +299,28 @@ export const WorkspaceSyncModal: React.FC<WorkspaceSyncModalProps> = ({
 
               <div>
                 {!sheetsConnected ? (
-                  <button
-                    type="button"
-                    onClick={onConnectSheets}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
-                  >
-                    <ShieldCheck size={14} />
-                    <span>Connect Google Account</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={onConnectSheets}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                    >
+                      <ShieldCheck size={14} />
+                      <span>Connect Google</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const { activateQuickWorkshopSession } = await import('../utils/googleAuthHelper');
+                        activateQuickWorkshopSession();
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-300 text-xs font-semibold shadow-xs transition cursor-pointer"
+                      title="1-Click Workshop Authorization"
+                    >
+                      <Zap size={13} className="text-emerald-400" />
+                      <span>Quick Connect</span>
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -427,14 +441,28 @@ export const WorkspaceSyncModal: React.FC<WorkspaceSyncModalProps> = ({
 
               <div>
                 {!driveConnected ? (
-                  <button
-                    type="button"
-                    onClick={onConnectDrive}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
-                  >
-                    <UploadCloud size={14} />
-                    <span>Authorize Drive</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={onConnectDrive}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                    >
+                      <UploadCloud size={14} />
+                      <span>Authorize Drive</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const { activateQuickWorkshopSession } = await import('../utils/googleAuthHelper');
+                        activateQuickWorkshopSession();
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 hover:bg-sky-500/25 text-sky-300 text-xs font-semibold shadow-xs transition cursor-pointer"
+                      title="1-Click Workshop Authorization"
+                    >
+                      <Zap size={13} className="text-sky-400" />
+                      <span>Quick Connect</span>
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"

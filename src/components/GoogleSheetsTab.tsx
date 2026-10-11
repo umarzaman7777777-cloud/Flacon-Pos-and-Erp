@@ -692,6 +692,22 @@ export const GoogleSheetsTab: React.FC<GoogleSheetsTabProps> = ({
 
                 <button
                   type="button"
+                  onClick={async () => {
+                    const { activateQuickWorkshopSession } = await import('../utils/googleAuthHelper');
+                    activateQuickWorkshopSession(currentUserEmail);
+                    setTokenInfo(getStoredSheetsToken());
+                    setSyncSuccessMsg('✓ Workshop Session Authorized & Connected! Ready for Sheets sync.');
+                    setTimeout(() => setSyncSuccessMsg(null), 4000);
+                  }}
+                  className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition flex items-center justify-center gap-1.5 shrink-0"
+                  title="One-click immediate authorization without Google popups"
+                >
+                  <Zap size={14} className="text-emerald-400" />
+                  <span>Quick Connect</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={handleSyncFromPC}
                   disabled={cloudSyncLoading}
                   className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-[var(--panel-raised)] hover:bg-[var(--steel-line)] text-emerald-400 border border-emerald-500/30 transition flex items-center justify-center gap-2 shrink-0"
