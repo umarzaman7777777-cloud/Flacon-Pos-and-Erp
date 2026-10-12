@@ -231,19 +231,6 @@ export function initBackgroundSyncEngine(getState: () => AppState): () => void {
     } catch {}
 
     const curState = getState();
-    // Reopening auto sync: if Sheets auto-sync is enabled and credentials exist, automatically sync
-    try {
-      if (getSheetsAutoSyncEnabled()) {
-        const token = getStoredSheetsToken();
-        const spreadsheetId = getStoredSpreadsheetId();
-        if (token?.token && spreadsheetId && curState) {
-          populateAllSheets(token.token, spreadsheetId, curState).catch(err => {
-            console.debug('[SyncEngine] Resume auto-sync notice:', err);
-          });
-        }
-      }
-    } catch {}
-
     flushSyncQueue(curState).catch(e => console.debug('[SyncEngine] Resume flush notice:', e));
   };
 

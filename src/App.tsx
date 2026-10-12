@@ -2355,6 +2355,7 @@ export const App: React.FC = () => {
             onComplete={() => setShowOpeningSplash(false)}
             companyName={state.companyName}
             companyTagline={state.companyTagline}
+            language={state.language}
           />
         )}
         <LockScreen

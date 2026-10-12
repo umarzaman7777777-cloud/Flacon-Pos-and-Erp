@@ -149,11 +149,17 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
     isVerifyingRef.current = true;
     setIsVerifying(true);
     try {
-      if (targetService === 'sheets' || targetService === 'all') {
+      if (targetService === 'all') {
+        const [sRes, dRes] = await Promise.all([
+          verifyWorkspaceOAuth('sheets', forceNetwork),
+          verifyWorkspaceOAuth('drive', forceNetwork)
+        ]);
+        setSheetsResult(sRes);
+        setDriveResult(dRes);
+      } else if (targetService === 'sheets') {
         const sRes = await verifyWorkspaceOAuth('sheets', forceNetwork);
         setSheetsResult(sRes);
-      }
-      if (targetService === 'drive' || targetService === 'all') {
+      } else if (targetService === 'drive') {
         const dRes = await verifyWorkspaceOAuth('drive', forceNetwork);
         setDriveResult(dRes);
       }

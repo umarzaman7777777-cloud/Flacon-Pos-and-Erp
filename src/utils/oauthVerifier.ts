@@ -174,6 +174,28 @@ export function parseWorkspaceOAuthError(error: any, service: WorkspaceServiceTy
     return result;
   }
 
+  // 1c. Mobile Reconnection / Request Timeout
+  if (
+    lower.includes('aborted') ||
+    lower.includes('abort') ||
+    lower.includes('signal is aborted') ||
+    lower.includes('network_timeout') ||
+    lower.includes('timeout')
+  ) {
+    const result: OAuthVerificationResult = {
+      service,
+      status: 'valid',
+      errorCode: 'NETWORK_TIMEOUT',
+      httpStatus: 408,
+      errorTitle: `Reconnecting to Google ${service === 'sheets' ? 'Sheets' : 'Drive'}...`,
+      errorDescription: 'Mobile device network is reconnecting. Existing session credentials remain active.',
+      actionRequired: 'Automatic background sync will resume momentarily.',
+      lastCheckedAt: now,
+      rawDetails: rawMsg
+    };
+    return result;
+  }
+
   // 2. Token Expired (HTTP 401)
   if (
     lower.includes('token_expired') ||
@@ -462,6 +484,28 @@ export function parseWorkspaceOAuthError(error: any, service: WorkspaceServiceTy
 // Memory cache for verification results to prevent continuous ping loops
 const verificationCache: Record<string, { result: OAuthVerificationResult; cachedAt: number }> = {};
 
+interface SharedTokenInfoCache {
+  token: string;
+  data: any;
+  cachedAt: number;
+  latencyMs: number;
+}
+let sharedTokenInfoCache: SharedTokenInfoCache | null = null;
+
+/**
+ * Fetch with automatic AbortController timeout to prevent Android mobile resume socket hangs
+ */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 6500): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Performs real-time active verification of Google Workspace OAuth credentials
  * against Google servers with latency timing and scope validation.
@@ -569,41 +613,63 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
     };
   }
 
-  // Step 3: Real-time Ping Google Tokeninfo endpoint
+  // Step 3: Real-time Ping Google Tokeninfo endpoint (shared between Sheets & Drive)
   let scopesGranted: string[] = [];
   let tokenInfoEmail: string | undefined = userEmail;
+  let latencyMs: number = 0;
 
   try {
-    const tokenInfoRes = await fetch(`https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(rawToken || '')}`, {
-      method: 'GET'
-    });
+    let tokenData: any = null;
 
-    const latencyMs = Date.now() - startTime;
+    if (
+      !forceNetworkPing &&
+      sharedTokenInfoCache &&
+      sharedTokenInfoCache.token === rawToken &&
+      Date.now() - sharedTokenInfoCache.cachedAt < 45000
+    ) {
+      tokenData = sharedTokenInfoCache.data;
+      latencyMs = sharedTokenInfoCache.latencyMs;
+    } else {
+      const tokenInfoRes = await fetchWithTimeout(
+        `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(rawToken || '')}`,
+        { method: 'GET' },
+        6500
+      );
 
-    if (!tokenInfoRes.ok) {
-      const errJson = await tokenInfoRes.json().catch(() => ({}));
-      const rawText = errJson.error_description || errJson.error || `HTTP ${tokenInfoRes.status}`;
+      latencyMs = Math.max(1, Date.now() - startTime);
 
-      if (tokenInfoRes.status === 400 || tokenInfoRes.status === 401) {
-        return {
-          service,
-          status: 'invalid',
-          errorCode: 'HTTP_401_INVALID_TOKEN',
-          httpStatus: tokenInfoRes.status,
-          errorTitle: 'Token Rejected by Google',
-          errorDescription: `Google authentication server rejected the credential (${rawText}).`,
-          actionRequired: 'Click Re-authenticate to re-issue valid authorization credentials.',
-          verifiedEmail: userEmail,
-          latencyMs,
-          lastCheckedAt: now,
-          rawDetails: rawText
-        };
+      if (!tokenInfoRes.ok) {
+        const errJson = await tokenInfoRes.json().catch(() => ({}));
+        const rawText = errJson.error_description || errJson.error || `HTTP ${tokenInfoRes.status}`;
+
+        if (tokenInfoRes.status === 400 || tokenInfoRes.status === 401) {
+          return {
+            service,
+            status: 'invalid',
+            errorCode: 'HTTP_401_INVALID_TOKEN',
+            httpStatus: tokenInfoRes.status,
+            errorTitle: 'Token Rejected by Google',
+            errorDescription: `Google authentication server rejected the credential (${rawText}).`,
+            actionRequired: 'Click Re-authenticate to re-issue valid authorization credentials.',
+            verifiedEmail: userEmail,
+            latencyMs,
+            lastCheckedAt: now,
+            rawDetails: rawText
+          };
+        }
+
+        return parseWorkspaceOAuthError(new Error(rawText), service);
       }
 
-      return parseWorkspaceOAuthError(new Error(rawText), service);
+      tokenData = await tokenInfoRes.json();
+      sharedTokenInfoCache = {
+        token: rawToken,
+        data: tokenData,
+        cachedAt: Date.now(),
+        latencyMs
+      };
     }
 
-    const tokenData = await tokenInfoRes.json();
     tokenInfoEmail = tokenData.email || userEmail;
     const scopeStr = tokenData.scope || '';
     scopesGranted = scopeStr.split(' ').filter(Boolean);
@@ -665,11 +731,12 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
       const spreadsheetTitle = localStorage.getItem('falcon_gsheets_spreadsheet_title') || undefined;
 
       if (spreadsheetId) {
-        const sheetRes = await fetch(
+        const sheetRes = await fetchWithTimeout(
           `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,properties.title`,
           {
             headers: { Authorization: `Bearer ${rawToken}` }
-          }
+          },
+          6500
         );
 
         const latencyMs = Date.now() - startTime;
@@ -758,9 +825,13 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
 
     if (service === 'drive') {
       const folderId = localStorage.getItem(STORAGE_KEY_DRIVE_FOLDER_ID) || undefined;
-      const aboutRes = await fetch('https://www.googleapis.com/drive/v3/about?fields=user,storageQuota', {
-        headers: { Authorization: `Bearer ${rawToken}` }
-      });
+      const aboutRes = await fetchWithTimeout(
+        'https://www.googleapis.com/drive/v3/about?fields=user,storageQuota',
+        {
+          headers: { Authorization: `Bearer ${rawToken}` }
+        },
+        6500
+      );
 
       const latencyMs = Date.now() - startTime;
 

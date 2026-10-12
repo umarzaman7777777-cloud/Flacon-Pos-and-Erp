@@ -128,6 +128,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
   const initialBackupChecked = useRef(false);
   const isBackingUpRef = useRef(false);
+  const isAutoSyncingRef = useRef(false);
+  const lastResumeSyncTimeRef = useRef(0);
   const currentUserEmail = auth.currentUser?.email || ALLOWED_SHEETS_OWNER_EMAIL;
 
   // Refresh local state from storage
@@ -224,6 +226,12 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
   // Automated Workspace Sync on App Launch and On-Demand
   const autoSyncNow = useCallback(async (customState?: AppState): Promise<boolean> => {
+    if (isAutoSyncingRef.current) {
+      console.debug('[Workspace Sync] Auto-sync already running, skipping overlapping invocation.');
+      return false;
+    }
+    isAutoSyncingRef.current = true;
+
     const stateToSync = customState || appState;
     setIsAutoAuthenticating(true);
     setSheetsError(null);
@@ -242,7 +250,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
       refreshWorkspaceState();
 
-      // 2. Auto-locate or create Master Spreadsheet
+      // 2 & 3. Locate or create spreadsheet and backup folder
       let curSheetId = getStoredSpreadsheetId();
       if (!curSheetId) {
         try {
@@ -256,7 +264,6 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         }
       }
 
-      // 3. Auto-locate or create Google Drive Backup folder
       let curFolderId = getStoredDriveFolderId();
       if (!curFolderId) {
         try {
@@ -271,8 +278,10 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
       let sheetsSuccess = false;
       let driveSuccess = false;
 
-      // 4. AUTOMATICALLY SYNC SHEETS ON APP OPEN
-      if (curSheetId) {
+      // 4 & 5. SYNCHRONIZE BOTH SHEETS AND DRIVE SIMULTANEOUSLY (PARALLEL EXECUTION)
+      // Running both concurrently ensures unified timing and eliminates staggered delay
+      const sheetsTask = (async () => {
+        if (!curSheetId) return;
         setIsSyncingSheets(true);
         try {
           await populateAllSheets(activeToken, curSheetId, stateToSync);
@@ -286,29 +295,32 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         } finally {
           setIsSyncingSheets(false);
         }
-      }
+      })();
 
-      // 5. AUTOMATICALLY BACKUP TO GOOGLE DRIVE ON APP OPEN
-      try {
+      const driveTask = (async () => {
         setIsUploadingDrive(true);
-        const { jsonString, filename } = getDatabaseJSONString(stateToSync, currentUserEmail, terminalId, true);
-        const uploaded = await uploadBackupToGoogleDrive(activeToken, {
-          fileName: filename,
-          fileContent: jsonString,
-          mimeType: 'application/json',
-          description: `Falcon Rod Maker POS - Automated App Launch Backup (${stateToSync.transactions?.length || 0} txns, ${stateToSync.products?.length || 0} products)`
-        });
-        const nowIso = new Date().toISOString();
-        setLastDriveBackup(nowIso);
-        setLastDriveBackupTime(nowIso);
-        setDriveBackupsCount(prev => prev + 1);
-        driveSuccess = true;
-        console.info('[Workspace Sync] ✓ Google Drive backup uploaded on app launch:', uploaded.name);
-      } catch (dErr: any) {
-        console.warn('[Workspace Sync] Startup Drive backup notice:', dErr);
-      } finally {
-        setIsUploadingDrive(false);
-      }
+        try {
+          const { jsonString, filename } = getDatabaseJSONString(stateToSync, currentUserEmail, terminalId, true);
+          const uploaded = await uploadBackupToGoogleDrive(activeToken, {
+            fileName: filename,
+            fileContent: jsonString,
+            mimeType: 'application/json',
+            description: `Falcon Rod Maker POS - Automated App Launch Backup (${stateToSync.transactions?.length || 0} txns, ${stateToSync.products?.length || 0} products)`
+          });
+          const nowIso = new Date().toISOString();
+          setLastDriveBackup(nowIso);
+          setLastDriveBackupTime(nowIso);
+          setDriveBackupsCount(prev => prev + 1);
+          driveSuccess = true;
+          console.info('[Workspace Sync] ✓ Google Drive backup uploaded on app launch:', uploaded.name);
+        } catch (dErr: any) {
+          console.warn('[Workspace Sync] Startup Drive backup notice:', dErr);
+        } finally {
+          setIsUploadingDrive(false);
+        }
+      })();
+
+      await Promise.allSettled([sheetsTask, driveTask]);
 
       if (sheetsSuccess || driveSuccess) {
         setSheetsSuccessMsg('✓ Google Workspace auto-authenticated & synced on app open!');
@@ -321,6 +333,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
       console.warn('[Workspace Sync] Startup autoSyncNow notice:', err);
       return false;
     } finally {
+      isAutoSyncingRef.current = false;
       setIsAutoAuthenticating(false);
       refreshWorkspaceState();
     }
@@ -333,20 +346,6 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
     console.info('[Workspace Sync] App opened: starting automatic authentication & sync...');
     autoSyncNow();
-
-    // Staggered retries for mobile / Android platforms where storage or auth loads asynchronously
-    const retryTimer1 = setTimeout(() => {
-      autoSyncNow();
-    }, 1500);
-
-    const retryTimer2 = setTimeout(() => {
-      autoSyncNow();
-    }, 4000);
-
-    return () => {
-      clearTimeout(retryTimer1);
-      clearTimeout(retryTimer2);
-    };
   }, [autoSyncNow]);
 
   // Auto-sync whenever Firebase Auth user signs in or restores session
@@ -376,17 +375,27 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   // Auto-sync whenever user returns to or resumes the app (e.g. returning from Google Sign-In or switching apps)
   useEffect(() => {
     const handleAppResume = () => {
+      const now = Date.now();
+      // Enforce 3-second cooldown to avoid duplicate triggers between focus & visibilitychange
+      if (now - lastResumeSyncTimeRef.current < 3000) {
+        return;
+      }
+      lastResumeSyncTimeRef.current = now;
       console.info('[Workspace Sync] Window focused / resumed: verifying workspace sync...');
       autoSyncNow();
     };
-    window.addEventListener('focus', handleAppResume);
-    document.addEventListener('visibilitychange', () => {
+
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         handleAppResume();
       }
-    });
+    };
+
+    window.addEventListener('focus', handleAppResume);
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('focus', handleAppResume);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [autoSyncNow]);
 

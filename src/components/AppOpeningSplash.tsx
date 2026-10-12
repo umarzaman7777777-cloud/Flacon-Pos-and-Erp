@@ -1,27 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { FalconLogo } from './FalconLogo';
-import { ShieldCheck, Sparkles } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
+import { AppLanguage } from '../types';
 
 interface AppOpeningSplashProps {
   onComplete: () => void;
   companyName?: string;
   companyTagline?: string;
+  language?: AppLanguage;
 }
 
 export const AppOpeningSplash: React.FC<AppOpeningSplashProps> = ({
   onComplete,
   companyName = 'Falcon Rod Maker',
-  companyTagline = 'Fan Accessories • Gujrat'
+  companyTagline = 'Fan Accessories • Gujrat',
+  language = 'en'
 }) => {
   const [phase, setPhase] = useState<'enter' | 'active' | 'exit'>('enter');
 
   useEffect(() => {
-    // Phase 1: enter to active after 50ms
-    const timer1 = setTimeout(() => setPhase('active'), 50);
-    // Phase 2: begin smooth fadeout at 1300ms
-    const timer2 = setTimeout(() => setPhase('exit'), 1350);
-    // Phase 3: complete and unmount at 1700ms
-    const timer3 = setTimeout(() => onComplete(), 1700);
+    // Ultra-snappy opening: active in 20ms, begins smooth fadeout at 420ms, unmounts at 580ms
+    const timer1 = setTimeout(() => setPhase('active'), 20);
+    const timer2 = setTimeout(() => setPhase('exit'), 420);
+    const timer3 = setTimeout(() => onComplete(), 580);
 
     return () => {
       clearTimeout(timer1);
@@ -33,7 +34,8 @@ export const AppOpeningSplash: React.FC<AppOpeningSplashProps> = ({
   return (
     <div
       id="app-opening-splash"
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-b from-[#070b14] via-[#0f172a] to-[#050811] text-white select-none transition-opacity duration-300 ${
+      onClick={onComplete}
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-b from-[#070b14] via-[#0f172a] to-[#050811] text-white select-none transition-opacity duration-200 cursor-pointer ${
         phase === 'exit' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
@@ -45,21 +47,21 @@ export const AppOpeningSplash: React.FC<AppOpeningSplashProps> = ({
 
       {/* Main Logo Container */}
       <div
-        className={`relative z-10 flex flex-col items-center justify-center p-6 text-center transform transition-all duration-700 ${
+        className={`relative z-10 flex flex-col items-center justify-center p-6 text-center transform transition-all duration-400 ${
           phase === 'enter'
-            ? 'scale-90 opacity-0 translate-y-4'
+            ? 'scale-95 opacity-0 translate-y-2'
             : phase === 'active'
             ? 'scale-100 opacity-100 translate-y-0'
-            : 'scale-105 opacity-0 -translate-y-2'
+            : 'scale-102 opacity-0 -translate-y-1'
         }`}
       >
         {/* Clean Standalone Falcon Logo with Organic Ambient Glow & Floating Animation (NO BOXES) */}
-        <div className="relative mb-6 flex items-center justify-center">
-          {/* Subtle Golden Ambient Aura (Blurred backdrop, not a box) */}
+        <div className="relative mb-5 flex items-center justify-center">
+          {/* Subtle Golden Ambient Aura */}
           <div className="absolute inset-0 max-w-[140px] max-h-[140px] mx-auto rounded-full bg-amber-500/25 blur-2xl pointer-events-none animate-pulse" />
           
-          {/* Standalone Logo Element - Pure Emblem without square/white enclosures */}
-          <div className="relative z-10 transition-transform duration-500 hover:scale-105 animate-float flex items-center justify-center">
+          {/* Standalone Logo Element */}
+          <div className="relative z-10 transition-transform duration-300 hover:scale-105 flex items-center justify-center">
             <FalconLogo
               variant="emblem"
               size={110}
@@ -84,14 +86,15 @@ export const AppOpeningSplash: React.FC<AppOpeningSplashProps> = ({
           Industrial POS &amp; Workshop ERP
         </p>
 
-        {/* Security / Biometric Ready Indicator */}
-        <div className="mt-8 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-amber-400/50 shadow-inner">
-          <ShieldCheck size={14} className="text-amber-400" />
-          <span className="text-[10px] font-mono font-bold text-amber-300 uppercase tracking-widest">
-            Biometric Security Terminal
+        {/* Login Options Loading Indicator Badge (Promptly Transitions directly to Lock Options) */}
+        <div className="mt-7 flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/85 border border-amber-400/50 shadow-inner">
+          <Loader2 size={13} className="text-amber-400 animate-spin" />
+          <span className="text-[10px] sm:text-[11px] font-mono font-bold text-amber-300 uppercase tracking-widest">
+            {language === 'ur' ? 'لاگ ان آپشنز لوڈ ہو رہے ہیں...' : 'Login Options Loading...'}
           </span>
         </div>
       </div>
     </div>
   );
 };
+
