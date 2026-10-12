@@ -136,6 +136,18 @@ export async function initPersistentStorage(): Promise<void> {
     }
   }
 
+  // Web / PWA / Android Mobile Browser foreground resume listeners
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', () => {
+      autoSyncWorkspaceFromCloud().catch(() => {});
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        autoSyncWorkspaceFromCloud().catch(() => {});
+      }
+    });
+  }
+
   // Set up real-time listener on Firestore sync_states/falcon_workshop so token updates propagate instantly!
   listenToCloudTokensRealtime();
 }

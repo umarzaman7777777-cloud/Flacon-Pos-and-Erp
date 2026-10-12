@@ -373,7 +373,14 @@ export const App: React.FC = () => {
   useEffect(() => {
     initPersistentStorage().catch(err => console.warn('Persistent storage init notice:', err));
     initNativeOAuthDeepLinkListener();
-    checkRedirectAuthResult().catch(err => console.warn('Auth redirect check:', err));
+    checkRedirectAuthResult()
+      .then(res => {
+        if (res && res.accessToken) {
+          console.info('[Falcon App] Mobile Google redirect authentication verified. Unlocking app...');
+          setIsLocked(false);
+        }
+      })
+      .catch(err => console.warn('Auth redirect check:', err));
   }, []);
 
   // Automatic Inactivity Screen Lock

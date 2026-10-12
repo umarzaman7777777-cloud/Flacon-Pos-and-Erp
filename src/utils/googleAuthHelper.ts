@@ -3,7 +3,7 @@ import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
 import { auth, googleProvider } from '../firebase/config';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { GoogleAuthProvider, signInWithPopup, getRedirectResult, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, User } from 'firebase/auth';
 import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, clearSheetsToken, isRealGoogleOAuthToken } from './googleSheetsSync';
 import { storeDriveToken, getStoredDriveToken, clearDriveToken } from './googleDriveBackup';
 
@@ -395,7 +395,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
   }
 
   try {
-    console.info('[Falcon Auth] Initiating Firebase Google Sign-In popup with active user gesture...');
+    console.info('[Falcon Auth] Initiating Firebase Google Sign-In with active user gesture...');
     const cred = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(cred);
     const accessToken = credential?.accessToken || '';
@@ -422,12 +422,29 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
   } catch (popupErr: any) {
     console.warn('[Falcon Auth] Sign-in popup notice:', popupErr?.code || popupErr?.message);
 
-    if (popupErr?.code === 'auth/popup-blocked') {
-      throw new Error('Google Sign-In popup was blocked by browser. Please tap again or allow popups in site settings.');
+    // If popup was blocked or cannot open (common in mobile WebViews and Android Chrome),
+    // trigger signInWithRedirect so the native browser opens Google full screen directly.
+    if (
+      popupErr?.code === 'auth/popup-blocked' ||
+      popupErr?.code === 'auth/cancelled-popup-request' ||
+      popupErr?.message?.includes('blocked')
+    ) {
+      console.info('[Falcon Auth] Popup blocked or restricted; transitioning to direct Google redirect...');
+      try {
+        await signInWithRedirect(auth, provider);
+        // Page will redirect to Google accounts
+        return {
+          accessToken: '',
+          expiresIn: 7200,
+          userEmail: preferredEmail
+        };
+      } catch (redirErr: any) {
+        throw new Error(redirErr?.message || 'Google authorization could not be started.');
+      }
     }
 
     if (popupErr?.code === 'auth/popup-closed-by-user') {
-      throw new Error('Google authorization window was closed before completing.');
+      throw new Error('Google authorization window was closed before completing. Tap "Retry Google Verification" to try again.');
     }
 
     throw new Error(popupErr?.message || 'Authentication with Google was cancelled or closed.');

@@ -10,9 +10,9 @@ import { Capacitor } from '@capacitor/core';
 import { FalconLogo } from './FalconLogo';
 import { FALCON_LOGO_PNG } from '../utils/logoData';
 import { auth, googleProvider } from '../firebase/config';
-import { isLocalhostOrMobileApp, performUniversalGoogleSignIn } from '../utils/googleAuthHelper';
+import { isLocalhostOrMobileApp, performUniversalGoogleSignIn, checkRedirectAuthResult } from '../utils/googleAuthHelper';
 import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, isRealGoogleOAuthToken } from '../utils/googleSheetsSync';
-import { storeDriveToken } from '../utils/googleDriveBackup';
+import { storeDriveToken, getStoredDriveToken } from '../utils/googleDriveBackup';
 import {
   onAuthStateChanged,
   signOut,
@@ -144,6 +144,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       setBiometricStatus(status);
     });
 
+    // Check if returning from a Google redirect auth flow on mobile
+    checkRedirectAuthResult().then(redir => {
+      if (redir && redir.userEmail && isEmailAuthorized(redir.userEmail)) {
+        console.info('[Falcon Lock] Successfully verified from Google redirect:', redir.userEmail);
+        handleConfirmAndLoginSafe(redir.userEmail);
+      }
+    }).catch(err => {
+      console.warn('[Falcon Lock] Redirect auth check notice:', err);
+    });
+
     // Clean up any failed/interrupted OAuth redirect parameters in the URL to prevent loops
     if (typeof window !== 'undefined' && (window.location.search.includes('apiKey=') || window.location.hash.includes('access_token'))) {
       try {
@@ -179,52 +189,58 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const handleOpenGmailSafetyPopup = () => {
     setSelectedOption('gmail');
     setShowGmailSafetyModal(true);
-    setGmailSafetyStage('checking');
-    setGmailVerificationMessage(language === 'ur' ? 'گوگل سیشن کی تصدیق جاری ہے...' : 'Checking active Gmail & Google session...');
     hapticTap();
 
     // Check if user is currently logged in via Firebase Auth or stored verified token
-    setTimeout(() => {
-      const activeUser = auth.currentUser;
-      const storedSession = localStorage.getItem('falcon_verified_owner_session');
-      const storedEmail = localStorage.getItem('falcon_verified_owner_email');
+    const activeUser = auth.currentUser;
+    const storedSession = localStorage.getItem('falcon_verified_owner_session');
+    const storedEmail = localStorage.getItem('falcon_verified_owner_email');
+    const sheetsToken = getStoredSheetsToken();
+    const driveToken = getStoredDriveToken();
+    const verifiedEmail = (sheetsToken?.userEmail || driveToken?.userEmail || storedEmail || '').toLowerCase().trim();
 
-      if (activeUser && activeUser.email) {
-        const userEmail = activeUser.email.toLowerCase().trim();
-        if (isEmailAuthorized(userEmail)) {
-          setVerifiedGmailAccount(activeUser.email);
-          setGmailSafetyStage('active_found');
-          setGmailVerificationMessage(
-            language === 'ur'
-              ? `فعال سیشن ملا: ${activeUser.email} (ورکشاپ ماسٹر اکاؤنٹ تصدیق شدہ)`
-              : `Active session found: ${activeUser.email} (Authorized Master Account)`
-          );
-        } else {
-          setGmailSafetyStage('error');
-          setGmailVerificationMessage(
-            language === 'ur'
-              ? `سیکیورٹی الرٹ: اکاؤنٹ "${activeUser.email}" مجاز نہیں ہے۔`
-              : `Security Alert: Account "${activeUser.email}" is NOT authorized. Workshop locked to ${OWNER_GMAIL}.`
-          );
-        }
-      } else if (storedSession === 'true' && storedEmail && isEmailAuthorized(storedEmail)) {
-        setVerifiedGmailAccount(storedEmail);
+    if (activeUser && activeUser.email) {
+      const userEmail = activeUser.email.toLowerCase().trim();
+      if (isEmailAuthorized(userEmail)) {
+        setVerifiedGmailAccount(activeUser.email);
         setGmailSafetyStage('active_found');
         setGmailVerificationMessage(
           language === 'ur'
-            ? `محفوظ شدہ گوگل اکاؤنٹ ملا: ${storedEmail}`
-            : `Saved verified Google session: ${storedEmail}`
+            ? `فعال سیشن ملا: ${activeUser.email} (تصدیق شدہ مالک)`
+            : `Active session found: ${activeUser.email} (Authorized Owner Account)`
         );
+        return;
       } else {
-        // Ready to authenticate with official Google account
-        setGmailSafetyStage('not_logged_in');
+        setGmailSafetyStage('error');
         setGmailVerificationMessage(
           language === 'ur'
-            ? 'گوگل اکاؤنٹ کی تصدیق کے لیے تیار۔'
-            : `Ready to verify registered account: ${OWNER_GMAIL}`
+            ? `سیکیورٹی الرٹ: اکاؤنٹ "${activeUser.email}" مجاز نہیں ہے۔`
+            : `Security Alert: Account "${activeUser.email}" is NOT authorized. Terminal locked to ${OWNER_GMAIL}.`
         );
+        return;
       }
-    }, 150);
+    } else if (
+      (storedSession === 'true' && storedEmail && isEmailAuthorized(storedEmail)) ||
+      (verifiedEmail && isEmailAuthorized(verifiedEmail) && (sheetsToken?.token || driveToken?.token))
+    ) {
+      const resolvedEmail = storedEmail && isEmailAuthorized(storedEmail) ? storedEmail : OWNER_GMAIL;
+      setVerifiedGmailAccount(resolvedEmail);
+      setGmailSafetyStage('active_found');
+      setGmailVerificationMessage(
+        language === 'ur'
+          ? `محفوظ شدہ گوگل اکاؤنٹ ملا: ${resolvedEmail}`
+          : `Saved verified Google session: ${resolvedEmail}`
+      );
+      return;
+    } else {
+      // Ready to authenticate with official Google account
+      setGmailSafetyStage('not_logged_in');
+      setGmailVerificationMessage(
+        language === 'ur'
+          ? 'گوگل اکاؤنٹ کی تصدیق کے لیے تیار۔'
+          : `Ready to verify registered account: ${OWNER_GMAIL}`
+      );
+    }
   };
 
   // Run Safety Verification on the Active Account and complete Login
@@ -648,7 +664,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                       </span>
                     </div>
                     <p className="text-xs font-mono text-[var(--text-dim)] truncate mt-0.5">
-                      {language === 'ur' ? 'ماسٹر ٹرمینل پن کوڈ درج کریں' : 'Enter 4-digit Master Security PIN (321)'}
+                      {language === 'ur' ? 'ٹرمینل پن کوڈ درج کریں' : 'Enter 4-digit Security PIN (321)'}
                     </p>
                   </div>
                 </div>
@@ -748,7 +764,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               </button>
               <div className="flex items-center gap-1.5 text-amber-400 font-mono text-xs font-bold uppercase tracking-wider">
                 <KeyRound size={15} />
-                <span>{language === 'ur' ? 'پن کوڈ لاگ ان' : 'Master PIN Login'}</span>
+                <span>{language === 'ur' ? 'پن کوڈ لاگ ان' : 'Security PIN Login'}</span>
               </div>
               <button
                 type="button"
@@ -763,7 +779,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             <div className="relative w-48 mx-auto">
               <div className="w-full bg-[var(--bg)] border border-amber-400/30 rounded-lg py-1.5 px-3 text-center font-mono text-xs text-[var(--yellow)] font-bold select-none flex items-center justify-center gap-1.5 shadow-inner">
                 <ShieldCheck size={14} />
-                <span>Umar (Master Owner)</span>
+                <span>Umar (Verified Owner)</span>
               </div>
             </div>
 

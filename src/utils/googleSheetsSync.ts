@@ -99,9 +99,19 @@ export function isRealGoogleOAuthToken(token?: string | null): boolean {
  */
 export function getStoredSheetsToken(allowGracePeriod: boolean = true): SheetsTokenInfo | null {
   try {
-    const token = getPersistent(STORAGE_KEY_SHEETS_TOKEN);
-    const expiresStr = getPersistent(STORAGE_KEY_SHEETS_EXPIRES);
-    const userEmail = getPersistent(STORAGE_KEY_SHEETS_EMAIL) || ALLOWED_SHEETS_OWNER_EMAIL;
+    let token = getPersistent(STORAGE_KEY_SHEETS_TOKEN);
+    let expiresStr = getPersistent(STORAGE_KEY_SHEETS_EXPIRES);
+    let userEmail = getPersistent(STORAGE_KEY_SHEETS_EMAIL) || ALLOWED_SHEETS_OWNER_EMAIL;
+
+    // Cross-fallback: if sheets token is not present, check drive token
+    if (!token) {
+      const driveToken = getPersistent('falcon_gdrive_token');
+      if (driveToken) {
+        token = driveToken;
+        expiresStr = getPersistent('falcon_gdrive_expires_at');
+        userEmail = getPersistent('falcon_gdrive_email') || userEmail;
+      }
+    }
 
     if (!token) return null;
 
@@ -122,12 +132,17 @@ export function storeSheetsToken(token: string, expiresInSeconds: number = 3600,
     const expiresAt = Date.now() + (validDuration * 1000);
     setPersistent(STORAGE_KEY_SHEETS_TOKEN, token);
     setPersistent(STORAGE_KEY_SHEETS_EXPIRES, expiresAt.toString());
+    // Also store to Google Drive token so both features share credentials seamlessly
+    setPersistent('falcon_gdrive_token', token);
+    setPersistent('falcon_gdrive_expires_at', expiresAt.toString());
     if (email) {
       setPersistent(STORAGE_KEY_SHEETS_EMAIL, email);
+      setPersistent('falcon_gdrive_email', email);
     }
     // Automatically replicate to Firestore cloud sync
     publishWorkspaceTokensToFirestore({
       sheetsToken: token,
+      driveToken: token,
       expiresInSec: validDuration,
       email: email || ALLOWED_SHEETS_OWNER_EMAIL,
       spreadsheetId: getStoredSpreadsheetId() || undefined,
@@ -486,7 +501,7 @@ export async function createMasterFalconSpreadsheet(
       locale: 'en_GB',
       timeZone: 'Asia/Karachi'
     },
-    sheets: DEFAULT_SHEET_TABS.map((tabTitle, idx) => ({
+    sheets: ALL_EXTENDED_SHEET_TABS.map((tabTitle, idx) => ({
       properties: {
         sheetId: idx + 1,
         title: tabTitle,
@@ -603,7 +618,7 @@ export async function ensureRequiredSheetsExist(accessToken: string, spreadsheet
   const info = await getSpreadsheetInfo(accessToken, cleanId);
   const existingTitles = new Set(info.sheets.map(s => s.title));
 
-  const missingTabs = DEFAULT_SHEET_TABS.filter(t => !existingTitles.has(t));
+  const missingTabs = ALL_EXTENDED_SHEET_TABS.filter(t => !existingTitles.has(t));
   if (missingTabs.length === 0) return;
 
   const requests = missingTabs.map(title => ({
@@ -873,21 +888,27 @@ export async function writeSheetValues(
   const cleanId = extractSpreadsheetId(spreadsheetId);
   const range = `'${sheetTitle}'!A1`;
 
-  // Clear existing content in sheet first
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/'${sheetTitle}':clear`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  // Safely clear existing content in sheet first without blocking on missing tabs
+  try {
+    const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent("'" + sheetTitle + "'!A1:ZZ5000")}:clear`;
+    await fetch(clearUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (clearErr) {
+    console.debug(`[Sheets] Non-fatal clear notice for tab "${sheetTitle}":`, clearErr);
+  }
 
   // Write new values
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
-  const response = await fetch(url, {
+  let currentToken = accessToken;
+  let response = await fetch(url, {
     method: 'PUT',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${currentToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -897,9 +918,83 @@ export async function writeSheetValues(
     })
   });
 
+  // Handle 401 (token expired) with auto-refresh
+  if (response.status === 401) {
+    try {
+      const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+      await autoSyncWorkspaceFromCloud();
+      const fresh = getStoredSheetsToken();
+      if (fresh?.token && fresh.token !== currentToken) {
+        currentToken = fresh.token;
+        response = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            range,
+            majorDimension: 'ROWS',
+            values
+          })
+        });
+      }
+    } catch {}
+  }
+
+  // Handle 400 (e.g. sheet tab does not exist yet) -> auto-create tab and retry
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody?.error?.message || `Failed to write sheet "${sheetTitle}" (${response.status})`);
+    const errMsg = String(errorBody?.error?.message || '');
+
+    if (response.status === 400 || errMsg.toLowerCase().includes('unable to parse range') || errMsg.toLowerCase().includes('not found')) {
+      try {
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            requests: [{
+              addSheet: {
+                properties: {
+                  title: sheetTitle,
+                  gridProperties: {
+                    rowCount: Math.max(200, values.length + 50),
+                    columnCount: 26,
+                    frozenRowCount: 1
+                  }
+                }
+              }
+            }]
+          })
+        });
+
+        // Retry writing now that sheet exists
+        const retryRes = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            range,
+            majorDimension: 'ROWS',
+            values
+          })
+        });
+
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          return retryData.updatedRows || values.length;
+        }
+      } catch (createErr) {
+        console.warn(`[Sheets] Auto-create missing sheet tab error for "${sheetTitle}":`, createErr);
+      }
+    }
+
+    throw new Error(errMsg || `Failed to write sheet "${sheetTitle}" (${response.status})`);
   }
 
   const result = await response.json();
@@ -1302,16 +1397,52 @@ export async function appendTransactionToSheet(
 
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
 
-  await fetch(url, {
+  let currentToken = accessToken;
+  let appendRes = await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${currentToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       values: [row]
     })
   });
+
+  if (appendRes.status === 401) {
+    try {
+      const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+      await autoSyncWorkspaceFromCloud();
+      const fresh = getStoredSheetsToken();
+      if (fresh?.token && fresh.token !== currentToken) {
+        currentToken = fresh.token;
+        appendRes = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ values: [row] })
+        });
+      }
+    } catch {}
+  }
+
+  if (!appendRes.ok) {
+    const errorBody = await appendRes.json().catch(() => ({}));
+    const errMsg = String(errorBody?.error?.message || '');
+    if (appendRes.status === 400 || errMsg.toLowerCase().includes('unable to parse range')) {
+      await ensureRequiredSheetsExist(currentToken, cleanId).catch(() => {});
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ values: [row] })
+      }).catch(() => {});
+    }
+  }
 }
 
 /**

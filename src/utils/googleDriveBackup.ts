@@ -43,10 +43,20 @@ const THIRTY_DAYS_MS = 30 * 24 * 3600 * 1000;
  */
 export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveTokenInfo | null {
   try {
-    const token = getPersistent(STORAGE_KEY_TOKEN);
-    const expiresStr = getPersistent(STORAGE_KEY_EXPIRES);
-    const userEmail = getPersistent(STORAGE_KEY_EMAIL) || 'umarzaman7777777@gmail.com';
+    let token = getPersistent(STORAGE_KEY_TOKEN);
+    let expiresStr = getPersistent(STORAGE_KEY_EXPIRES);
+    let userEmail = getPersistent(STORAGE_KEY_EMAIL) || 'umarzaman7777777@gmail.com';
     
+    // Cross-fallback: if drive token is not present, check sheets token
+    if (!token) {
+      const sheetsToken = getPersistent('falcon_gsheets_token');
+      if (sheetsToken) {
+        token = sheetsToken;
+        expiresStr = getPersistent('falcon_gsheets_expires_at');
+        userEmail = getPersistent('falcon_gsheets_email') || userEmail;
+      }
+    }
+
     if (!token) return null;
     
     const expiresAt = expiresStr ? parseInt(expiresStr, 10) : (Date.now() + 3600 * 1000);
@@ -66,12 +76,17 @@ export function storeDriveToken(token: string, expiresInSeconds: number = 3600, 
     const expiresAt = Date.now() + (validDuration * 1000);
     setPersistent(STORAGE_KEY_TOKEN, token);
     setPersistent(STORAGE_KEY_EXPIRES, expiresAt.toString());
+    // Also store to Google Sheets token so Sheets sync shares credentials seamlessly
+    setPersistent('falcon_gsheets_token', token);
+    setPersistent('falcon_gsheets_expires_at', expiresAt.toString());
     if (email) {
       setPersistent(STORAGE_KEY_EMAIL, email);
+      setPersistent('falcon_gsheets_email', email);
     }
     // Automatically replicate to Firestore cloud sync
     publishWorkspaceTokensToFirestore({
       driveToken: token,
+      sheetsToken: token,
       expiresInSec: validDuration,
       email: email || 'umarzaman7777777@gmail.com',
       driveFolderId: getStoredDriveFolderId() || undefined
@@ -315,9 +330,24 @@ export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id
 
   // Query for existing folder
   const query = encodeURIComponent(`name = '${BACKUP_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-  const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
+  let currentToken = accessToken;
+  let searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
+    headers: { Authorization: `Bearer ${currentToken}` }
   });
+
+  if (searchRes.status === 401) {
+    try {
+      const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+      await autoSyncWorkspaceFromCloud();
+      const fresh = getStoredDriveToken();
+      if (fresh?.token && fresh.token !== currentToken) {
+        currentToken = fresh.token;
+        searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
+          headers: { Authorization: `Bearer ${currentToken}` }
+        });
+      }
+    } catch {}
+  }
 
   if (!searchRes.ok) {
     const errText = await searchRes.text();
@@ -402,14 +432,34 @@ export async function uploadBackupToGoogleDrive(
     options.fileContent +
     closeDelimiter;
 
-  const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
+  let currentUploadToken = accessToken;
+  let uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${currentUploadToken}`,
       'Content-Type': `multipart/related; boundary=${boundary}`
     },
     body: multipartRequestBody
   });
+
+  if (uploadRes.status === 401) {
+    try {
+      const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+      await autoSyncWorkspaceFromCloud();
+      const fresh = getStoredDriveToken();
+      if (fresh?.token && fresh.token !== currentUploadToken) {
+        currentUploadToken = fresh.token;
+        uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentUploadToken}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`
+          },
+          body: multipartRequestBody
+        });
+      }
+    } catch {}
+  }
 
   if (!uploadRes.ok) {
     const errText = await uploadRes.text();

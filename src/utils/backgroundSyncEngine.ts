@@ -222,18 +222,40 @@ export function initBackgroundSyncEngine(getState: () => AppState): () => void {
 
   // 1. Capacitor Native App State Changes (Background / Foreground transition)
   let appStateListenerRemove: (() => void) | null = null;
+
+  const handleForegroundResume = async () => {
+    console.info('[SyncEngine] App resumed to foreground: checking sync queue and workspace status...');
+    try {
+      const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
+      await autoSyncWorkspaceFromCloud();
+    } catch {}
+
+    const curState = getState();
+    // Reopening auto sync: if Sheets auto-sync is enabled and credentials exist, automatically sync
+    try {
+      if (getSheetsAutoSyncEnabled()) {
+        const token = getStoredSheetsToken();
+        const spreadsheetId = getStoredSpreadsheetId();
+        if (token?.token && spreadsheetId && curState) {
+          populateAllSheets(token.token, spreadsheetId, curState).catch(err => {
+            console.debug('[SyncEngine] Resume auto-sync notice:', err);
+          });
+        }
+      }
+    } catch {}
+
+    flushSyncQueue(curState).catch(e => console.debug('[SyncEngine] Resume flush notice:', e));
+  };
+
   try {
     if (Capacitor.isNativePlatform()) {
       App.addListener('appStateChange', ({ isActive }) => {
         if (!isActive) {
-          // App is going to background or screen turning off:
-          // Immediately flush all queued items so no transactions or sheets rows are left pending!
+          // App moving to background: immediately flush all queued items
           console.info('[SyncEngine] App moving to background: flushing sync queue...');
           flushSyncQueue(getState()).catch(e => console.warn('[SyncEngine] Background flush error:', e));
         } else {
-          // App returned to foreground:
-          console.info('[SyncEngine] App resumed to foreground: checking sync queue...');
-          flushSyncQueue(getState()).catch(e => console.warn('[SyncEngine] Resume flush error:', e));
+          handleForegroundResume();
         }
       }).then(handle => {
         appStateListenerRemove = () => handle.remove();
@@ -243,15 +265,20 @@ export function initBackgroundSyncEngine(getState: () => AppState): () => void {
     console.warn('[SyncEngine] App listener error:', err);
   }
 
-  // 2. Page Visibility Listener (Web & WebView tab hiding)
+  // 2. Page Visibility Listener (Web & WebView tab hiding and reopening)
   const handleVisibilityChange = () => {
     if (document.visibilityState === 'hidden') {
       flushSyncQueue(getState()).catch(() => {});
-    } else {
-      flushSyncQueue(getState()).catch(() => {});
+    } else if (document.visibilityState === 'visible') {
+      handleForegroundResume();
     }
   };
   document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  // 3. Window Focus Listener (Returning from other apps or popup tabs)
+  window.addEventListener('focus', () => {
+    handleForegroundResume();
+  });
 
   // 3. Online & Network Recovery Listener
   const handleOnline = () => {
