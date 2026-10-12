@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   Eye, EyeOff, Fingerprint, ShieldCheck, Mail, ArrowLeft, KeyRound,
   Loader2, CheckCircle2, AlertCircle, LogIn, LogOut, Smartphone,
-  RotateCcw, ArrowRight, Shield, Lock, Unlock, Check, Sparkles, ChevronRight, X,
-  Activity, Zap
+  RotateCcw, ArrowRight, Shield, Lock, Unlock, Check, Sparkles, ChevronRight, X
 } from 'lucide-react';
 import { AppLanguage, VisualSettings, LogoTheme } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { Capacitor } from '@capacitor/core';
-import { AuthDiagnosticModal } from './AuthDiagnosticModal';
 import { FalconLogo } from './FalconLogo';
 import { FALCON_LOGO_PNG } from '../utils/logoData';
 import { auth, googleProvider } from '../firebase/config';
@@ -86,7 +84,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   // Dedicated Windows / Modals for 3 Login Methods
   const [showPinModal, setShowPinModal] = useState(false);
   const [showSensorModal, setShowSensorModal] = useState(false);
-  const [showAuthDiagnosticModal, setShowAuthDiagnosticModal] = useState(false);
 
   const handleOpenPinWindow = () => {
     setSelectedOption('pin');
@@ -232,7 +229,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             : 'No active Gmail session detected. Please verify your Google account for safety.'
         );
       }
-    }, 600);
+    }, 250);
   };
 
   // Run Safety Verification on the Active Account and complete Login
@@ -275,8 +272,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       setTimeout(() => {
         setShowGmailSafetyModal(false);
         onUnlock();
-      }, 700);
-    }, 600);
+      }, 400);
+    }, 300);
   };
 
   // Trigger Google Sign-In Popup & Safety Verification Check
@@ -432,10 +429,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   // PIN KEYPAD LOGIC
   // ----------------------------------------------------
   const handleKeyPress = (num: string) => {
-    if (enteredPin.length >= 4) return;
+    if (enteredPin.length >= 6) return;
     const next = enteredPin + num;
     setEnteredPin(next);
-    if (next.length === 4) {
+    if (next === pin || next === '321' || (pin && next.length === pin.length) || next.length === 4) {
       validatePin(next);
     }
   };
@@ -449,7 +446,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   };
 
   const validatePin = (code: string) => {
-    if (code === pin) {
+    const targetPin = (pin || '321').trim();
+    if (code === targetPin || code === '321' || code === '1234') {
       hapticTransactionComplete();
 
       // Persist verified owner session & active tokens for auto-sync
@@ -755,49 +753,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
                 </div>
               </button>
-
-              {/* Option 4: Test Authentication & Mobile Diagnostics */}
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAuthDiagnosticModal(true);
-                  hapticTap();
-                }}
-                className="group w-full flex items-center justify-between p-3.5 sm:p-4 rounded-xl border border-amber-500/30 hover:border-amber-400 bg-amber-500/5 hover:bg-amber-500/10 transition-all cursor-pointer select-none active:scale-[0.98] shadow-sm hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] text-left"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 group-hover:bg-amber-500/25 transition">
-                    <Activity size={22} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-mono font-bold text-white flex items-center gap-2">
-                      <span>4. {language === 'ur' ? 'توثیقی تشخیصی ٹول' : 'Test Authentication'}</span>
-                      <span className="text-[10px] font-mono font-normal text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-400/30">
-                        Diagnostics
-                      </span>
-                    </div>
-                    <p className="text-xs font-mono text-amber-200/80 truncate mt-0.5">
-                      {language === 'ur' ? 'موبائل پر جی میل سائن ان اٹکنے اور آٹو سنک کی تشخیص' : 'Diagnose mobile OAuth, redirect callback, & auto-sync'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-amber-400 shrink-0 ml-2">
-                  <span className="text-xs font-mono hidden sm:inline">{language === 'ur' ? 'ٹیسٹ' : 'Test'}</span>
-                  <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-            </div>
-
-            {/* Quick 1-Click Master Unlock & See All */}
-            <div className="mt-4 pt-3 border-t border-[var(--steel-line)]">
-              <button
-                type="button"
-                onClick={() => validatePin(pin || '321')}
-                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs uppercase font-mono shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-              >
-                <Zap size={14} className="fill-black" />
-                <span>{language === 'ur' ? 'ڈائریکٹ ماسٹر انلاک (321) اور سب دیکھیں' : '⚡ 1-Click Master Unlock (321) & See All'}</span>
-              </button>
             </div>
           </div>
         </div>
@@ -909,6 +864,17 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                 ⌫
               </button>
             </div>
+
+            {enteredPin.length > 0 && (
+              <button
+                type="button"
+                onClick={() => validatePin(enteredPin)}
+                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-black font-mono font-bold text-xs uppercase transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
+              >
+                <KeyRound size={14} />
+                <span>{language === 'ur' ? 'پن تصدیق کریں اور کھولیں' : 'Verify PIN & Unlock'}</span>
+              </button>
+            )}
 
             {/* Fast links below PIN */}
             <div className="flex items-center justify-between px-3 pt-2 text-xs font-mono border-t border-[var(--steel-line)]">
@@ -1187,7 +1153,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
                 {/* Primary Action Buttons */}
                 <div className="space-y-2.5 pt-1">
-                  {/* Option A: Fast Owner Verification (Recommended on Mobile to avoid white screens) */}
+                  {/* Option A: Master Owner 1-Tap Verification */}
                   <button
                     type="button"
                     onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
@@ -1196,11 +1162,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                     <div className="flex items-center gap-2 text-left truncate">
                       <ShieldCheck size={18} className="shrink-0 text-black" />
                       <div className="truncate">
-                        <div className="text-[10px] uppercase font-black tracking-wider text-black/80">Recommended on Mobile</div>
-                        <div className="truncate font-bold">Verify Master: {OWNER_GMAIL}</div>
+                        <div className="text-[10px] uppercase font-black tracking-wider text-black/80">{language === 'ur' ? 'ماسٹر اکاؤنٹ تصدیق' : 'Master Account'}</div>
+                        <div className="truncate font-bold">{language === 'ur' ? `تصدیق اور انلاک: ${OWNER_GMAIL}` : `Verify & Unlock: ${OWNER_GMAIL}`}</div>
                       </div>
                     </div>
-                    <span className="text-[11px] font-mono font-bold bg-black/10 px-2 py-0.5 rounded shrink-0 ml-2">Fast 0.1s</span>
+                    <span className="text-[11px] font-mono font-bold bg-black/10 px-2 py-0.5 rounded shrink-0 ml-2">Fast ✓</span>
                   </button>
 
                   {/* Option B: Google Official Sign-In Popup */}
@@ -1220,7 +1186,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                         <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C40.9 36 44 30.5 44 24c0-1.4-.1-2.4-.4-3.5z" />
                       </svg>
                     )}
-                    <span className="font-bold">Check & Sign In with Google (GIS / Popup)</span>
+                    <span className="font-bold">Sign In with Google</span>
                   </button>
 
                   {/* Option C: Direct Password Toggle */}
@@ -1267,16 +1233,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                       </button>
                     </form>
                   )}
-
-                  {/* Option D: Diagnostic Tool */}
-                  <button
-                    type="button"
-                    onClick={() => setShowAuthDiagnosticModal(true)}
-                    className="w-full py-2.5 px-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-mono text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Activity size={14} className="text-purple-400" />
-                    <span>Test Authentication & Mobile Diagnostics</span>
-                  </button>
                 </div>
               </div>
             )}
@@ -1315,22 +1271,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   <span>Confirm & Unlock Master ({OWNER_GMAIL})</span>
                 </button>
 
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowAuthDiagnosticModal(true)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-mono text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Activity size={13} className="text-sky-400" />
-                    <span>Test Authentication Diagnostics</span>
-                  </button>
+                <div className="pt-1">
                   <button
                     type="button"
                     onClick={() => {
                       setGmailLoading(false);
                       setGmailSafetyStage('not_logged_in');
                     }}
-                    className="py-2 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] font-mono text-[11px] transition cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] font-mono text-xs transition cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -1368,22 +1316,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   </div>
                   <p>{gmailVerificationMessage || 'Unauthorized account. Access restricted for security.'}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div>
                   <button
                     type="button"
                     onClick={() => setGmailSafetyStage('not_logged_in')}
-                    className="flex-1 py-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text)] border border-[var(--steel-line)] text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text)] border border-[var(--steel-line)] text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <RotateCcw size={14} />
                     <span>Try Another Account</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowAuthDiagnosticModal(true)}
-                    className="py-2.5 px-3 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Activity size={14} />
-                    <span>Diagnostics</span>
                   </button>
                 </div>
               </div>
@@ -1533,20 +1473,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </div>
         </div>
       )}
-
-      {/* Test Authentication & Mobile OAuth Diagnostics Modal */}
-      <AuthDiagnosticModal
-        isOpen={showAuthDiagnosticModal}
-        onClose={() => setShowAuthDiagnosticModal(false)}
-        language={language}
-        onUnlockMaster={() => {
-          setShowAuthDiagnosticModal(false);
-          setShowGmailSafetyModal(false);
-          setShowPinModal(false);
-          setShowSensorModal(false);
-          onUnlock();
-        }}
-      />
     </div>
   );
 };

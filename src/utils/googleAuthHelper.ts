@@ -341,62 +341,12 @@ export function parseOAuthUrlParams(url: string): Record<string, string> {
  * the blank white screen error on mobile Android devices.
  */
 export async function requestGoogleAccessTokenViaGIS(
-  preferredEmail: string = 'umarzaman7777777@gmail.com',
-  interactive: boolean = false
+  _preferredEmail: string = 'umarzaman7777777@gmail.com',
+  _interactive: boolean = false
 ): Promise<string | null> {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined') {
-      resolve(null);
-      return;
-    }
-
-    let settled = false;
-    const finish = (token: string | null) => {
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        resolve(token);
-      }
-    };
-
-    // Safety timeout: Prevents GIS from freezing the UI indefinitely (shortened to 5s to prevent UI hang)
-    const timer = setTimeout(() => {
-      console.warn('[GIS Auth] GIS request timed out (safe fallback to popup/cloud sync)');
-      finish(null);
-    }, interactive ? 5000 : 2500);
-
-    const googleObj = (window as any).google;
-    if (!googleObj?.accounts?.oauth2?.initTokenClient) {
-      finish(null);
-      return;
-    }
-
-    try {
-      const client = googleObj.accounts.oauth2.initTokenClient({
-        client_id: firebaseConfig.oAuthClientId,
-        scope: DEFAULT_GOOGLE_SCOPES.join(' '),
-        hint: preferredEmail,
-        callback: (resp: any) => {
-          if (resp?.access_token && isRealGoogleOAuthToken(resp.access_token)) {
-            console.info('[GIS Auth] ✓ Direct Google OAuth token obtained via accounts.google.com!');
-            finish(resp.access_token);
-          } else {
-            console.warn('[GIS Auth] Token response did not contain real access token:', resp);
-            finish(null);
-          }
-        },
-        error_callback: (err: any) => {
-          console.warn('[GIS Auth] Direct GIS error callback:', err);
-          finish(null);
-        }
-      });
-
-      client.requestAccessToken({ prompt: interactive ? 'consent' : '' });
-    } catch (err) {
-      console.warn('[GIS Auth] Exception initiating token client:', err);
-      finish(null);
-    }
-  });
+  // Disabled: GIS client requires exact static origin whitelisting in Google Cloud Console
+  // which fails on dynamic preview origins and webviews with Error 400 origin_mismatch.
+  return null;
 }
 
 /**
@@ -450,28 +400,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     }
   } catch {}
 
-  // 3. Try Direct Google Identity Services (GIS) with strict safety timeout
-  try {
-    const gisToken = await requestGoogleAccessTokenViaGIS(preferredEmail, false);
-    if (gisToken && isRealGoogleOAuthToken(gisToken)) {
-      storeSheetsToken(gisToken, 7200, preferredEmail);
-      storeDriveToken(gisToken, 7200, preferredEmail);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('falcon_verified_owner_session', 'true');
-        localStorage.setItem('falcon_verified_owner_email', preferredEmail);
-      }
-      notifyWorkspaceSyncUpdated();
-      return {
-        accessToken: gisToken,
-        expiresIn: 7200,
-        userEmail: preferredEmail
-      };
-    }
-  } catch (gisErr) {
-    console.debug('[Falcon Auth] Silent GIS attempt notice:', gisErr);
-  }
-
-  // 4. Interactive Google Sign-In with Firebase Auth GoogleAuthProvider
+  // 3. Interactive Google Sign-In with Firebase Auth GoogleAuthProvider
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
     prompt: 'select_account',
@@ -514,29 +443,14 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     console.warn('[Falcon Auth] Sign-in popup notice:', popupErr?.code || popupErr?.message);
 
     if (popupErr?.code === 'auth/popup-blocked') {
-      throw new Error('Google Sign-In popup was blocked by browser. Please allow popups for this site or use "Enter OAuth Token" in settings.');
+      throw new Error('Google Sign-In popup was blocked by browser. Please tap "Verify Master" or allow popups.');
     }
 
     if (popupErr?.code === 'auth/popup-closed-by-user') {
       throw new Error('Google authorization window was closed before completing.');
     }
 
-    // Try interactive GIS as secondary fallback if Firebase popup was rejected
-    try {
-      const interactiveGisToken = await requestGoogleAccessTokenViaGIS(preferredEmail, true);
-      if (interactiveGisToken && isRealGoogleOAuthToken(interactiveGisToken)) {
-        storeSheetsToken(interactiveGisToken, 7200, preferredEmail);
-        storeDriveToken(interactiveGisToken, 7200, preferredEmail);
-        notifyWorkspaceSyncUpdated();
-        return {
-          accessToken: interactiveGisToken,
-          expiresIn: 7200,
-          userEmail: preferredEmail
-        };
-      }
-    } catch {}
-
-    throw new Error(popupErr?.message || 'Authentication with Google was cancelled, blocked by browser pop-ups, or closed. You can tap "Enter Token" or "Quick Connect" to proceed.');
+    throw new Error(popupErr?.message || 'Authentication with Google was cancelled or closed.');
   }
 }
 
