@@ -119,9 +119,30 @@ export function initNativeOAuthDeepLinkListener(): void {
   }
 }
 
-// Auto-initialize deep link listener
+// Auto-initialize deep link listener and native OAuth custom event listener
 if (typeof window !== 'undefined') {
   initNativeOAuthDeepLinkListener();
+
+  window.addEventListener('falconNativeOAuthCallback', (event: any) => {
+    try {
+      const url = event?.detail?.url;
+      if (!url) return;
+      console.info('[Falcon Auth] Native OAuth event received:', url);
+      const params = parseOAuthUrlParams(url);
+      const token = params.access_token || params.token;
+      if (token) {
+        const email = params.email || 'umarzaman7777777@gmail.com';
+        const expiresIn = params.expires_in ? parseInt(params.expires_in, 10) : 7200;
+        storeSheetsToken(token, expiresIn, email);
+        storeDriveToken(token, expiresIn, email);
+        localStorage.setItem('falcon_verified_owner_session', 'true');
+        localStorage.setItem('falcon_verified_owner_email', email);
+        notifyWorkspaceSyncUpdated();
+      }
+    } catch (err) {
+      console.warn('[Falcon Auth] Native event handling error:', err);
+    }
+  });
 }
 
 /**

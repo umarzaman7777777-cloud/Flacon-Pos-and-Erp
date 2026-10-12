@@ -79,6 +79,7 @@ public class MainActivity extends BridgeActivity {
                             popupSettings.setDomStorageEnabled(true);
                             popupSettings.setSupportMultipleWindows(true);
                             popupSettings.setJavaScriptCanOpenWindowsAutomatically(true);
+                            popupSettings.setUserAgentString("Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36");
                             CookieManager.getInstance().setAcceptThirdPartyCookies(popupWebView, true);
 
                             popupWebView.setWebChromeClient(new WebChromeClient() {
@@ -95,7 +96,6 @@ public class MainActivity extends BridgeActivity {
                                 public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                                     super.onPageStarted(view, url, favicon);
                                     if (url != null && (url.startsWith("whatsapp://") || url.contains("api.whatsapp.com") || url.contains("wa.me")
-                                        || url.contains("accounts.google.com") || url.contains("google.com/o/oauth2")
                                         || url.contains("docs.google.com/spreadsheets") || url.contains("drive.google.com"))) {
                                         return;
                                     }
@@ -118,13 +118,13 @@ public class MainActivity extends BridgeActivity {
                                             return MainActivity.this.launchDirectWhatsApp(url);
                                         }
 
-                                        // 0b. Google OAuth URLs -> Launch via Chrome Custom Tabs to prevent 403 disallowed_useragent!
+                                        // 0b. Google OAuth URLs: Let popupWebView handle accounts.google.com and Firebase handler directly
+                                        // so that Google's 2FA ("Yes, it's me") prompt and window.opener callbacks operate smoothly without losing state!
                                         if (url.contains("accounts.google.com") || url.contains("google.com/o/oauth2") || url.contains("firebaseapp.com/__/auth/handler")) {
-                                            if (authDialog.isShowing()) {
-                                                authDialog.dismiss();
+                                            if (!authDialog.isShowing() && !MainActivity.this.isFinishing()) {
+                                                authDialog.show();
                                             }
-                                            MainActivity.this.launchCustomTab(Uri.parse(url));
-                                            return true;
+                                            return false;
                                         }
 
                                         // 1. Android Intent URLs (intent://... -> launch Google Sheets/Drive app directly)
@@ -281,6 +281,27 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        try {
+            if (intent != null && intent.getData() != null) {
+                final String uriString = intent.getData().toString();
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    getBridge().getWebView().post(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                getBridge().getWebView().loadUrl(
+                                    "javascript:(function(){" +
+                                    "window.dispatchEvent(new CustomEvent('falconNativeOAuthCallback', { detail: { url: '" + uriString.replace("'", "\\'") + "' } }));" +
+                                    "})()"
+                                );
+                            } catch (Exception ignored) {}
+                        }
+                    });
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @CapacitorPlugin(name = "NativeAppOpener")

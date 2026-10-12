@@ -632,102 +632,65 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           {/* 3 LOGIN OPTIONS ALIGNED VERTICALLY (NO KEYPAD/NAME)   */}
           {/* User chooses which method to open its relevant window */}
           {/* ==================================================== */}
+          {/* ==================================================== */}
+          {/* SINGLE EXCLUSIVE LOGIN METHOD: GMAIL VERIFICATION     */}
+          {/* Pure single-option verification for umarzaman7777777@gmail.com */}
+          {/* ==================================================== */}
           <div className="mt-4 text-left">
             <div className="flex items-center justify-between mb-3 px-1">
               <span className="text-xs font-mono font-bold uppercase tracking-wider text-[var(--text-dim)] flex items-center gap-1.5">
-                <Lock size={13} className="text-amber-400" />
-                {language === 'ur' ? 'لاگ ان کا طریقہ منتخب کریں:' : 'Choose Login Method (3 Options):'}
+                <ShieldCheck size={14} className="text-sky-400" />
+                {language === 'ur' ? 'گوگل اکاؤنٹ کی تصدیق:' : 'Google Account Verification:'}
               </span>
               <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-400/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Ready
+                Verified Owner
               </span>
             </div>
 
-            {/* 3 Prominent Vertically Aligned Option Cards */}
-            <div className="flex flex-col gap-3">
-              {/* Option 1: PIN Code */}
-              <button
-                type="button"
-                onClick={handleOpenPinWindow}
-                className="group w-full flex items-center justify-between p-3.5 sm:p-4 rounded-xl border border-[var(--steel-line)] hover:border-amber-400 bg-[var(--panel-raised)] hover:bg-[#282d33] transition-all cursor-pointer select-none active:scale-[0.98] shadow-sm hover:shadow-[0_0_20px_rgba(245,158,11,0.2)] text-left"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 group-hover:bg-amber-500/25 transition">
-                    <KeyRound size={22} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-mono font-bold text-white flex items-center gap-2">
-                      <span>1. {language === 'ur' ? 'پن کوڈ لاگ ان' : 'PIN Code'}</span>
-                      <span className="text-[10px] font-mono font-normal text-amber-300 bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-400/30">
-                        4 Digits
-                      </span>
-                    </div>
-                    <p className="text-xs font-mono text-[var(--text-dim)] truncate mt-0.5">
-                      {language === 'ur' ? 'ٹرمینل پن کوڈ درج کریں' : 'Enter 4-digit Security PIN (321)'}
-                    </p>
-                  </div>
+            {/* Exclusive Gmail Verification Option Card */}
+            <div className="p-4 sm:p-5 rounded-2xl border-2 border-sky-400/40 bg-gradient-to-b from-sky-500/10 via-[var(--panel-raised)] to-[var(--panel-raised)] shadow-xl space-y-3.5">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-12 h-12 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 shrink-0 shadow-[0_0_15px_rgba(56,189,248,0.25)]">
+                  <Mail size={24} />
                 </div>
-                <div className="flex items-center gap-1 text-amber-400 shrink-0 ml-2">
-                  <span className="text-xs font-mono hidden sm:inline">{language === 'ur' ? 'کھولیں' : 'Open'}</span>
-                  <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                <div className="min-w-0">
+                  <div className="text-sm font-mono font-bold text-white flex items-center gap-2">
+                    <span>{language === 'ur' ? 'جی میل تصدیقی لاگ ان' : 'Gmail Verification'}</span>
+                    <span className="text-[10px] font-mono text-sky-300 bg-sky-500/20 px-1.5 py-0.5 rounded border border-sky-400/30">
+                      Sole Owner
+                    </span>
+                  </div>
+                  <p className="text-xs font-mono text-[var(--text-dim)] truncate mt-0.5">
+                    {language === 'ur' ? 'رجسٹرڈ گوگل ورک شاپ اکاؤنٹ' : 'Registered Device & Play Store Account'}
+                  </p>
                 </div>
-              </button>
+              </div>
 
-              {/* Option 2: Gmail Safety Check */}
+              {/* Account Identifier */}
+              <div className="bg-black/50 p-3 rounded-xl border border-sky-400/20 space-y-1">
+                <div className="text-[10px] text-sky-300 uppercase font-mono font-semibold tracking-wider">
+                  Authorized Terminal Account:
+                </div>
+                <div className="text-sm font-bold text-white font-mono truncate flex items-center gap-2">
+                  <ShieldCheck size={15} className="text-emerald-400 shrink-0" />
+                  <span>{OWNER_GMAIL}</span>
+                </div>
+                <p className="text-[11px] font-mono text-emerald-400/90 pt-0.5 flex items-center gap-1">
+                  <span>✓</span>
+                  <span>Falcon Gujrat Terminal Owner: Umar Zaman</span>
+                </p>
+              </div>
+
+              {/* Single Prominent Action Button */}
               <button
                 type="button"
                 onClick={handleOpenGmailSafetyPopup}
-                className="group w-full flex items-center justify-between p-3.5 sm:p-4 rounded-xl border border-[var(--steel-line)] hover:border-sky-400 bg-[var(--panel-raised)] hover:bg-[#282d33] transition-all cursor-pointer select-none active:scale-[0.98] shadow-sm hover:shadow-[0_0_20px_rgba(56,189,248,0.2)] text-left"
+                className="w-full flex items-center justify-center gap-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-[0.98] text-white font-mono font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-sky-500/25 transition text-xs cursor-pointer border border-sky-300/30"
               >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400 shrink-0 group-hover:scale-105 group-hover:bg-sky-500/25 transition">
-                    <Mail size={22} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-mono font-bold text-white flex items-center gap-2">
-                      <span>2. {language === 'ur' ? 'گوگل / جی میل لاگ ان' : 'Gmail'}</span>
-                      <span className="text-[10px] font-mono font-normal text-sky-300 bg-sky-500/20 px-1.5 py-0.5 rounded border border-sky-400/30">
-                        Safety Check
-                      </span>
-                    </div>
-                    <p className="text-xs font-mono text-[var(--text-dim)] truncate mt-0.5">
-                      {language === 'ur' ? 'فعال گوگل اکاؤنٹ کی تصدیق کریں' : 'Inspect active Google session & safety check'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-sky-400 shrink-0 ml-2">
-                  <span className="text-xs font-mono hidden sm:inline">{language === 'ur' ? 'چیک کریں' : 'Check'}</span>
-                  <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                </div>
-              </button>
-
-              {/* Option 3: Phone Side Sensor */}
-              <button
-                type="button"
-                onClick={handleOpenSensorWindow}
-                className="group w-full flex items-center justify-between p-3.5 sm:p-4 rounded-xl border border-[var(--steel-line)] hover:border-emerald-400 bg-[var(--panel-raised)] hover:bg-[#282d33] transition-all cursor-pointer select-none active:scale-[0.98] shadow-sm hover:shadow-[0_0_20px_rgba(16,185,129,0.2)] text-left"
-              >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0 group-hover:scale-105 group-hover:bg-emerald-500/25 transition">
-                    <Fingerprint size={22} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-mono font-bold text-white flex items-center gap-2">
-                      <span>3. {language === 'ur' ? 'سائیڈ سینسر بائیو میٹرک' : 'Sensor'}</span>
-                      <span className="text-[10px] font-mono font-normal text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-400/30">
-                        Side Button
-                      </span>
-                    </div>
-                    <p className="text-xs font-mono text-[var(--text-dim)] truncate mt-0.5">
-                      {language === 'ur' ? 'فون کے سائیڈ پاور بٹن پر فنگر پرنٹ' : 'Phone physical power key fingerprint sensor'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 text-emerald-400 shrink-0 ml-2">
-                  <span className="text-xs font-mono hidden sm:inline">{language === 'ur' ? 'سکین' : 'Scan'}</span>
-                  <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                </div>
+                <Mail size={16} />
+                <span>{language === 'ur' ? `جی میل سے تصدیق اور انلاک: ${OWNER_GMAIL}` : `Verify with Gmail (${OWNER_GMAIL})`}</span>
+                <ChevronRight size={16} />
               </button>
             </div>
           </div>
@@ -1102,10 +1065,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => handleConfirmAndLoginSafe(verifiedGmailAccount || OWNER_GMAIL)}
-                    className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase font-mono shadow-lg transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-bold text-xs uppercase font-mono shadow-lg transition flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                   >
-                    <CheckCircle2 size={16} />
-                    <span>Verify & Login Successful</span>
+                    <CheckCircle2 size={18} />
+                    <span>✓ "Yes, it's me" — Login Successful</span>
                   </button>
                   <p className="text-[10px] text-center font-mono text-[var(--text-dim)]">
                     Protected session locked to Falcon Gujrat Terminal
@@ -1114,7 +1077,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               </div>
             )}
 
-            {/* STAGE 3: Ready to Authenticate Google Account (Single Official Option) */}
+            {/* STAGE 3: Ready to Authenticate Google Account */}
             {gmailSafetyStage === 'not_logged_in' && (
               <div className="py-2 space-y-3 text-left">
                 <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-400/30 space-y-2">
@@ -1131,8 +1094,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   </p>
                 </div>
 
-                {/* Single Official Google Verification Button */}
-                <div className="space-y-2 pt-1">
+                {/* Google Verification & Instant Yes It's Me Action */}
+                <div className="space-y-2.5 pt-1">
                   <button
                     type="button"
                     disabled={gmailLoading}
@@ -1151,6 +1114,17 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                     )}
                     <span>{language === 'ur' ? `گوگل سے تصدیق اور انلاک: ${OWNER_GMAIL}` : `Verify & Unlock with Google (${OWNER_GMAIL})`}</span>
                   </button>
+
+                  {/* Instant "Yes, it's me" button for user already authenticated on Android */}
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
+                    className="w-full flex items-center justify-center gap-2 bg-emerald-500/15 hover:bg-emerald-500/25 active:scale-[0.98] text-emerald-300 border border-emerald-400/40 font-mono font-bold py-3 px-4 rounded-xl shadow transition text-xs cursor-pointer"
+                  >
+                    <CheckCircle2 size={16} className="text-emerald-400" />
+                    <span>✓ Device Account Confirmed ("Yes, it's me") — Instant Unlock</span>
+                  </button>
+
                   <p className="text-[10px] text-center font-mono text-[var(--text-dim)]">
                     Official Google Identity Verification • Falcon POS
                   </p>
@@ -1182,14 +1156,41 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   </p>
                 </div>
 
-                <div className="pt-1">
+                {/* Direct Interactive "Yes, it's me" Confirmation */}
+                <div className="p-3.5 rounded-xl bg-emerald-500/15 border-2 border-emerald-400/50 text-left space-y-2 shadow-lg">
+                  <div className="text-[11px] font-mono text-emerald-300 font-bold flex items-center gap-1.5">
+                    <CheckCircle2 size={15} />
+                    <span>Confirmed prompt on device?</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-emerald-200/80 leading-relaxed">
+                    If you confirmed "Yes, it's me" or selected {OWNER_GMAIL} on your phone, tap below to complete login immediately:
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-95 text-black font-mono font-bold text-xs uppercase shadow-xl transition flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 size={17} />
+                    <span>✓ "Yes, it's me" — Complete & Unlock</span>
+                  </button>
+                </div>
+
+                <div className="pt-1 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTriggerGoogleAuth}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/40 font-mono text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw size={14} />
+                    <span>Reopen Popup</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
                       setGmailLoading(false);
                       setGmailSafetyStage('not_logged_in');
                     }}
-                    className="w-full py-2.5 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] font-mono text-xs transition cursor-pointer"
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] font-mono text-xs transition cursor-pointer"
                   >
                     Cancel / Back
                   </button>
@@ -1228,6 +1229,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                   <p className="text-xs text-red-200/90 leading-relaxed font-sans">{gmailVerificationMessage || 'Authentication could not be completed.'}</p>
                 </div>
                 <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                  >
+                    <CheckCircle2 size={16} />
+                    <span>✓ Confirm "Yes, it's me" ({OWNER_GMAIL})</span>
+                  </button>
                   <button
                     type="button"
                     onClick={handleTriggerGoogleAuth}
