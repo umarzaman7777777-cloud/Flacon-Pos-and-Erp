@@ -14,8 +14,6 @@ import { isLocalhostOrMobileApp, performUniversalGoogleSignIn } from '../utils/g
 import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, isRealGoogleOAuthToken } from '../utils/googleSheetsSync';
 import { storeDriveToken } from '../utils/googleDriveBackup';
 import {
-  signInWithPopup,
-  signInWithEmailAndPassword,
   onAuthStateChanged,
   signOut,
   User
@@ -123,9 +121,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [verifiedGmailAccount, setVerifiedGmailAccount] = useState<string | null>(null);
   const [gmailVerificationMessage, setGmailVerificationMessage] = useState<string>('');
   const [gmailLoading, setGmailLoading] = useState(false);
-  const [gmailInput, setGmailInput] = useState(OWNER_GMAIL);
-  const [gmailPassword, setGmailPassword] = useState('');
-  const [showPasswordLogin, setShowPasswordLogin] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
 
   // Clean up any stale or obsolete authorized email references from localStorage
@@ -221,15 +216,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             : `Saved verified Google session: ${storedEmail}`
         );
       } else {
-        // No active session logged in yet
+        // Ready to authenticate with official Google account
         setGmailSafetyStage('not_logged_in');
         setGmailVerificationMessage(
           language === 'ur'
-            ? 'فی الحال کوئی فعال جی میل سیشن لاگ ان نہیں ہے۔ حفاظت کے لیے اکاؤنٹ چیک کریں۔'
-            : 'No active Gmail session detected. Please verify your Google account for safety.'
+            ? 'گوگل اکاؤنٹ کی تصدیق کے لیے تیار۔'
+            : `Ready to verify registered account: ${OWNER_GMAIL}`
         );
       }
-    }, 250);
+    }, 150);
   };
 
   // Run Safety Verification on the Active Account and complete Login
@@ -272,8 +267,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       setTimeout(() => {
         setShowGmailSafetyModal(false);
         onUnlock();
-      }, 400);
-    }, 300);
+      }, 350);
+    }, 250);
   };
 
   // Trigger Google Sign-In Popup & Safety Verification Check
@@ -283,7 +278,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     setGmailVerificationMessage(
       language === 'ur'
         ? 'گوگل سائن ان ونڈو کھل رہی ہے... براہ کرم اپنا اکاؤنٹ منتخب کریں۔'
-        : 'Opening Google Sign-In... Please select your master account in the popup.'
+        : `Opening Google Sign-In... Please select ${OWNER_GMAIL} in the Google popup.`
     );
     hapticTap();
 
@@ -313,53 +308,18 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       handleConfirmAndLoginSafe(authedEmail);
     } catch (err: any) {
       console.info('Authentication note:', err?.message || err);
-      setGmailSafetyStage('not_logged_in');
+      setGmailSafetyStage('error');
       setGmailVerificationMessage(
-        language === 'ur'
-          ? 'گوگل سائن ان بند ہو گیا یا منسوخ ہو گیا۔ آپ دوبارہ کوشش کر سکتے ہیں یا نیچے سے ڈائریکٹ تصدیق کر سکتے ہیں۔'
-          : 'Google sign-in window was closed. You can tap "Sign In with Google" again, or click "Verify Master" below.'
+        err?.message || (language === 'ur'
+          ? 'گوگل سائن ان ونڈو بند ہو گئی۔ دوبارہ کوشش کرنے کے لیے بٹن دبائیں۔'
+          : 'Google sign-in window was closed or blocked. Tap "Retry Google Verification" to try again.')
       );
     } finally {
       setGmailLoading(false);
     }
   };
 
-  // Direct Gmail & Password check
-  const handleDirectGmailPasswordVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const inputEmail = gmailInput.toLowerCase().trim();
 
-    if (!isEmailAuthorized(inputEmail)) {
-      setGmailSafetyStage('error');
-      setGmailVerificationMessage(`Access Denied: "${gmailInput}" is not authorized.`);
-      hapticError();
-      return;
-    }
-
-    if (!gmailPassword.trim()) {
-      setGmailVerificationMessage('Please enter password to verify.');
-      return;
-    }
-
-    setGmailLoading(true);
-    setGmailSafetyStage('verifying');
-    setGmailVerificationMessage('Checking account password and security credentials...');
-    hapticTap();
-
-    try {
-      const cred = await signInWithEmailAndPassword(auth, inputEmail, gmailPassword);
-      if (cred.user) {
-        setCurrentUser(cred.user);
-        handleConfirmAndLoginSafe(cred.user.email || inputEmail);
-      }
-    } catch (err: any) {
-      setGmailSafetyStage('error');
-      setGmailVerificationMessage(err.message || 'Authentication check failed.');
-      hapticError();
-    } finally {
-      setGmailLoading(false);
-    }
-  };
 
   // ----------------------------------------------------
   // FINGERPRINT UNLOCK LOGIC
@@ -1138,101 +1098,46 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               </div>
             )}
 
-            {/* STAGE 3: Not Logged In Yet */}
+            {/* STAGE 3: Ready to Authenticate Google Account (Single Official Option) */}
             {gmailSafetyStage === 'not_logged_in' && (
               <div className="py-2 space-y-3 text-left">
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 space-y-2">
-                  <div className="flex items-center gap-2 text-amber-400 text-xs font-mono font-bold">
-                    <AlertCircle size={16} />
-                    <span>No Active Session Found</span>
+                <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-400/30 space-y-2">
+                  <div className="flex items-center gap-2 text-sky-400 text-xs font-mono font-bold">
+                    <ShieldCheck size={16} />
+                    <span>Registered Workshop Owner Account</span>
                   </div>
-                  <p className="text-xs text-[var(--text-dim)] font-mono leading-relaxed">
-                    No active Gmail was detected on this device. Sign in or verify your master workshop account to proceed safely.
+                  <div className="text-xs text-[var(--text)] font-mono bg-black/40 p-2.5 rounded-lg border border-sky-400/20">
+                    <div className="text-[10px] text-sky-300 uppercase font-semibold">Authorized Gmail:</div>
+                    <div className="font-bold text-sm text-white truncate">{OWNER_GMAIL}</div>
+                  </div>
+                  <p className="text-[11px] text-[var(--text-dim)] font-mono leading-relaxed">
+                    Verify with your Google account to confirm identity and securely unlock the terminal.
                   </p>
                 </div>
 
-                {/* Primary Action Buttons */}
-                <div className="space-y-2.5 pt-1">
-                  {/* Option A: Master Owner 1-Tap Verification */}
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
-                    className="w-full py-3 px-3.5 rounded-xl bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-black font-bold text-xs font-mono shadow-md transition flex items-center justify-between cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2 text-left truncate">
-                      <ShieldCheck size={18} className="shrink-0 text-black" />
-                      <div className="truncate">
-                        <div className="text-[10px] uppercase font-black tracking-wider text-black/80">{language === 'ur' ? 'ماسٹر اکاؤنٹ تصدیق' : 'Master Account'}</div>
-                        <div className="truncate font-bold">{language === 'ur' ? `تصدیق اور انلاک: ${OWNER_GMAIL}` : `Verify & Unlock: ${OWNER_GMAIL}`}</div>
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-mono font-bold bg-black/10 px-2 py-0.5 rounded shrink-0 ml-2">Fast ✓</span>
-                  </button>
-
-                  {/* Option B: Google Official Sign-In Popup */}
+                {/* Single Official Google Verification Button */}
+                <div className="space-y-2 pt-1">
                   <button
                     type="button"
                     disabled={gmailLoading}
                     onClick={handleTriggerGoogleAuth}
-                    className="w-full flex items-center justify-center gap-2.5 bg-white text-gray-800 font-medium py-2.5 px-4 rounded-xl shadow hover:bg-gray-100 active:scale-95 transition text-xs font-mono cursor-pointer disabled:opacity-50"
+                    className="w-full flex items-center justify-center gap-2.5 bg-white hover:bg-gray-100 active:scale-[0.98] text-gray-800 font-bold py-3.5 px-4 rounded-xl shadow-lg transition text-xs font-mono cursor-pointer disabled:opacity-50 border border-gray-200"
                   >
                     {gmailLoading ? (
-                      <Loader2 size={16} className="animate-spin text-gray-700" />
+                      <Loader2 size={18} className="animate-spin text-gray-700" />
                     ) : (
-                      <svg width="16" height="16" viewBox="0 0 48 48">
+                      <svg width="18" height="18" viewBox="0 0 48 48">
                         <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34 5.1 29.3 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.4-.4-3.5z" />
                         <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.6 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34 5.1 29.3 3 24 3 16.3 3 9.6 7.4 6.3 14.7z" />
                         <path fill="#4CAF50" d="M24 45c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.3 36.6 26.8 37.5 24 37.5c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.4 40.5 16.1 45 24 45z" />
                         <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C40.9 36 44 30.5 44 24c0-1.4-.1-2.4-.4-3.5z" />
                       </svg>
                     )}
-                    <span className="font-bold">Sign In with Google</span>
+                    <span>{language === 'ur' ? `گوگل سے تصدیق اور انلاک: ${OWNER_GMAIL}` : `Verify & Unlock with Google (${OWNER_GMAIL})`}</span>
                   </button>
-
-                  {/* Option C: Direct Password Toggle */}
-                  {!showPasswordLogin ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowPasswordLogin(true)}
-                      className="text-[11px] text-[var(--text-dim)] hover:text-sky-300 font-mono underline block mx-auto pt-1"
-                    >
-                      Enter Gmail & Password directly instead
-                    </button>
-                  ) : (
-                    <form onSubmit={handleDirectGmailPasswordVerify} className="p-3 rounded-xl bg-black/40 border border-[var(--steel-line)] space-y-2 mt-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-[var(--text-dim)] font-mono uppercase">Password Verification</span>
-                        <button
-                          type="button"
-                          onClick={() => setShowPasswordLogin(false)}
-                          className="text-[10px] text-red-400 hover:underline font-mono"
-                        >
-                          Close
-                        </button>
-                      </div>
-                      <input
-                        type="email"
-                        value={gmailInput}
-                        onChange={e => setGmailInput(e.target.value)}
-                        placeholder="Gmail address..."
-                        className="w-full bg-black border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono focus:outline-none focus:border-sky-400"
-                      />
-                      <input
-                        type="password"
-                        value={gmailPassword}
-                        onChange={e => setGmailPassword(e.target.value)}
-                        placeholder="Password..."
-                        className="w-full bg-black border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono focus:outline-none focus:border-sky-400"
-                      />
-                      <button
-                        type="submit"
-                        disabled={gmailLoading}
-                        className="w-full py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-bold text-xs uppercase font-mono shadow transition"
-                      >
-                        {gmailLoading ? 'Verifying...' : 'Verify Password & Login'}
-                      </button>
-                    </form>
-                  )}
+                  <p className="text-[10px] text-center font-mono text-[var(--text-dim)]">
+                    Official Google Identity Verification • Falcon POS
+                  </p>
                 </div>
               </div>
             )}
@@ -1240,36 +1145,26 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             {/* STAGE 4: Verifying */}
             {gmailSafetyStage === 'verifying' && (
               <div className="py-4 space-y-3">
-                <Loader2 size={36} className="animate-spin text-amber-400 mx-auto" />
+                <Loader2 size={36} className="animate-spin text-sky-400 mx-auto" />
                 <div className="space-y-1">
                   <div className="text-sm font-bold text-white font-mono">
-                    {gmailVerificationMessage || 'Verifying account safety...'}
+                    {gmailVerificationMessage || 'Verifying account with Google...'}
                   </div>
                   <p className="text-xs text-[var(--text-dim)] font-mono">
-                    Matching email against authorized master workshop registry...
+                    Verifying authorization for: {OWNER_GMAIL}
                   </p>
                 </div>
 
-                {/* Mobile Android 2FA Assistance Notice */}
+                {/* Mobile Android Prompt Notice */}
                 <div className="p-3.5 rounded-xl bg-blue-500/15 border border-blue-400/30 text-left space-y-2 text-xs font-mono">
                   <div className="flex items-center gap-2 text-blue-300 font-bold">
                     <Smartphone size={16} />
-                    <span>Mobile Android "Yes, it's me" / 2FA Notice:</span>
+                    <span>Android "Yes, it's me" Prompt:</span>
                   </div>
                   <p className="text-[11px] text-blue-200/90 leading-relaxed font-sans">
-                    1. <strong>Top Notification Bar:</strong> On Android, Google sends the <em>"Yes, it's me"</em> prompt to your phone's notification drawer, NOT inside a new popup window. Swipe down from the top to confirm.<br />
-                    2. <strong>If Popup is Stuck:</strong> Tap the gold button below to bypass and unlock directly!
+                    Google has opened the sign-in window. If prompted on your phone, select <strong>{OWNER_GMAIL}</strong> or swipe down the notification bar to confirm <em>"Yes, it's me"</em>.
                   </p>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleConfirmAndLoginSafe(OWNER_GMAIL)}
-                  className="w-full py-3 px-4 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-mono text-xs font-bold uppercase transition flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95"
-                >
-                  <ShieldCheck size={17} />
-                  <span>Confirm & Unlock Master ({OWNER_GMAIL})</span>
-                </button>
 
                 <div className="pt-1">
                   <button
@@ -1280,7 +1175,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
                     }}
                     className="w-full py-2.5 px-3 rounded-xl bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] font-mono text-xs transition cursor-pointer"
                   >
-                    Cancel
+                    Cancel / Back
                   </button>
                 </div>
               </div>
@@ -1309,21 +1204,28 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             {/* STAGE 6: Error State */}
             {gmailSafetyStage === 'error' && (
               <div className="py-3 space-y-3 text-left">
-                <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs font-mono space-y-2">
+                <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs font-mono space-y-2">
                   <div className="flex items-center gap-1.5 font-bold text-red-400">
                     <AlertCircle size={16} />
-                    <span>Safety Verification Blocked</span>
+                    <span>Google Verification Notice</span>
                   </div>
-                  <p>{gmailVerificationMessage || 'Unauthorized account. Access restricted for security.'}</p>
+                  <p className="text-xs text-red-200/90 leading-relaxed font-sans">{gmailVerificationMessage || 'Authentication could not be completed.'}</p>
                 </div>
-                <div>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleTriggerGoogleAuth}
+                    className="w-full py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-black text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                  >
+                    <RotateCcw size={15} />
+                    <span>Retry Google Verification</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setGmailSafetyStage('not_logged_in')}
-                    className="w-full py-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text)] border border-[var(--steel-line)] text-xs font-mono font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-[#323842] text-[var(--text-dim)] hover:text-white border border-[var(--steel-line)] text-xs font-mono transition cursor-pointer text-center"
                   >
-                    <RotateCcw size={14} />
-                    <span>Try Another Account</span>
+                    Back to Login
                   </button>
                 </div>
               </div>

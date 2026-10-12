@@ -530,7 +530,7 @@ export async function runOAuthRedirectCallbackDiagnostic(): Promise<{
 
   let mobileWarning: string | undefined = undefined;
   if (isAndroid) {
-    mobileWarning = 'On Android, Google 2-Step Verification prompts ("Yes, it\'s me") are delivered to your Android system notifications tray, NOT a new browser tab. Swipe down from the top of your phone screen to accept the prompt, or use 1-Tap Master Unlock.';
+    mobileWarning = 'On Android, Google 2-Step Verification prompts ("Yes, it\'s me") are delivered to your Android system notifications tray, NOT a new browser tab. Swipe down from the top of your phone screen to accept the prompt.';
   }
 
   let errorMessage = '';

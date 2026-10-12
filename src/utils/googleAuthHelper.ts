@@ -378,29 +378,9 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     };
   }
 
-  // 2. Check Firestore cloud sync for existing valid credentials
-  try {
-    const { syncSheetsTokenFromCloud } = await import('./googleSheetsSync');
-    const { syncDriveTokenFromCloud } = await import('./googleDriveBackup');
-    const sCloud = await syncSheetsTokenFromCloud();
-    if (sCloud?.token && isRealGoogleOAuthToken(sCloud.token)) {
-      return {
-        accessToken: sCloud.token,
-        expiresIn: 7200,
-        userEmail: sCloud.userEmail || preferredEmail
-      };
-    }
-    const dCloud = await syncDriveTokenFromCloud();
-    if (dCloud?.token && isRealGoogleOAuthToken(dCloud.token)) {
-      return {
-        accessToken: dCloud.token,
-        expiresIn: 7200,
-        userEmail: dCloud.userEmail || preferredEmail
-      };
-    }
-  } catch {}
-
-  // 3. Interactive Google Sign-In with Firebase Auth GoogleAuthProvider
+  // 2. Interactive Google Sign-In with Firebase Auth GoogleAuthProvider
+  // NOTE: Must run synchronously from user tap to preserve browser user activation gesture
+  // (Prevents browser popup blockers from suppressing the Google "Yes, it's me" window on Android)
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({
     prompt: 'select_account',
@@ -415,7 +395,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
   }
 
   try {
-    console.info('[Falcon Auth] Initiating Firebase Google Sign-In popup...');
+    console.info('[Falcon Auth] Initiating Firebase Google Sign-In popup with active user gesture...');
     const cred = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(cred);
     const accessToken = credential?.accessToken || '';
@@ -443,7 +423,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     console.warn('[Falcon Auth] Sign-in popup notice:', popupErr?.code || popupErr?.message);
 
     if (popupErr?.code === 'auth/popup-blocked') {
-      throw new Error('Google Sign-In popup was blocked by browser. Please tap "Verify Master" or allow popups.');
+      throw new Error('Google Sign-In popup was blocked by browser. Please tap again or allow popups in site settings.');
     }
 
     if (popupErr?.code === 'auth/popup-closed-by-user') {
