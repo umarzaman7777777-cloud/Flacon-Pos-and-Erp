@@ -336,8 +336,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       }
 
       if (res.accessToken && isRealGoogleOAuthToken(res.accessToken)) {
-        storeSheetsToken(res.accessToken, 7200, authedEmail);
-        storeDriveToken(res.accessToken, 7200, authedEmail);
+        storeSheetsToken(res.accessToken, 315360000, authedEmail);
+        storeDriveToken(res.accessToken, 315360000, authedEmail);
         notifyWorkspaceSyncUpdated();
       }
 

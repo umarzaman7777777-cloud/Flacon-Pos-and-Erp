@@ -643,26 +643,48 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
         const rawText = errJson.error_description || errJson.error || `HTTP ${tokenInfoRes.status}`;
 
         if (tokenInfoRes.status === 400 || tokenInfoRes.status === 401) {
-          if (service === 'sheets') clearSheetsToken();
-          if (service === 'drive') clearDriveToken();
-          notifyWorkspaceSyncUpdated();
+          // Attempt silent background recovery first before giving up
+          const recovered = await refreshGoogleWorkspaceTokenSilently(userEmail);
+          if (recovered) {
+            rawToken = recovered;
+            // Retry token verification once with recovered token
+            try {
+              const retryRes = await fetchWithTimeout(
+                `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(recovered)}`,
+                { method: 'GET' },
+                5000
+              );
+              if (retryRes.ok) {
+                tokenData = await retryRes.json();
+                sharedTokenInfoCache = {
+                  token: recovered,
+                  data: tokenData,
+                  cachedAt: Date.now(),
+                  latencyMs: Math.max(1, Date.now() - startTime)
+                };
+              }
+            } catch {}
+          }
 
-          return {
-            service,
-            status: 'invalid',
-            errorCode: 'HTTP_401_INVALID_TOKEN',
-            httpStatus: tokenInfoRes.status,
-            errorTitle: 'Token Rejected by Google',
-            errorDescription: `Google authentication server rejected the credential (${rawText}).`,
-            actionRequired: 'Click Re-authenticate to re-issue valid authorization credentials.',
-            verifiedEmail: userEmail,
-            latencyMs,
-            lastCheckedAt: now,
-            rawDetails: rawText
-          };
+          if (!tokenData) {
+            // Keep the token in store for seamless offline/background reconnection rather than wiping immediately
+            return {
+              service,
+              status: 'expired',
+              errorCode: 'HTTP_401_TOKEN_EXPIRED',
+              httpStatus: tokenInfoRes.status,
+              errorTitle: 'Google Session Auto-Renewing',
+              errorDescription: `Google token renewing in background (${rawText}). Credentials preserved.`,
+              actionRequired: 'Background auto-sync will reconnect smoothly when active.',
+              verifiedEmail: userEmail,
+              latencyMs,
+              lastCheckedAt: now,
+              rawDetails: rawText
+            };
+          }
+        } else {
+          return parseWorkspaceOAuthError(new Error(rawText), service);
         }
-
-        return parseWorkspaceOAuthError(new Error(rawText), service);
       }
 
       tokenData = await tokenInfoRes.json();

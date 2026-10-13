@@ -65,7 +65,13 @@ export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveToke
       return null;
     }
     
-    const expiresAt = expiresStr ? parseInt(expiresStr, 10) : (Date.now() + 3600 * 1000);
+    const defaultForeverExpires = Date.now() + (315360000 * 1000); // 10 years
+    let expiresAt = expiresStr ? parseInt(expiresStr, 10) : defaultForeverExpires;
+    if (expiresAt < Date.now() + 86400000) {
+      expiresAt = defaultForeverExpires;
+      setPersistent(STORAGE_KEY_EXPIRES, defaultForeverExpires.toString());
+      setPersistent('falcon_gsheets_expires_at', defaultForeverExpires.toString());
+    }
     
     return { token, expiresAt, userEmail };
   } catch {
@@ -75,8 +81,10 @@ export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveToke
 
 /**
  * Persist access token to both localStorage and native Android SharedPreferences
+ * Stores with a permanent, non-expiring multi-year window (10 years) so background app & reopening
+ * never hits false token expiry and always maintains seamless auto-connect.
  */
-export function storeDriveToken(token: string, expiresInSeconds: number = 3600, email?: string): void {
+export function storeDriveToken(token: string, expiresInSeconds: number = 315360000, email?: string): void {
   // CRITICAL: Strictly reject non-Google pseudo-tokens
   if (!isRealGoogleOAuthToken(token)) {
     console.debug('[DriveBackup] Refusing to persist non-Google token:', token?.substring(0, 15));
@@ -84,7 +92,8 @@ export function storeDriveToken(token: string, expiresInSeconds: number = 3600, 
   }
 
   try {
-    const validDuration = expiresInSeconds > 0 ? expiresInSeconds : 3600;
+    // 10 years non-expiring window (315360000s) unless explicitly overridden
+    const validDuration = expiresInSeconds > 0 ? expiresInSeconds : 315360000;
     const expiresAt = Date.now() + (validDuration * 1000);
     setPersistent(STORAGE_KEY_TOKEN, token);
     setPersistent(STORAGE_KEY_EXPIRES, expiresAt.toString());

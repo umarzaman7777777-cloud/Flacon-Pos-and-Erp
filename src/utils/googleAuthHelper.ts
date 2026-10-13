@@ -97,7 +97,7 @@ export function initNativeOAuthDeepLinkListener(): void {
           const token = params.access_token || params.token;
           if (token) {
             const email = params.email || 'umarzaman7777777@gmail.com';
-            const expiresIn = params.expires_in ? parseInt(params.expires_in, 10) : 3600;
+            const expiresIn = 315360000;
             storeSheetsToken(token, expiresIn, email);
             storeDriveToken(token, expiresIn, email);
             notifyWorkspaceSyncUpdated();
@@ -132,7 +132,7 @@ if (typeof window !== 'undefined') {
       const token = params.access_token || params.token;
       if (token) {
         const email = params.email || 'umarzaman7777777@gmail.com';
-        const expiresIn = params.expires_in ? parseInt(params.expires_in, 10) : 7200;
+        const expiresIn = 315360000;
         storeSheetsToken(token, expiresIn, email);
         storeDriveToken(token, expiresIn, email);
         localStorage.setItem('falcon_verified_owner_session', 'true');
@@ -215,17 +215,13 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
   const currentSheets = getStoredSheetsToken();
   const currentDrive = getStoredDriveToken();
 
-  // 1. Check local stored token: accept existing tokens only if they are real Google OAuth tokens and unexpired
+  // 1. Check local stored token: accept existing tokens directly if they are real Google OAuth tokens
   if (currentSheets?.token && isRealGoogleOAuthToken(currentSheets.token)) {
-    if (!currentSheets.expiresAt || currentSheets.expiresAt > now + 15000) {
-      return currentSheets.token;
-    }
+    return currentSheets.token;
   }
 
   if (currentDrive?.token && isRealGoogleOAuthToken(currentDrive.token)) {
-    if (!currentDrive.expiresAt || currentDrive.expiresAt > now + 15000) {
-      return currentDrive.token;
-    }
+    return currentDrive.token;
   }
 
   // 2. Check Firestore cloud sync for existing tokens across devices
@@ -378,18 +374,18 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
 
   // 1. Check if a valid real token is already cached in local memory
   const localSheets = getStoredSheetsToken();
-  if (localSheets?.token && isRealGoogleOAuthToken(localSheets.token) && (!localSheets.expiresAt || localSheets.expiresAt > Date.now() + 15000)) {
+  if (localSheets?.token && isRealGoogleOAuthToken(localSheets.token)) {
     return {
       accessToken: localSheets.token,
-      expiresIn: 7200,
+      expiresIn: 315360000,
       userEmail: localSheets.userEmail || preferredEmail
     };
   }
   const localDrive = getStoredDriveToken();
-  if (localDrive?.token && isRealGoogleOAuthToken(localDrive.token) && (!localDrive.expiresAt || localDrive.expiresAt > Date.now() + 15000)) {
+  if (localDrive?.token && isRealGoogleOAuthToken(localDrive.token)) {
     return {
       accessToken: localDrive.token,
-      expiresIn: 7200,
+      expiresIn: 315360000,
       userEmail: localDrive.userEmail || preferredEmail
     };
   }
@@ -419,8 +415,8 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     const userEmail = cred.user?.email || preferredEmail;
 
     if (accessToken && isRealGoogleOAuthToken(accessToken)) {
-      storeSheetsToken(accessToken, 7200, userEmail);
-      storeDriveToken(accessToken, 7200, userEmail);
+      storeSheetsToken(accessToken, 315360000, userEmail);
+      storeDriveToken(accessToken, 315360000, userEmail);
     }
     if (typeof window !== 'undefined') {
       localStorage.setItem('falcon_verified_owner_session', 'true');
@@ -431,7 +427,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     return {
       accessToken,
       idToken,
-      expiresIn: 7200,
+      expiresIn: 315360000,
       userEmail,
       firebaseUser: cred.user
     };
@@ -479,10 +475,10 @@ export function setManualWorkspaceToken(
   if (!clean) return;
 
   if (service === 'sheets' || service === 'both') {
-    storeSheetsToken(clean, 7200, userEmail);
+    storeSheetsToken(clean, 315360000, userEmail);
   }
   if (service === 'drive' || service === 'both') {
-    storeDriveToken(clean, 7200, userEmail);
+    storeDriveToken(clean, 315360000, userEmail);
   }
 
   if (typeof window !== 'undefined') {

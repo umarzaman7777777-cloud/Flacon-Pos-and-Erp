@@ -2449,6 +2449,8 @@ export const App: React.FC = () => {
             try {
               sessionStorage.setItem('falcon_last_active_time', String(Date.now()));
             } catch {}
+            // Seamlessly trigger auto-sync upon unlocking
+            workspaceSync.autoSyncNow().catch(() => {});
           }}
           onUpdatePin={newPin => setState(prev => ({ ...prev, pin: newPin }))}
           onUpdateVisualSettings={handleUpdateVisualSettings}

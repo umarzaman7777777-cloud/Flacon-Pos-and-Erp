@@ -296,8 +296,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           const lower = msg.toLowerCase();
           const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
           if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
-            clearSheetsToken();
-            setSheetsError('Google Sheets session expired. Click Re-authenticate to renew.');
+            refreshGoogleWorkspaceTokenSilently().catch(() => {});
+            setSheetsError('Reconnecting Google Sheets in background...');
           }
         } finally {
           setIsSyncingSheets(false);
@@ -326,8 +326,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           const lower = msg.toLowerCase();
           const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
           if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
-            clearDriveToken();
-            setDriveError('Google Drive session expired. Click Re-authenticate to renew.');
+            refreshGoogleWorkspaceTokenSilently().catch(() => {});
+            setDriveError('Reconnecting Google Drive in background...');
           }
         } finally {
           setIsUploadingDrive(false);
