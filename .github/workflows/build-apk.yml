@@ -101,6 +101,15 @@ jobs:
             node scripts/generate_assets.cjs
           fi
 
+      # Cache the signing keystore so every subsequent CI build uses the exact same signature
+      - name: Cache Android Keystore
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.android/debug.keystore
+            android/app/debug.keystore
+          key: falcon-pos-signing-keystore-v2
+
       - name: Build Android Debug APK with Gradle
         run: |
           cd android
@@ -119,10 +128,20 @@ jobs:
             grep -q "android.suppressUnsupportedCompileSdk" gradle.properties || echo "android.suppressUnsupportedCompileSdk=36" >> gradle.properties
           fi
 
-          # Ensure the permanent Falcon POS keystore is used so all APK builds share the identical signature
+          mkdir -p ~/.android
+          # Ensure a genuine Java keytool keystore is used and preserved across builds
           if [ ! -f "app/debug.keystore" ]; then
-            echo "Restoring permanent Falcon signing keystore..."
-            echo "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" | base64 -d > app/debug.keystore
+            if [ -f "$HOME/.android/debug.keystore" ]; then
+              echo "Restoring cached debug keystore from ~/.android/debug.keystore..."
+              cp "$HOME/.android/debug.keystore" app/debug.keystore
+            else
+              echo "Generating persistent Java keytool signing keystore..."
+              keytool -genkey -v -keystore app/debug.keystore \
+                -storepass android -alias androiddebugkey -keypass android \
+                -keyalg RSA -keysize 2048 -validity 10000 \
+                -dname "CN=Falcon POS,O=Falcon,C=US"
+              cp app/debug.keystore "$HOME/.android/debug.keystore"
+            fi
           fi
 
           GRADLE_FLAGS="-Pandroid.useAndroidX=true -Pandroid.enableJetifier=true -Pandroid.suppressUnsupportedCompileSdk=36 -PversionCode=$VERSION_CODE -PversionName=$VERSION_NAME --no-daemon --stacktrace"
