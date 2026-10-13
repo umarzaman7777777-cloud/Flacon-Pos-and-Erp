@@ -215,22 +215,17 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
   const currentSheets = getStoredSheetsToken();
   const currentDrive = getStoredDriveToken();
 
-  // 1. Check local stored token: accept existing tokens only if they are real Google OAuth tokens
+  // 1. Check local stored token: accept existing tokens only if they are real Google OAuth tokens and unexpired
   if (currentSheets?.token && isRealGoogleOAuthToken(currentSheets.token)) {
-    if (!currentSheets.expiresAt || currentSheets.expiresAt > now + 30000) {
+    if (!currentSheets.expiresAt || currentSheets.expiresAt > now + 15000) {
       return currentSheets.token;
     }
-    // Token is near or past nominal 1hr timestamp, refresh validity seamlessly
-    storeSheetsToken(currentSheets.token, 7200, preferredEmail);
-    return currentSheets.token;
   }
 
   if (currentDrive?.token && isRealGoogleOAuthToken(currentDrive.token)) {
-    if (!currentDrive.expiresAt || currentDrive.expiresAt > now + 30000) {
+    if (!currentDrive.expiresAt || currentDrive.expiresAt > now + 15000) {
       return currentDrive.token;
     }
-    storeDriveToken(currentDrive.token, 7200, preferredEmail);
-    return currentDrive.token;
   }
 
   // 2. Check Firestore cloud sync for existing tokens across devices

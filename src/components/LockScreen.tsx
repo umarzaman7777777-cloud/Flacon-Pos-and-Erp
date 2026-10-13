@@ -73,8 +73,23 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const [confirmPinInput, setConfirmPinInput] = useState('');
   const [resetError, setResetError] = useState('');
 
-  // Hardware Biometric / Fingerprint State
-  const [biometricStatus, setBiometricStatus] = useState<BiometricStatus | null>(null);
+  // Hardware Biometric / Fingerprint State with instantaneous cache for quick reopening
+  const [biometricStatus, setBiometricStatus] = useState<BiometricStatus | null>(() => {
+    try {
+      const cached = sessionStorage.getItem('falcon_cached_biometric_status') || localStorage.getItem('falcon_cached_biometric_status');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isLoadingOptions, setIsLoadingOptions] = useState<boolean>(() => {
+    try {
+      const cached = sessionStorage.getItem('falcon_cached_biometric_status') || localStorage.getItem('falcon_cached_biometric_status');
+      return !cached;
+    } catch {
+      return true;
+    }
+  });
   const [isBiometricScanning, setIsBiometricScanning] = useState(false);
   const [biometricMsg, setBiometricMsg] = useState<string | null>(null);
   const [biometricError, setBiometricError] = useState<string | null>(null);
@@ -139,9 +154,19 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   }, []);
 
   useEffect(() => {
+    let isSubscribed = true;
     // Detect device fingerprint / biometric sensor capabilities
     checkBiometricSupport().then(status => {
-      setBiometricStatus(status);
+      if (isSubscribed) {
+        setBiometricStatus(status);
+        setIsLoadingOptions(false);
+        try {
+          sessionStorage.setItem('falcon_cached_biometric_status', JSON.stringify(status));
+          localStorage.setItem('falcon_cached_biometric_status', JSON.stringify(status));
+        } catch {}
+      }
+    }).catch(() => {
+      if (isSubscribed) setIsLoadingOptions(false);
     });
 
     // Check if returning from a Google redirect auth flow on mobile
@@ -260,13 +285,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         : 'Verifying security integrity & workshop authorization...'
     );
 
-    // CRITICAL: Ensure persistent owner session and Workspace tokens are saved immediately
+    // CRITICAL: Ensure persistent owner session is saved immediately
     localStorage.setItem('falcon_verified_owner_session', 'true');
     localStorage.setItem('falcon_verified_owner_email', targetEmail);
-
-    const activeToken = getStoredSheetsToken()?.token || `falcon_master_auth_${Date.now()}`;
-    storeSheetsToken(activeToken, 7200, targetEmail);
-    storeDriveToken(activeToken, 7200, targetEmail);
     notifyWorkspaceSyncUpdated();
 
     setTimeout(() => {
@@ -360,12 +381,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         setFingerprintAttemptFailed(false);
         hapticTransactionComplete();
 
-        // Persist verified owner session & active tokens for auto-sync
+        // Persist verified owner session for POS unlock
         localStorage.setItem('falcon_verified_owner_session', 'true');
         localStorage.setItem('falcon_verified_owner_email', OWNER_GMAIL);
-        const activeToken = getStoredSheetsToken()?.token || `falcon_bio_auth_${Date.now()}`;
-        storeSheetsToken(activeToken, 7200, OWNER_GMAIL);
-        storeDriveToken(activeToken, 7200, OWNER_GMAIL);
         notifyWorkspaceSyncUpdated();
 
         setTimeout(() => {
@@ -426,12 +444,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     if (code === targetPin || code === '321' || code === '1234') {
       hapticTransactionComplete();
 
-      // Persist verified owner session & active tokens for auto-sync
+      // Persist verified owner session for POS unlock
       localStorage.setItem('falcon_verified_owner_session', 'true');
       localStorage.setItem('falcon_verified_owner_email', OWNER_GMAIL);
-      const activeToken = getStoredSheetsToken()?.token || `falcon_pin_auth_${Date.now()}`;
-      storeSheetsToken(activeToken, 7200, OWNER_GMAIL);
-      storeDriveToken(activeToken, 7200, OWNER_GMAIL);
       notifyWorkspaceSyncUpdated();
 
       setTimeout(() => {
@@ -622,9 +637,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             )}
 
             {/* Status Indicator */}
-            <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[11px] font-mono text-[var(--text-dim)] select-none">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Falcon Secure Terminal • Gujrat</span>
+            <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[11px] font-mono select-none">
+              {isLoadingOptions ? (
+                <>
+                  <Loader2 size={12} className="animate-spin text-amber-400" />
+                  <span className="text-amber-300 font-bold">
+                    {language === 'ur' ? 'لاگ ان آپشنز لوڈ ہو رہے ہیں...' : 'login options loading...'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[var(--text-dim)]">Falcon Secure Terminal • Gujrat</span>
+                </>
+              )}
             </div>
           </div>
 

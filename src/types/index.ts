@@ -655,6 +655,7 @@ export interface AppState {
   recoveryAnswer: string;
   autolockMinutes: number;
   autolockSeconds?: number; // 30, 60 (1m), 300 (5m), 0 (never)
+  lockOnMinimize?: boolean; // Instantly lock when app is minimized / switched to background
   deviceName: string;
   ntn: string;
   salesTaxReg: string;

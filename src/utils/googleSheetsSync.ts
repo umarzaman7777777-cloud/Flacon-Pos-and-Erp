@@ -81,17 +81,8 @@ export interface FullSyncReport {
 export function isRealGoogleOAuthToken(token?: string | null): boolean {
   if (!token || typeof token !== 'string') return false;
   const t = token.trim();
-  if (
-    t.startsWith('falcon_') ||
-    t.startsWith('mock_') ||
-    t.startsWith('offline_') ||
-    t === 'undefined' ||
-    t === 'null' ||
-    t === ''
-  ) {
-    return false;
-  }
-  return t.startsWith('ya29.') || t.length > 30;
+  // Valid Google OAuth2 access tokens for Google APIs ALWAYS begin with "ya29."
+  return t.startsWith('ya29.') && t.length > 20;
 }
 
 /**
@@ -115,6 +106,12 @@ export function getStoredSheetsToken(allowGracePeriod: boolean = true): SheetsTo
 
     if (!token) return null;
 
+    // If stored token is not a genuine Google OAuth token (e.g. an old dummy string), clean it out immediately
+    if (!isRealGoogleOAuthToken(token)) {
+      clearSheetsToken();
+      return null;
+    }
+
     const expiresAt = expiresStr ? parseInt(expiresStr, 10) : (Date.now() + 3600 * 1000);
 
     return { token, expiresAt, userEmail };
@@ -127,6 +124,12 @@ export function getStoredSheetsToken(allowGracePeriod: boolean = true): SheetsTo
  * Persist access token in both localStorage and native Android SharedPreferences
  */
 export function storeSheetsToken(token: string, expiresInSeconds: number = 3600, email?: string): void {
+  // CRITICAL: Strictly reject non-Google pseudo-tokens to prevent corrupting workspace auth
+  if (!isRealGoogleOAuthToken(token)) {
+    console.debug('[SheetsSync] Refusing to persist non-Google token:', token?.substring(0, 15));
+    return;
+  }
+
   try {
     const validDuration = expiresInSeconds > 0 ? expiresInSeconds : 3600;
     const expiresAt = Date.now() + (validDuration * 1000);

@@ -143,7 +143,7 @@ interface SettingsViewProps {
   onUpdateBranding: (name: string, tagline: string) => void;
   onUpdatePin: (newPin: string) => void;
   onUpdateRecoveryAnswer?: (newAnswer: string) => void;
-  onUpdateAutolock?: (seconds: number) => void;
+  onUpdateAutolock?: (seconds: number, lockOnMinimize?: boolean) => void;
   onLockTerminal: () => void;
   appState?: AppState;
   syncState?: 'synced' | 'syncing' | 'offline' | 'error';
@@ -208,6 +208,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (appState?.autolockMinutes !== undefined) return appState.autolockMinutes * 60;
     return 300;
   });
+  const [lockOnMinimizeVal, setLockOnMinimizeVal] = useState<boolean>(() => {
+    return appState?.lockOnMinimize ?? false;
+  });
   const [pinSavedMsg, setPinSavedMsg] = useState(false);
   const [showPinMask, setShowPinMask] = useState(false);
 
@@ -258,7 +261,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       onUpdateRecoveryAnswer(newRecoveryVal.trim());
     }
     if (onUpdateAutolock) {
-      onUpdateAutolock(selectedAutolockSec);
+      onUpdateAutolock(selectedAutolockSec, lockOnMinimizeVal);
     }
 
     // 3. Save Printer & Exports
@@ -563,7 +566,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         onUpdateRecoveryAnswer(newRecoveryVal.trim());
       }
       if (onUpdateAutolock) {
-        onUpdateAutolock(selectedAutolockSec);
+        onUpdateAutolock(selectedAutolockSec, lockOnMinimizeVal);
       }
       setPinSavedMsg(true);
       setTimeout(() => setPinSavedMsg(false), 3000);
@@ -1658,6 +1661,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="text-[10px] text-[var(--text-dim)]">{opt.sub}</div>
                   </button>
                 ))}
+              </div>
+
+              {/* Background / Minimize Protection Toggle */}
+              <div className="mt-3 p-3 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] flex items-center justify-between gap-3">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-[var(--text)]">
+                      Instant Lock on Minimize / Background
+                    </span>
+                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-400/30 font-semibold">
+                      Counter Security
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[var(--text-dim)] mt-0.5">
+                    Locks POS terminal immediately whenever app is minimized, screen is locked, or you switch apps
+                  </span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={lockOnMinimizeVal}
+                    onChange={e => setLockOnMinimizeVal(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-400"></div>
+                </label>
               </div>
             </div>
 

@@ -292,6 +292,13 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           console.info('[Workspace Sync] ✓ Google Sheets automatically synchronized on app launch!');
         } catch (sErr: any) {
           console.warn('[Workspace Sync] Startup Sheets sync notice:', sErr);
+          const msg = String(sErr?.message || sErr || '');
+          const lower = msg.toLowerCase();
+          const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
+          if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
+            clearSheetsToken();
+            setSheetsError('Google Sheets session expired. Click Re-authenticate to renew.');
+          }
         } finally {
           setIsSyncingSheets(false);
         }
@@ -315,6 +322,13 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           console.info('[Workspace Sync] ✓ Google Drive backup uploaded on app launch:', uploaded.name);
         } catch (dErr: any) {
           console.warn('[Workspace Sync] Startup Drive backup notice:', dErr);
+          const msg = String(dErr?.message || dErr || '');
+          const lower = msg.toLowerCase();
+          const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
+          if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
+            clearDriveToken();
+            setDriveError('Google Drive session expired. Click Re-authenticate to renew.');
+          }
         } finally {
           setIsUploadingDrive(false);
         }
@@ -786,15 +800,30 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   }, [driveAutoBackup]);
 
   // Calculate high-level status for header indicator
-  const sheetsConnected = Boolean(sheetsTokenInfo?.token);
-  const driveConnected = Boolean(driveTokenInfo?.token);
+  const hasRealSheets = Boolean(
+    sheetsTokenInfo?.token &&
+    isRealGoogleOAuthToken(sheetsTokenInfo.token) &&
+    (!sheetsTokenInfo.expiresAt || sheetsTokenInfo.expiresAt > Date.now())
+  );
+  const hasRealDrive = Boolean(
+    driveTokenInfo?.token &&
+    isRealGoogleOAuthToken(driveTokenInfo.token) &&
+    (!driveTokenInfo.expiresAt || driveTokenInfo.expiresAt > Date.now())
+  );
+  const sheetsConnected = hasRealSheets && !sheetsError;
+  const driveConnected = hasRealDrive && !driveError;
   const isSyncing = isSyncingSheets || isUploadingDrive;
+  const hasAuthError = Boolean(sheetsError || driveError);
 
   let workspaceStatus: 'syncing' | 'synced' | 'ready' | 'warning' | 'disconnected' = 'disconnected';
   let statusBadgeText = 'G-Sync';
   let statusBadgeTooltip = 'Google Workspace: Click to connect Google Sheets & Drive';
 
-  if (isAutoAuthenticating) {
+  if (hasAuthError) {
+    workspaceStatus = 'warning';
+    statusBadgeText = 'Re-Authenticate';
+    statusBadgeTooltip = `Google Workspace Auth Alert: ${sheetsError || driveError || 'Session expired or rejected by Google. Click to re-authenticate.'}`;
+  } else if (isAutoAuthenticating) {
     workspaceStatus = 'syncing';
     statusBadgeText = 'Auto-Connecting...';
     statusBadgeTooltip = 'Google Workspace: Automatically authenticating and synchronizing with Google Sheets & Drive...';

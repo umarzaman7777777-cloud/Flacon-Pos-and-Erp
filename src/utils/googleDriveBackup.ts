@@ -58,6 +58,12 @@ export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveToke
     }
 
     if (!token) return null;
+
+    // If stored token is not a genuine Google OAuth token, clean it out immediately
+    if (!isRealGoogleOAuthToken(token)) {
+      clearDriveToken();
+      return null;
+    }
     
     const expiresAt = expiresStr ? parseInt(expiresStr, 10) : (Date.now() + 3600 * 1000);
     
@@ -71,6 +77,12 @@ export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveToke
  * Persist access token to both localStorage and native Android SharedPreferences
  */
 export function storeDriveToken(token: string, expiresInSeconds: number = 3600, email?: string): void {
+  // CRITICAL: Strictly reject non-Google pseudo-tokens
+  if (!isRealGoogleOAuthToken(token)) {
+    console.debug('[DriveBackup] Refusing to persist non-Google token:', token?.substring(0, 15));
+    return;
+  }
+
   try {
     const validDuration = expiresInSeconds > 0 ? expiresInSeconds : 3600;
     const expiresAt = Date.now() + (validDuration * 1000);

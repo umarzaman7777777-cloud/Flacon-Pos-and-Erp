@@ -643,6 +643,10 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
         const rawText = errJson.error_description || errJson.error || `HTTP ${tokenInfoRes.status}`;
 
         if (tokenInfoRes.status === 400 || tokenInfoRes.status === 401) {
+          if (service === 'sheets') clearSheetsToken();
+          if (service === 'drive') clearDriveToken();
+          notifyWorkspaceSyncUpdated();
+
           return {
             service,
             status: 'invalid',

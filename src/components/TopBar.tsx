@@ -20,12 +20,13 @@ import {
   HardDrive,
   Database,
   Trash2,
-  Grid
+  Grid,
+  AlertTriangle
 } from 'lucide-react';
 import { AppLanguage, AppTheme, PrinterSettings } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { getPrinterSettings, subscribeToPrinterSettings } from '../utils/printerManager';
-import { getStoredSheetsToken, WORKSPACE_SYNC_EVENT } from '../utils/googleSheetsSync';
+import { getStoredSheetsToken, WORKSPACE_SYNC_EVENT, isRealGoogleOAuthToken } from '../utils/googleSheetsSync';
 import { getStoredDriveToken } from '../utils/googleDriveBackup';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -99,21 +100,22 @@ export const TopBar: React.FC<TopBarProps> = ({
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
   // Real-time Google Workspace (Drive & Sheets) Connectivity State
-  const [localSheetsConnected, setLocalSheetsConnected] = useState(() => {
-    const s = getStoredSheetsToken();
-    return Boolean(s && s.token && !s.token.startsWith('falcon_offline_session_'));
-  });
-  const [localDriveConnected, setLocalDriveConnected] = useState(() => {
-    const d = getStoredDriveToken();
-    return Boolean(d && d.token && !d.token.startsWith('falcon_offline_session_'));
-  });
+  const isTokenLive = (info: any) => {
+    return Boolean(
+      info &&
+      info.token &&
+      isRealGoogleOAuthToken(info.token) &&
+      (!info.expiresAt || info.expiresAt > Date.now())
+    );
+  };
+
+  const [localSheetsConnected, setLocalSheetsConnected] = useState(() => isTokenLive(getStoredSheetsToken()));
+  const [localDriveConnected, setLocalDriveConnected] = useState(() => isTokenLive(getStoredDriveToken()));
 
   useEffect(() => {
     const checkTokens = () => {
-      const s = getStoredSheetsToken();
-      const d = getStoredDriveToken();
-      setLocalSheetsConnected(Boolean(s && s.token && !s.token.startsWith('falcon_offline_session_')));
-      setLocalDriveConnected(Boolean(d && d.token && !d.token.startsWith('falcon_offline_session_')));
+      setLocalSheetsConnected(isTokenLive(getStoredSheetsToken()));
+      setLocalDriveConnected(isTokenLive(getStoredDriveToken()));
     };
     checkTokens();
     window.addEventListener(WORKSPACE_SYNC_EVENT, checkTokens);
@@ -124,15 +126,18 @@ export const TopBar: React.FC<TopBarProps> = ({
     };
   }, []);
 
-  const hasSheets = sheetsConnected || localSheetsConnected;
-  const hasDrive = driveConnected || localDriveConnected;
+  const hasSheets = sheetsConnected && localSheetsConnected;
+  const hasDrive = driveConnected && localDriveConnected;
   const hasAnyGoogle = hasSheets || hasDrive;
 
-  // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'offline' (amber/red)
+  // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'warning' (rose/re-auth) | 'offline' (amber)
   const isSyncing = isSyncingWorkspace || workspaceStatus === 'syncing' || isAutoAuthenticating;
-  const googleState: 'live' | 'syncing' | 'offline' = isSyncing
+  const hasAuthWarning = workspaceStatus === 'warning';
+  const googleState: 'live' | 'syncing' | 'warning' | 'offline' = hasAuthWarning
+    ? 'warning'
+    : isSyncing
     ? 'syncing'
-    : hasAnyGoogle || workspaceStatus === 'synced' || workspaceStatus === 'ready'
+    : hasAnyGoogle && (workspaceStatus === 'synced' || workspaceStatus === 'ready')
     ? 'live'
     : 'offline';
 
@@ -368,16 +373,21 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="topbar-workspace-sync-btn"
             onClick={onOpenWorkspaceModal}
             title={
-              isAutoAuthenticating
+              workspaceTooltip ||
+              (googleState === 'warning'
+                ? 'Google Workspace: Authentication required (token expired or rejected). Tap to re-authenticate.'
+                : isAutoAuthenticating
                 ? 'Google Workspace: Auto-authenticating and synchronizing Google Sheets & Drive...'
                 : googleState === 'syncing'
                 ? 'Google Workspace: Synchronization in progress (Uploading to Drive/Sheets)...'
                 : googleState === 'live'
                 ? `Google Workspace: Connected & Live (${hasSheets ? 'Sheets ✓' : ''} ${hasDrive ? 'Drive ✓' : ''}) • Auto-Sync Active`
-                : 'Google Workspace: Click to connect Google Drive & Sheets (Once connected, auto-authenticates & syncs every time you open the app)'
+                : 'Google Workspace: Click to connect Google Drive & Sheets (Once connected, auto-authenticates & syncs every time you open the app)')
             }
             className={`flex items-center gap-1.5 sm:gap-2 h-7 sm:h-8 px-2.5 sm:px-3 rounded-full border text-[10.5px] font-mono font-bold uppercase transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
-              googleState === 'live'
+              googleState === 'warning'
+                ? 'border-rose-500/80 bg-rose-950/70 text-rose-200 hover:border-rose-400 hover:bg-rose-900/80 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                : googleState === 'live'
                 ? 'border-emerald-500/70 bg-emerald-950/60 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-900/70 shadow-[0_0_12px_rgba(16,185,129,0.18)]'
                 : googleState === 'syncing'
                 ? 'border-amber-500/80 bg-amber-950/60 text-amber-200 hover:border-amber-400 hover:bg-amber-900/70 shadow-[0_0_12px_rgba(245,158,11,0.22)]'
@@ -385,7 +395,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             }`}
           >
             {/* Status Icon */}
-            {googleState === 'syncing' ? (
+            {googleState === 'warning' ? (
+              <AlertTriangle size={13} className="text-rose-400 shrink-0" />
+            ) : googleState === 'syncing' ? (
               <RefreshCw size={13} className="text-amber-400 animate-spin shrink-0" />
             ) : googleState === 'live' ? (
               <Cloud size={13} className="text-emerald-400 shrink-0" />
@@ -395,6 +407,9 @@ export const TopBar: React.FC<TopBarProps> = ({
 
             {/* Glowing Beacon Dot */}
             <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+              {googleState === 'warning' && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-80" />
+              )}
               {googleState === 'live' && (
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               )}
@@ -403,7 +418,9 @@ export const TopBar: React.FC<TopBarProps> = ({
               )}
               <span
                 className={`relative inline-flex h-2 w-2 rounded-full ${
-                  googleState === 'live'
+                  googleState === 'warning'
+                    ? 'bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
+                    : googleState === 'live'
                     ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]'
                     : googleState === 'syncing'
                     ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]'
@@ -416,7 +433,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold tracking-tight">
                 <span className="hidden xs:inline text-[9px] opacity-75">G-SYNC: </span>
-                {googleState === 'live' ? (
+                {googleState === 'warning' ? (
+                  <span className="text-rose-300 font-black">RE-AUTH</span>
+                ) : googleState === 'live' ? (
                   <span className="text-emerald-300 font-black">LIVE</span>
                 ) : googleState === 'syncing' ? (
                   <span className="text-amber-300 font-black">{isAutoAuthenticating ? 'AUTO-SYNC' : 'SYNCING'}</span>

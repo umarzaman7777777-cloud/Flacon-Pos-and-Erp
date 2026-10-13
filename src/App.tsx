@@ -383,7 +383,11 @@ export const App: React.FC = () => {
       .catch(err => console.warn('Auth redirect check:', err));
   }, []);
 
-  // Automatic Inactivity Screen Lock
+  // Track last active timestamp across interactions and background states
+  const lastActiveTimestampRef = useRef<number>(Date.now());
+  const backgroundHiddenAtRef = useRef<number | null>(null);
+
+  // Automatic Inactivity & Background Inactivity Screen Lock
   useEffect(() => {
     // If screen is already locked, no need to run timer
     if (isLocked) return;
@@ -393,13 +397,27 @@ export const App: React.FC = () => {
       ? state.autolockSeconds 
       : (state.autolockMinutes !== undefined ? state.autolockMinutes * 60 : 300);
 
-    // If 0, auto-lock is disabled
-    if (timeoutSec <= 0) return;
+    const lockOnMinimize = state.lockOnMinimize ?? false;
+
+    // Record current active timestamp
+    lastActiveTimestampRef.current = Date.now();
+    try {
+      sessionStorage.setItem('falcon_last_active_time', String(Date.now()));
+    } catch {}
 
     let timeoutId: any = null;
 
     const resetTimer = () => {
+      lastActiveTimestampRef.current = Date.now();
+      try {
+        sessionStorage.setItem('falcon_last_active_time', String(Date.now()));
+      } catch {}
+
       if (timeoutId) clearTimeout(timeoutId);
+
+      // If auto-lock is disabled (0), do not arm the timer
+      if (timeoutSec <= 0) return;
+
       timeoutId = setTimeout(() => {
         setIsLocked(true);
       }, timeoutSec * 1000);
@@ -419,6 +437,65 @@ export const App: React.FC = () => {
       window.addEventListener(evt, resetTimer, { passive: true });
     });
 
+    // Handle background / minimized state ("app on backend")
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // App went to background (minimized, user switched apps, or turned off phone screen)
+        const now = Date.now();
+        backgroundHiddenAtRef.current = now;
+        try {
+          sessionStorage.setItem('falcon_app_hidden_at', String(now));
+        } catch {}
+
+        if (lockOnMinimize) {
+          setIsLocked(true);
+        }
+      } else if (document.visibilityState === 'visible') {
+        // App returned from background to foreground
+        const now = Date.now();
+        const lastActive = lastActiveTimestampRef.current || now;
+        const elapsedSec = (now - lastActive) / 1000;
+
+        if (lockOnMinimize) {
+          setIsLocked(true);
+          return;
+        }
+
+        if (timeoutSec > 0 && elapsedSec >= timeoutSec) {
+          // Time spent in background exceeded the auto-lock threshold
+          console.info(`[Falcon Security] Inactivity threshold reached while in background (${Math.round(elapsedSec)}s >= ${timeoutSec}s). Locking terminal.`);
+          setIsLocked(true);
+        } else if (timeoutSec > 0) {
+          // App returned before timer expired; adjust remaining time
+          const remainingSec = Math.max(0, timeoutSec - elapsedSec);
+          if (timeoutId) clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+            setIsLocked(true);
+          }, remainingSec * 1000);
+        }
+      }
+    };
+
+    const handleWindowFocus = () => {
+      if (isLocked) return;
+      const now = Date.now();
+      const lastActive = lastActiveTimestampRef.current || now;
+      const elapsedSec = (now - lastActive) / 1000;
+
+      if (lockOnMinimize) {
+        setIsLocked(true);
+        return;
+      }
+
+      if (timeoutSec > 0 && elapsedSec >= timeoutSec) {
+        console.info(`[Falcon Security] Terminal focus lock triggered after ${Math.round(elapsedSec)}s.`);
+        setIsLocked(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
+
     // Start initial timer
     resetTimer();
 
@@ -427,8 +504,10 @@ export const App: React.FC = () => {
       activityEvents.forEach(evt => {
         window.removeEventListener(evt, resetTimer);
       });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [isLocked, state.autolockSeconds, state.autolockMinutes]);
+  }, [isLocked, state.autolockSeconds, state.autolockMinutes, state.lockOnMinimize]);
 
   // Pull-to-Refresh Mechanism for Main App Viewport
   const mainScrollRef = useRef<HTMLElement>(null);
@@ -2364,8 +2443,13 @@ export const App: React.FC = () => {
           language={state.language}
           companyName={state.companyName}
           companyTagline={state.companyTagline}
-          visualSettings={state.visualSettings}
-          onUnlock={() => setIsLocked(false)}
+          onUnlock={() => {
+            setIsLocked(false);
+            lastActiveTimestampRef.current = Date.now();
+            try {
+              sessionStorage.setItem('falcon_last_active_time', String(Date.now()));
+            } catch {}
+          }}
           onUpdatePin={newPin => setState(prev => ({ ...prev, pin: newPin }))}
           onUpdateVisualSettings={handleUpdateVisualSettings}
         />
@@ -2771,8 +2855,12 @@ export const App: React.FC = () => {
               onUpdateVisualSettings={handleUpdateVisualSettings}
               onUpdateBranding={handleUpdateBranding}
               onUpdatePin={newPin => setState(prev => ({ ...prev, pin: newPin }))}
-              onUpdateRecoveryAnswer={newAns => setState(prev => ({ ...prev, recoveryAnswer: newAns }))}
-              onUpdateAutolock={sec => setState(prev => ({ ...prev, autolockSeconds: sec, autolockMinutes: Math.round(sec / 60) }))}
+              onUpdateAutolock={(sec, lockOnMin) => setState(prev => ({
+                ...prev,
+                autolockSeconds: sec,
+                autolockMinutes: Math.round(sec / 60),
+                ...(lockOnMin !== undefined ? { lockOnMinimize: lockOnMin } : {})
+              }))}
               onLockTerminal={() => setIsLocked(true)}
               appState={state}
               syncState={syncState}

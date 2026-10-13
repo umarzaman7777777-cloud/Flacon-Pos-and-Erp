@@ -129,6 +129,7 @@ export const INITIAL_STATE: AppState = {
   recoveryAnswer: 'Umar',
   autolockMinutes: 5,
   autolockSeconds: 300,
+  lockOnMinimize: false,
   deviceName: 'Shop Counter',
   ntn: '4128956-8',
   salesTaxReg: '08-01-8412-911-28',
