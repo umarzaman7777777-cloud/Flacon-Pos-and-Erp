@@ -133,12 +133,14 @@ export const TopBar: React.FC<TopBarProps> = ({
   // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'warning' (rose/re-auth) | 'offline' (amber)
   const isSyncing = isSyncingWorkspace || workspaceStatus === 'syncing' || isAutoAuthenticating;
   const hasAuthWarning = workspaceStatus === 'warning';
+  
+  // If already authorized & connected, stay solidly 'live' (green) so reopening the app doesn't bounce between LIVE and AUTO-SYNC
   const googleState: 'live' | 'syncing' | 'warning' | 'offline' = hasAuthWarning
     ? 'warning'
+    : hasAnyGoogle && (workspaceStatus === 'synced' || workspaceStatus === 'ready' || !hasAuthWarning)
+    ? 'live'
     : isSyncing
     ? 'syncing'
-    : hasAnyGoogle && (workspaceStatus === 'synced' || workspaceStatus === 'ready')
-    ? 'live'
     : 'offline';
 
   // Real-time hardware printer connectivity status
@@ -400,7 +402,11 @@ export const TopBar: React.FC<TopBarProps> = ({
             ) : googleState === 'syncing' ? (
               <RefreshCw size={13} className="text-amber-400 animate-spin shrink-0" />
             ) : googleState === 'live' ? (
-              <Cloud size={13} className="text-emerald-400 shrink-0" />
+              isSyncing ? (
+                <RefreshCw size={13} className="text-emerald-400 animate-spin shrink-0" />
+              ) : (
+                <Cloud size={13} className="text-emerald-400 shrink-0" />
+              )
             ) : (
               <CloudOff size={13} className="text-amber-400 shrink-0" />
             )}
@@ -438,7 +444,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 ) : googleState === 'live' ? (
                   <span className="text-emerald-300 font-black">LIVE</span>
                 ) : googleState === 'syncing' ? (
-                  <span className="text-amber-300 font-black">{isAutoAuthenticating ? 'AUTO-SYNC' : 'SYNCING'}</span>
+                  <span className="text-amber-300 font-black">SYNCING</span>
                 ) : (
                   <span className="text-amber-300 font-black">CONNECT</span>
                 )}

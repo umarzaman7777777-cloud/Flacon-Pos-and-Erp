@@ -124,7 +124,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSuccessMsg, setDriveSuccessMsg] = useState<string | null>(null);
   const [driveBackupsCount, setDriveBackupsCount] = useState<number>(0);
-  const [isAutoAuthenticating, setIsAutoAuthenticating] = useState(true);
+  const [isAutoAuthenticating, setIsAutoAuthenticating] = useState(() => {
+    const s = getStoredSheetsToken();
+    const d = getStoredDriveToken();
+    return !((s?.token && isRealGoogleOAuthToken(s.token)) || (d?.token && isRealGoogleOAuthToken(d.token)));
+  });
 
   const initialBackupChecked = useRef(false);
   const isBackingUpRef = useRef(false);
@@ -233,7 +237,13 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
     isAutoSyncingRef.current = true;
 
     const stateToSync = customState || appState;
-    setIsAutoAuthenticating(true);
+    const existingToken = getStoredSheetsToken() || getStoredDriveToken();
+    const hasValidLocalToken = Boolean(existingToken?.token && isRealGoogleOAuthToken(existingToken.token));
+    
+    // Only flag as auto-authenticating if we do not already have a valid local token
+    if (!hasValidLocalToken) {
+      setIsAutoAuthenticating(true);
+    }
     setSheetsError(null);
     setDriveError(null);
 
@@ -248,6 +258,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         return false;
       }
 
+      setIsAutoAuthenticating(false);
       refreshWorkspaceState();
 
       // 2 & 3. Locate or create spreadsheet and backup folder
