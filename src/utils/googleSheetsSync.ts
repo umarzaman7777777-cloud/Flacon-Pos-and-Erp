@@ -43,6 +43,22 @@ export function notifyWorkspaceSyncUpdated(): void {
   }
 }
 
+/**
+ * Robust fetch wrapper with hard AbortSignal timeout to prevent mobile app resume freezing
+ */
+export async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 export interface SheetsTokenInfo {
   token: string;
   expiresAt: number;
@@ -389,11 +405,11 @@ export async function getSpreadsheetInfo(accessToken: string, spreadsheetId: str
     };
   }
 
-  const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}?fields=spreadsheetId,properties.title,spreadsheetUrl,sheets.properties`, {
+  const response = await fetchWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}?fields=spreadsheetId,properties.title,spreadsheetUrl,sheets.properties`, {
     headers: {
       Authorization: `Bearer ${accessToken}`
     }
-  });
+  }, 10000);
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
@@ -646,14 +662,14 @@ export async function ensureRequiredSheetsExist(accessToken: string, spreadsheet
     }
   }));
 
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+  const res = await fetchWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ requests })
-  });
+  }, 10000);
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
@@ -903,13 +919,13 @@ export async function writeSheetValues(
   // Safely clear existing content in sheet first without blocking on missing tabs
   try {
     const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent("'" + sheetTitle + "'!A1:ZZ5000")}:clear`;
-    await fetch(clearUrl, {
+    await fetchWithTimeout(clearUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       }
-    });
+    }, 8000);
   } catch (clearErr) {
     console.debug(`[Sheets] Non-fatal clear notice for tab "${sheetTitle}":`, clearErr);
   }
@@ -917,7 +933,7 @@ export async function writeSheetValues(
   // Write new values
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cleanId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
   let currentToken = accessToken;
-  let response = await fetch(url, {
+  let response = await fetchWithTimeout(url, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${currentToken}`,
@@ -928,7 +944,7 @@ export async function writeSheetValues(
       majorDimension: 'ROWS',
       values
     })
-  });
+  }, 10000);
 
   // Handle 401 (token expired) with auto-refresh
   if (response.status === 401) {
@@ -938,7 +954,7 @@ export async function writeSheetValues(
       const fresh = getStoredSheetsToken();
       if (fresh?.token && fresh.token !== currentToken) {
         currentToken = fresh.token;
-        response = await fetch(url, {
+        response = await fetchWithTimeout(url, {
           method: 'PUT',
           headers: {
             Authorization: `Bearer ${currentToken}`,
@@ -949,7 +965,7 @@ export async function writeSheetValues(
             majorDimension: 'ROWS',
             values
           })
-        });
+        }, 10000);
       }
     } catch {}
   }
@@ -961,7 +977,7 @@ export async function writeSheetValues(
 
     if (response.status === 400 || errMsg.toLowerCase().includes('unable to parse range') || errMsg.toLowerCase().includes('not found')) {
       try {
-        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
+        await fetchWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${cleanId}:batchUpdate`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${currentToken}`,
@@ -981,10 +997,10 @@ export async function writeSheetValues(
               }
             }]
           })
-        });
+        }, 10000);
 
         // Retry writing now that sheet exists
-        const retryRes = await fetch(url, {
+        const retryRes = await fetchWithTimeout(url, {
           method: 'PUT',
           headers: {
             Authorization: `Bearer ${currentToken}`,
@@ -995,7 +1011,7 @@ export async function writeSheetValues(
             majorDimension: 'ROWS',
             values
           })
-        });
+        }, 10000);
 
         if (retryRes.ok) {
           const retryData = await retryRes.json();
@@ -1022,7 +1038,11 @@ export async function populateAllSheets(
   appState: AppState
 ): Promise<SheetSyncResult[]> {
   const cleanId = extractSpreadsheetId(spreadsheetId);
-  await ensureRequiredSheetsExist(accessToken, cleanId);
+  try {
+    await ensureRequiredSheetsExist(accessToken, cleanId);
+  } catch (e) {
+    console.debug('[Sheets] Tab check notice:', e);
+  }
 
   const tabs = getAllApplicableSheetTabs(appState);
   const syncTasks = tabs.map(tab => ({
@@ -1032,20 +1052,28 @@ export async function populateAllSheets(
 
   const results: SheetSyncResult[] = [];
 
-  for (const task of syncTasks) {
-    try {
+  // Parallelize tab updates so all 7 tabs sync simultaneously in 1-2s instead of 15s sequential loop
+  const settled = await Promise.allSettled(
+    syncTasks.map(async task => {
       const rowsUpdated = await writeSheetValues(accessToken, cleanId, task.title, task.values);
-      results.push({
+      return {
         sheetName: task.title,
         rowsUpdated,
-        status: 'success'
-      });
-    } catch (err: any) {
+        status: 'success' as const
+      };
+    })
+  );
+
+  for (let i = 0; i < syncTasks.length; i++) {
+    const item = settled[i];
+    if (item.status === 'fulfilled') {
+      results.push(item.value);
+    } else {
       results.push({
-        sheetName: task.title,
+        sheetName: syncTasks[i].title,
         rowsUpdated: 0,
         status: 'error',
-        error: err?.message || 'Failed to update sheet'
+        error: (item.reason as any)?.message || 'Failed to update sheet tab'
       });
     }
   }

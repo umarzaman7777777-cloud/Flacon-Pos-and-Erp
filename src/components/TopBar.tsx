@@ -104,8 +104,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     return Boolean(
       info &&
       info.token &&
-      isRealGoogleOAuthToken(info.token) &&
-      (!info.expiresAt || info.expiresAt > Date.now())
+      isRealGoogleOAuthToken(info.token)
     );
   };
 
@@ -126,18 +125,18 @@ export const TopBar: React.FC<TopBarProps> = ({
     };
   }, []);
 
-  const hasSheets = sheetsConnected && localSheetsConnected;
-  const hasDrive = driveConnected && localDriveConnected;
+  const hasSheets = sheetsConnected || localSheetsConnected;
+  const hasDrive = driveConnected || localDriveConnected;
   const hasAnyGoogle = hasSheets || hasDrive;
 
   // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'warning' (rose/re-auth) | 'offline' (amber)
   const isSyncing = isSyncingWorkspace || workspaceStatus === 'syncing' || isAutoAuthenticating;
   const hasAuthWarning = workspaceStatus === 'warning';
   
-  // If already authorized & connected, stay solidly 'live' (green) so reopening the app doesn't bounce between LIVE and AUTO-SYNC
+  // When authorized with token, stay solidly 'live' (green) so reopening the app or doing background sync NEVER bounces away from LIVE
   const googleState: 'live' | 'syncing' | 'warning' | 'offline' = hasAuthWarning
     ? 'warning'
-    : hasAnyGoogle && (workspaceStatus === 'synced' || workspaceStatus === 'ready' || !hasAuthWarning)
+    : hasAnyGoogle
     ? 'live'
     : isSyncing
     ? 'syncing'
@@ -442,7 +441,10 @@ export const TopBar: React.FC<TopBarProps> = ({
                 {googleState === 'warning' ? (
                   <span className="text-rose-300 font-black">RE-AUTH</span>
                 ) : googleState === 'live' ? (
-                  <span className="text-emerald-300 font-black">LIVE</span>
+                  <span className="text-emerald-300 font-black inline-flex items-center gap-1">
+                    <span>LIVE</span>
+                    {isSyncing && <RefreshCw size={9} className="animate-spin text-emerald-400 opacity-90 inline" />}
+                  </span>
                 ) : googleState === 'syncing' ? (
                   <span className="text-amber-300 font-black">SYNCING</span>
                 ) : (

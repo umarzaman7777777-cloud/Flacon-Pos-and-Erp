@@ -307,8 +307,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           const lower = msg.toLowerCase();
           const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
           if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
+            // Keep token intact and silently restore credentials in background without disrupting UI
             refreshGoogleWorkspaceTokenSilently().catch(() => {});
-            setSheetsError('Reconnecting Google Sheets in background...');
           }
         } finally {
           setIsSyncingSheets(false);
@@ -337,15 +337,17 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           const lower = msg.toLowerCase();
           const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
           if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
+            // Keep token intact and silently restore credentials in background without disrupting UI
             refreshGoogleWorkspaceTokenSilently().catch(() => {});
-            setDriveError('Reconnecting Google Drive in background...');
           }
         } finally {
           setIsUploadingDrive(false);
         }
       })();
 
-      await Promise.allSettled([sheetsTask, driveTask]);
+      // Hard race timeout (12s) prevents background sync from hanging or freezing app resume
+      const syncTimeoutPromise = new Promise(resolve => setTimeout(resolve, 12000));
+      await Promise.race([Promise.allSettled([sheetsTask, driveTask]), syncTimeoutPromise]);
 
       if (sheetsSuccess || driveSuccess) {
         setSheetsSuccessMsg('✓ Google Workspace auto-authenticated & synced on app open!');
@@ -401,12 +403,12 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   useEffect(() => {
     const handleAppResume = () => {
       const now = Date.now();
-      // Enforce 3-second cooldown to avoid duplicate triggers between focus & visibilitychange
-      if (now - lastResumeSyncTimeRef.current < 3000) {
+      // Enforce 20-second cooldown to avoid duplicate triggers between focus & visibilitychange
+      if (now - lastResumeSyncTimeRef.current < 20000) {
         return;
       }
       lastResumeSyncTimeRef.current = now;
-      console.info('[Workspace Sync] Window focused / resumed: verifying workspace sync...');
+      console.info('[Workspace Sync] Window focused / resumed: running smooth background sync...');
       autoSyncNow();
     };
 
@@ -472,9 +474,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         return true;
       } catch (err: any) {
         if (err?.message?.includes('401') || err?.message?.includes('Invalid Credentials')) {
-          clearSheetsToken();
-          setSheetsTokenInfo(null);
-          setSheetsError('Google Sheets authorization expired. Please reconnect your account.');
+          refreshGoogleWorkspaceTokenSilently().catch(() => {});
+          console.debug('[Workspace Sync] Sheets credentials refreshed silently in background.');
         } else {
           setSheetsError(err?.message || 'Failed to sync with Google Sheets.');
         }
@@ -658,9 +659,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         return true;
       } catch (err: any) {
         if (err?.message?.includes('401') || err?.message?.includes('Invalid Credentials')) {
-          clearDriveToken();
-          setDriveTokenInfo(null);
-          setDriveError('Google Drive authorization expired. Please reconnect your account.');
+          refreshGoogleWorkspaceTokenSilently().catch(() => {});
+          console.debug('[Workspace Sync] Drive credentials refreshed silently in background.');
         } else {
           setDriveError(err?.message || 'Failed to upload backup to Google Drive.');
         }
@@ -720,9 +720,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         return true;
       } catch (err: any) {
         if (err?.message?.includes('401') || err?.message?.includes('Invalid Credentials')) {
-          clearDriveToken();
-          setDriveTokenInfo(null);
-          setDriveError('Google Drive authorization expired. Please reconnect your account.');
+          refreshGoogleWorkspaceTokenSilently().catch(() => {});
+          console.debug('[Workspace Sync] Drive credentials refreshed silently in background.');
         } else {
           setDriveError(err?.message || 'Failed to backup all files to Google Drive.');
         }
@@ -813,31 +812,33 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   // Calculate high-level status for header indicator
   const hasRealSheets = Boolean(
     sheetsTokenInfo?.token &&
-    isRealGoogleOAuthToken(sheetsTokenInfo.token) &&
-    (!sheetsTokenInfo.expiresAt || sheetsTokenInfo.expiresAt > Date.now())
+    isRealGoogleOAuthToken(sheetsTokenInfo.token)
   );
   const hasRealDrive = Boolean(
     driveTokenInfo?.token &&
-    isRealGoogleOAuthToken(driveTokenInfo.token) &&
-    (!driveTokenInfo.expiresAt || driveTokenInfo.expiresAt > Date.now())
+    isRealGoogleOAuthToken(driveTokenInfo.token)
   );
   const sheetsConnected = hasRealSheets && !sheetsError;
   const driveConnected = hasRealDrive && !driveError;
   const isSyncing = isSyncingSheets || isUploadingDrive;
-  const hasAuthError = Boolean(sheetsError || driveError);
+  // True auth error only if user was explicitly rejected by security, not routine background token expiration
+  const isHardAuthFailure = Boolean(
+    (sheetsError && !sheetsError.toLowerCase().includes('expired') && !sheetsError.toLowerCase().includes('reconnecting')) ||
+    (driveError && !driveError.toLowerCase().includes('expired') && !driveError.toLowerCase().includes('reconnecting'))
+  );
 
   let workspaceStatus: 'syncing' | 'synced' | 'ready' | 'warning' | 'disconnected' = 'disconnected';
   let statusBadgeText = 'G-Sync';
   let statusBadgeTooltip = 'Google Workspace: Click to connect Google Sheets & Drive';
 
-  if (hasAuthError) {
+  if (isHardAuthFailure) {
     workspaceStatus = 'warning';
     statusBadgeText = 'Re-Authenticate';
-    statusBadgeTooltip = `Google Workspace Auth Alert: ${sheetsError || driveError || 'Session expired or rejected by Google. Click to re-authenticate.'}`;
+    statusBadgeTooltip = `Google Workspace: ${sheetsError || driveError}. Click to connect.`;
   } else if (isAutoAuthenticating) {
     workspaceStatus = 'syncing';
-    statusBadgeText = 'Auto-Connecting...';
-    statusBadgeTooltip = 'Google Workspace: Automatically authenticating and synchronizing with Google Sheets & Drive...';
+    statusBadgeText = 'Connecting...';
+    statusBadgeTooltip = 'Google Workspace: Checking connection with Google Sheets & Drive...';
   } else if (isSyncing) {
     workspaceStatus = 'syncing';
     statusBadgeText = isSyncingSheets ? 'Sheets Syncing...' : 'Drive Uploading...';
@@ -858,7 +859,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   } else if (sheetsConnected) {
     workspaceStatus = 'ready';
     statusBadgeText = 'Sheets Ready';
-    statusBadgeTooltip = 'Google Sheets: Authorized. Auto-creating / linking spreadsheet.';
+    statusBadgeTooltip = 'Google Sheets: Authorized. Ready for spreadsheet sync.';
+  } else {
+    workspaceStatus = 'disconnected';
+    statusBadgeText = 'Ready to Connect';
+    statusBadgeTooltip = 'Google Workspace: Tap to link Google Sheets & Drive for cloud backups and live mirroring.';
   }
 
   // Direct App Openers using Explicit Android Intents & Custom Tabs

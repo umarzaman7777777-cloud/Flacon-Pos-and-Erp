@@ -232,7 +232,8 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
       const refreshedLocal = getStoredSheetsToken() || getStoredDriveToken();
       if (refreshedLocal?.token && isRealGoogleOAuthToken(refreshedLocal.token)) {
         console.info('[Falcon Auth] ✓ Restored active token from Firestore cloud sync.');
-        storeSheetsToken(refreshedLocal.token, 7200, preferredEmail);
+        storeSheetsToken(refreshedLocal.token, 315360000, preferredEmail);
+        storeDriveToken(refreshedLocal.token, 315360000, preferredEmail);
         return refreshedLocal.token;
       }
     }

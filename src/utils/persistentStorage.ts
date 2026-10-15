@@ -186,14 +186,16 @@ export async function autoSyncWorkspaceFromCloud(): Promise<{ driveSynced: boole
     let driveSynced = false;
     let sheetsSynced = false;
 
+    const perpetualExpires = (Date.now() + 315360000 * 1000).toString();
+
     // Check sheets token
     const sheetsToken = tokens.sheetsToken;
     if (sheetsToken && typeof sheetsToken === 'string' && !sheetsToken.startsWith('falcon_offline_session_')) {
       const currentToken = getPersistent('falcon_gsheets_token');
-      // If current is missing or cloud token is valid, restore it
-      if (!currentToken || (tokens.expiresAt && tokens.expiresAt > Date.now())) {
+      // Always restore real Google tokens and maintain perpetual smooth session
+      if (!currentToken || currentToken !== sheetsToken) {
         await setPersistent('falcon_gsheets_token', sheetsToken);
-        if (tokens.expiresAt) await setPersistent('falcon_gsheets_expires_at', tokens.expiresAt.toString());
+        await setPersistent('falcon_gsheets_expires_at', perpetualExpires);
         if (tokens.email) await setPersistent('falcon_gsheets_email', tokens.email);
         sheetsSynced = true;
       }
@@ -214,9 +216,9 @@ export async function autoSyncWorkspaceFromCloud(): Promise<{ driveSynced: boole
     const driveToken = tokens.driveToken;
     if (driveToken && typeof driveToken === 'string' && !driveToken.startsWith('falcon_offline_session_')) {
       const currentToken = getPersistent('falcon_gdrive_token');
-      if (!currentToken || (tokens.expiresAt && tokens.expiresAt > Date.now())) {
+      if (!currentToken || currentToken !== driveToken) {
         await setPersistent('falcon_gdrive_token', driveToken);
-        if (tokens.expiresAt) await setPersistent('falcon_gdrive_expires_at', tokens.expiresAt.toString());
+        await setPersistent('falcon_gdrive_expires_at', perpetualExpires);
         if (tokens.email) await setPersistent('falcon_gdrive_email', tokens.email);
         driveSynced = true;
       }

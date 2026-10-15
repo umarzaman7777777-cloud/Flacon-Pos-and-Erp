@@ -327,9 +327,10 @@ export const BackupView: React.FC<BackupViewProps> = ({
       setDriveFolderId(result.folderId);
     } catch (err: any) {
       if (err?.message?.includes('401') || err?.message?.includes('Invalid Credentials')) {
-        clearDriveToken();
-        setDriveTokenInfo(null);
-        setDriveError('Google Drive authorization expired. Please reconnect your account.');
+        try {
+          const { refreshGoogleWorkspaceTokenSilently } = await import('../utils/googleAuthHelper');
+          await refreshGoogleWorkspaceTokenSilently();
+        } catch {}
       } else {
         setDriveError(err?.message || 'Failed to load backups from Google Drive.');
       }

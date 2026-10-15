@@ -2,7 +2,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { auth, db, googleProvider } from '../firebase/config';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { notifyWorkspaceSyncUpdated, isNativeOrLocalEnvironment, storeSheetsToken, isRealGoogleOAuthToken } from './googleSheetsSync';
+import { notifyWorkspaceSyncUpdated, isNativeOrLocalEnvironment, storeSheetsToken, isRealGoogleOAuthToken, fetchWithTimeout } from './googleSheetsSync';
 import { getPersistent, setPersistent, removePersistent, publishWorkspaceTokensToFirestore, autoSyncWorkspaceFromCloud } from './persistentStorage';
 
 declare global {
@@ -335,9 +335,9 @@ export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id
   const cachedFolderId = localStorage.getItem(STORAGE_KEY_FOLDER_ID);
   if (cachedFolderId) {
     try {
-      const verifyRes = await fetch(`https://www.googleapis.com/drive/v3/files/${cachedFolderId}?fields=id,name,trashed`, {
+      const verifyRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files/${cachedFolderId}?fields=id,name,trashed`, {
         headers: { Authorization: `Bearer ${accessToken}` }
-      });
+      }, 8000);
       if (verifyRes.ok) {
         const folder = await verifyRes.json();
         if (!folder.trashed) {
@@ -352,9 +352,9 @@ export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id
   // Query for existing folder
   const query = encodeURIComponent(`name = '${BACKUP_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
   let currentToken = accessToken;
-  let searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
+  let searchRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
     headers: { Authorization: `Bearer ${currentToken}` }
-  });
+  }, 10000);
 
   if (searchRes.status === 401) {
     try {
@@ -363,9 +363,9 @@ export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id
       const fresh = getStoredDriveToken();
       if (fresh?.token && fresh.token !== currentToken) {
         currentToken = fresh.token;
-        searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
+        searchRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
           headers: { Authorization: `Bearer ${currentToken}` }
-        });
+        }, 10000);
       }
     } catch {}
   }
@@ -383,7 +383,7 @@ export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id
   }
 
   // Create new folder
-  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+  const createRes = await fetchWithTimeout('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -454,14 +454,14 @@ export async function uploadBackupToGoogleDrive(
     closeDelimiter;
 
   let currentUploadToken = accessToken;
-  let uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
+  let uploadRes = await fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${currentUploadToken}`,
       'Content-Type': `multipart/related; boundary=${boundary}`
     },
     body: multipartRequestBody
-  });
+  }, 15000);
 
   if (uploadRes.status === 401) {
     try {
@@ -470,14 +470,14 @@ export async function uploadBackupToGoogleDrive(
       const fresh = getStoredDriveToken();
       if (fresh?.token && fresh.token !== currentUploadToken) {
         currentUploadToken = fresh.token;
-        uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
+        uploadRes = await fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${currentUploadToken}`,
             'Content-Type': `multipart/related; boundary=${boundary}`
           },
           body: multipartRequestBody
-        });
+        }, 15000);
       }
     } catch {}
   }
@@ -503,11 +503,12 @@ export async function listGoogleDriveBackups(accessToken: string): Promise<{ fil
   const folder = await getOrCreateBackupFolder(accessToken);
 
   const query = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
-  const listRes = await fetch(
+  const listRes = await fetchWithTimeout(
     `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink)&orderBy=createdTime desc&pageSize=50`,
     {
       headers: { Authorization: `Bearer ${accessToken}` }
-    }
+    },
+    10000
   );
 
   if (!listRes.ok) {
