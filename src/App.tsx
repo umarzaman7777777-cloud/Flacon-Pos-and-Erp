@@ -106,19 +106,23 @@ export const App: React.FC = () => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          // Revert any incorrect/stale logo and branding settings across the app
-          if (!parsed.companyName || parsed.companyName !== 'Falcon Rod Maker') {
+          // Preserve user-configured company branding settings while ensuring valid fallbacks
+          if (!parsed.companyName || typeof parsed.companyName !== 'string') {
             parsed.companyName = 'Falcon Rod Maker';
           }
-          parsed.companyTagline = 'Precision Ceiling Fan Down Rod Specialist — Gujrat, Pakistan';
+          if (!parsed.companyTagline || typeof parsed.companyTagline !== 'string') {
+            parsed.companyTagline = 'Precision Ceiling Fan Down Rod Specialist — Gujrat, Pakistan';
+          }
 
-          // Migrate any legacy Fan Guard entries and datasets to Fan Rods
-          const hasLegacyGuardData = 
-            parsed.products?.some((p: any) => p.name?.includes('Tikka') || p.name?.includes('Guard') || p.name?.includes('Universal-Heavy')) ||
+          // Migrate any legacy Fan Guard entries and datasets to Fan Rods once if not already migrated
+          const hasLegacyGuardData =
+            !parsed._hasMigratedToRods &&
+            (parsed.products?.some((p: any) => p.name?.includes('Tikka') || p.name?.includes('Universal-Heavy')) ||
             parsed.guardSizes?.some((s: string) => s.startsWith('P/')) ||
-            parsed.rawStock?.some((rs: any) => rs.name?.includes('Steel Taar') || rs.name?.includes('Chutki'));
+            parsed.rawStock?.some((rs: any) => rs.name?.includes('Steel Taar') || rs.name?.includes('Chutki')));
 
           if (hasLegacyGuardData) {
+            parsed._hasMigratedToRods = true;
             parsed.products = INITIAL_PRODUCTS;
             parsed.items = INITIAL_STATE.items;
             parsed.customerLedgers = INITIAL_STATE.customerLedgers;
@@ -317,16 +321,11 @@ export const App: React.FC = () => {
               return p;
             });
           }
-          if (parsed.visualSettings) {
-            if (parsed.visualSettings.logoTheme === 'cyan') {
-              parsed.visualSettings.logoTheme = 'amber';
-            }
-            if (parsed.visualSettings.theme === 'blue') {
-              parsed.visualSettings.theme = 'dark';
-            }
-          } else {
-            parsed.visualSettings = INITIAL_STATE.visualSettings;
-          }
+          // Ensure visual settings retain all user-customized preferences (themes, grids, density, etc.)
+          parsed.visualSettings = {
+            ...INITIAL_STATE.visualSettings,
+            ...(parsed.visualSettings || {})
+          };
           return parsed;
         }
       }
@@ -714,10 +713,11 @@ export const App: React.FC = () => {
     };
   }, [state]);
 
-  // Auto-save to localStorage
+  // Auto-save to localStorage with version timestamp
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem('falcon_erp_state_version', String(Date.now()));
     } catch (e) {
       console.error('Error saving state to localStorage:', e);
     }
@@ -2383,18 +2383,39 @@ export const App: React.FC = () => {
   // VISUAL SETTINGS & BRANDING
   // ----------------------------------------------------
   const handleUpdateVisualSettings = (settings: Partial<VisualSettings>) => {
-    setState(prev => ({
-      ...prev,
-      visualSettings: { ...prev.visualSettings, ...settings }
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        visualSettings: { ...prev.visualSettings, ...settings }
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem('falcon_erp_state_version', String(Date.now()));
+      } catch (e) {
+        console.error('Error saving visual settings:', e);
+      }
+      pushStateImmediately(next);
+      return next;
+    });
   };
 
   const handleUpdateBranding = (companyName: string, companyTagline: string) => {
-    setState(prev => ({
-      ...prev,
-      companyName,
-      companyTagline
-    }));
+    setState(prev => {
+      const next = {
+        ...prev,
+        companyName,
+        companyTagline,
+        exportCompanyName: companyName
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem('falcon_erp_state_version', String(Date.now()));
+      } catch (e) {
+        console.error('Error saving branding settings:', e);
+      }
+      pushStateImmediately(next);
+      return next;
+    });
   };
 
   const handleUpdateSignatures = (
@@ -2856,13 +2877,38 @@ export const App: React.FC = () => {
               printerTabTrigger={printerTabTrigger}
               onUpdateVisualSettings={handleUpdateVisualSettings}
               onUpdateBranding={handleUpdateBranding}
-              onUpdatePin={newPin => setState(prev => ({ ...prev, pin: newPin }))}
-              onUpdateAutolock={(sec, lockOnMin) => setState(prev => ({
-                ...prev,
-                autolockSeconds: sec,
-                autolockMinutes: Math.round(sec / 60),
-                ...(lockOnMin !== undefined ? { lockOnMinimize: lockOnMin } : {})
-              }))}
+              onUpdatePin={newPin => setState(prev => {
+                const next = { ...prev, pin: newPin };
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+                  localStorage.setItem('falcon_erp_state_version', String(Date.now()));
+                } catch (e) {}
+                pushStateImmediately(next);
+                return next;
+              })}
+              onUpdateRecoveryAnswer={newAnswer => setState(prev => {
+                const next = { ...prev, recoveryAnswer: newAnswer };
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+                  localStorage.setItem('falcon_erp_state_version', String(Date.now()));
+                } catch (e) {}
+                pushStateImmediately(next);
+                return next;
+              })}
+              onUpdateAutolock={(sec, lockOnMin) => setState(prev => {
+                const next = {
+                  ...prev,
+                  autolockSeconds: sec,
+                  autolockMinutes: Math.round(sec / 60),
+                  ...(lockOnMin !== undefined ? { lockOnMinimize: lockOnMin } : {})
+                };
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+                  localStorage.setItem('falcon_erp_state_version', String(Date.now()));
+                } catch (e) {}
+                pushStateImmediately(next);
+                return next;
+              })}
               onLockTerminal={() => setIsLocked(true)}
               appState={state}
               syncState={syncState}

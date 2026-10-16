@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Settings,
   Sliders,
@@ -153,7 +153,7 @@ interface SettingsViewProps {
   pendingQueueCount?: number;
   isOnline?: boolean;
   syncErrorMsg?: string | null;
-  onForceSyncNow?: () => void;
+  onForceSyncNow?: (overrideState?: any) => void;
   onNavigateToBackup?: (tab?: 'cloud_status' | 'google_drive' | 'google_sheets' | 'sql_export' | 'json_backup' | 'signatures') => void;
 }
 
@@ -221,6 +221,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [visualSavedMsg, setVisualSavedMsg] = useState(false);
   const [allSettingsSavedMsg, setAllSettingsSavedMsg] = useState(false);
 
+  // Document Export Studio Configuration State
+  const [exportConf, setExportConf] = useState<ExportDocumentConfig>(() => getSavedExportConfig());
+  const [exportSavedMsg, setExportSavedMsg] = useState(false);
+
+  // Printer Hardware Configuration State
+  const [printerConf, setPrinterConf] = useState<PrinterSettings>(() => getPrinterSettings());
+  const [isScanningBt, setIsScanningBt] = useState(false);
+  const [btScanMsg, setBtScanMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [testPrintSuccess, setTestPrintSuccess] = useState(false);
+  const [printerSavedMsg, setPrinterSavedMsg] = useState(false);
+  const [isAdvancedPageSetupOpen, setIsAdvancedPageSetupOpen] = useState(false);
+
+  // Committed Settings Baseline Snapshot for Dirty Checking
+  const initialAutolock = appState?.autolockSeconds !== undefined
+    ? appState.autolockSeconds
+    : (appState?.autolockMinutes !== undefined ? appState.autolockMinutes * 60 : 300);
+  const initialLockOnMin = appState?.lockOnMinimize ?? false;
+
+  const [committedSnapshot, setCommittedSnapshot] = useState(() => ({
+    companyName: companyName,
+    companyTagline: companyTagline,
+    pin: pin,
+    recoveryAnswer: recoveryAnswer,
+    autolockSeconds: initialAutolock,
+    lockOnMinimize: initialLockOnMin,
+    visualSettingsJson: JSON.stringify(visualSettings),
+    printerConfJson: JSON.stringify(getPrinterSettings()),
+    exportConfJson: JSON.stringify(getSavedExportConfig())
+  }));
+
+  const [lastCommittedAt, setLastCommittedAt] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('falcon_erp_state_version');
+      if (v) {
+        const num = Number(v);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+    return Date.now();
+  });
+
   useEffect(() => {
     setDraftCompanyName(companyName);
   }, [companyName]);
@@ -229,14 +270,97 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setDraftCompanyTagline(companyTagline);
   }, [companyTagline]);
 
+  // Dirty state computations comparing interactive drafts against committed disk snapshot
+  const cleanPin = newPinVal.trim();
+  const cleanRecovery = newRecoveryVal.trim();
+
+  const isBrandingDirty = draftCompanyName !== committedSnapshot.companyName || draftCompanyTagline !== committedSnapshot.companyTagline;
+  const isSecurityDirty = (cleanPin !== committedSnapshot.pin && /^\d{3,8}$/.test(cleanPin)) ||
+    cleanRecovery !== committedSnapshot.recoveryAnswer ||
+    selectedAutolockSec !== committedSnapshot.autolockSeconds ||
+    lockOnMinimizeVal !== committedSnapshot.lockOnMinimize;
+  const isVisualDirty = JSON.stringify(visualSettings) !== committedSnapshot.visualSettingsJson;
+  const isPrinterDirty = JSON.stringify(printerConf) !== committedSnapshot.printerConfJson;
+  const isExportDirty = JSON.stringify(exportConf) !== committedSnapshot.exportConfJson;
+
+  const isDirty = isBrandingDirty || isSecurityDirty || isVisualDirty || isPrinterDirty || isExportDirty;
+
+  const dirtySections = useMemo(() => {
+    const list: { name: string; sectionId: string }[] = [];
+    if (isBrandingDirty) list.push({ name: 'Workshop Branding', sectionId: 'branding' });
+    if (isVisualDirty) list.push({ name: 'Visual Themes', sectionId: 'visual_studio' });
+    if (isSecurityDirty) list.push({ name: 'Security & PIN', sectionId: 'security' });
+    if (isPrinterDirty) list.push({ name: 'Printer Hardware', sectionId: 'printer' });
+    if (isExportDirty) list.push({ name: 'Export Studio', sectionId: 'export_studio' });
+    return list;
+  }, [isBrandingDirty, isVisualDirty, isSecurityDirty, isPrinterDirty, isExportDirty]);
+
+  // Browser close / navigation safety guard when uncommitted changes exist
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'You have uncommitted settings changes. Are you sure you want to leave without saving?';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  // Direct persistence helper that commits state to local storage with timestamp
+  const persistStateDirectly = (partialUpdates: any): any => {
+    try {
+      const currentStateRaw = localStorage.getItem('falcon_rod_erp_state_v1');
+      const existing = currentStateRaw ? JSON.parse(currentStateRaw) : (appState || {});
+      const now = Date.now();
+      const updatedState: any = {
+        ...existing,
+        ...partialUpdates
+      };
+      if (partialUpdates.visualSettings) {
+        updatedState.visualSettings = {
+          ...(existing.visualSettings || {}),
+          ...partialUpdates.visualSettings
+        };
+      }
+      localStorage.setItem('falcon_rod_erp_state_v1', JSON.stringify(updatedState));
+      localStorage.setItem('falcon_erp_state_version', String(now));
+      setLastCommittedAt(now);
+      return updatedState;
+    } catch (e) {
+      console.warn('Direct local storage commit warning:', e);
+      return null;
+    }
+  };
+
   const handleSaveBranding = () => {
     onUpdateBranding(draftCompanyName, draftCompanyTagline);
+    const updated = persistStateDirectly({
+      companyName: draftCompanyName,
+      companyTagline: draftCompanyTagline,
+      exportCompanyName: draftCompanyName
+    });
+    setCommittedSnapshot(prev => ({
+      ...prev,
+      companyName: draftCompanyName,
+      companyTagline: draftCompanyTagline
+    }));
+    onForceSyncNow?.(updated || undefined);
     triggerHaptic('success');
     setBrandingSavedMsg(true);
     setTimeout(() => setBrandingSavedMsg(false), 3000);
   };
 
   const handleSaveVisualSettings = () => {
+    onUpdateVisualSettings(visualSettings);
+    const updated = persistStateDirectly({
+      visualSettings: visualSettings
+    });
+    setCommittedSnapshot(prev => ({
+      ...prev,
+      visualSettingsJson: JSON.stringify(visualSettings)
+    }));
+    onForceSyncNow?.(updated || undefined);
     triggerHaptic('success');
     setVisualSavedMsg(true);
     setTimeout(() => setVisualSavedMsg(false), 3000);
@@ -244,6 +368,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleSavePrinterSettings = () => {
     savePrinterSettings(printerConf);
+    setCommittedSnapshot(prev => ({
+      ...prev,
+      printerConfJson: JSON.stringify(printerConf)
+    }));
+    setLastCommittedAt(Date.now());
+    onForceSyncNow?.();
     triggerHaptic('success');
     setPrinterSavedMsg(true);
     setTimeout(() => setPrinterSavedMsg(false), 3000);
@@ -254,21 +384,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     onUpdateBranding(draftCompanyName, draftCompanyTagline);
 
     // 2. Save Security PIN, recovery & autolock
-    if (/^\d{4}$/.test(newPinVal)) {
-      onUpdatePin(newPinVal);
+    if (/^\d{3,8}$/.test(cleanPin)) {
+      onUpdatePin(cleanPin);
     }
-    if (onUpdateRecoveryAnswer && newRecoveryVal.trim()) {
-      onUpdateRecoveryAnswer(newRecoveryVal.trim());
+    if (onUpdateRecoveryAnswer && cleanRecovery) {
+      onUpdateRecoveryAnswer(cleanRecovery);
     }
     if (onUpdateAutolock) {
       onUpdateAutolock(selectedAutolockSec, lockOnMinimizeVal);
     }
 
-    // 3. Save Printer & Exports
+    // 3. Save Visual Settings
+    onUpdateVisualSettings(visualSettings);
+
+    // 4. Save Printer & Exports
     savePrinterSettings(printerConf);
     saveExportConfig(exportConf);
 
-    // 4. Trigger Haptics and visual notifications across all sections
+    // 5. Guaranteed direct synchronous local storage commitment
+    const updated = persistStateDirectly({
+      companyName: draftCompanyName,
+      companyTagline: draftCompanyTagline,
+      exportCompanyName: draftCompanyName,
+      pin: /^\d{3,8}$/.test(cleanPin) ? cleanPin : undefined,
+      recoveryAnswer: cleanRecovery || undefined,
+      autolockSeconds: selectedAutolockSec,
+      autolockMinutes: Math.round(selectedAutolockSec / 60),
+      lockOnMinimize: lockOnMinimizeVal,
+      visualSettings: visualSettings
+    });
+
+    // 6. Reset dirty state snapshot baseline
+    setCommittedSnapshot({
+      companyName: draftCompanyName,
+      companyTagline: draftCompanyTagline,
+      pin: cleanPin,
+      recoveryAnswer: cleanRecovery,
+      autolockSeconds: selectedAutolockSec,
+      lockOnMinimize: lockOnMinimizeVal,
+      visualSettingsJson: JSON.stringify(visualSettings),
+      printerConfJson: JSON.stringify(printerConf),
+      exportConfJson: JSON.stringify(exportConf)
+    });
+
+    // 7. Cloud sync immediately with freshly committed state
+    onForceSyncNow?.(updated || undefined);
+
+    // 8. Trigger Haptics and visual notifications across all sections
     triggerHaptic('success');
     setAllSettingsSavedMsg(true);
     setBrandingSavedMsg(true);
@@ -279,13 +441,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setAllSettingsSavedMsg(false), 3500);
   };
 
-  // Document Export Studio Configuration State
-  const [exportConf, setExportConf] = useState<ExportDocumentConfig>(() => getSavedExportConfig());
-  const [exportSavedMsg, setExportSavedMsg] = useState(false);
-
   const handleUpdateExportConfig = (updates: Partial<ExportDocumentConfig>) => {
     const next = saveExportConfig({ ...exportConf, ...updates });
     setExportConf(next);
+    setCommittedSnapshot(prev => ({
+      ...prev,
+      exportConfJson: JSON.stringify(next)
+    }));
+    setLastCommittedAt(Date.now());
     setExportSavedMsg(true);
     setTimeout(() => setExportSavedMsg(false), 2000);
   };
@@ -316,14 +479,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [settingsPingLatency, setSettingsPingLatency] = useState<number | null>(null);
   const [isSettingsPinging, setIsSettingsPinging] = useState(false);
   const [showSettingsRawReport, setShowSettingsRawReport] = useState(false);
-
-  // Printer Hardware Configuration State
-  const [printerConf, setPrinterConf] = useState<PrinterSettings>(() => getPrinterSettings());
-  const [isScanningBt, setIsScanningBt] = useState(false);
-  const [btScanMsg, setBtScanMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [testPrintSuccess, setTestPrintSuccess] = useState(false);
-  const [printerSavedMsg, setPrinterSavedMsg] = useState(false);
-  const [isAdvancedPageSetupOpen, setIsAdvancedPageSetupOpen] = useState(false);
 
   useEffect(() => {
     if (initialTab) {
@@ -484,7 +639,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Derive lock logo values from visualSettings with sensible defaults
   const [logoAsset, setLogoAsset] = useState<string>(() => {
     const saved = localStorage.getItem('falcon_logo_asset');
-    return (saved && saved.startsWith('/falcon-theme-rod-logo')) ? saved : '/falcon-theme-rod-logo.svg';
+    return saved || '/falcon-theme-rod-logo.svg';
   });
   const logoPosition = visualSettings.lockLogoPosition || 'inline';
   const customHeight = typeof visualSettings.lockLogoHeight === 'number' ? visualSettings.lockLogoHeight : 30;
@@ -560,14 +715,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handleSaveSecurity = (e: React.FormEvent) => {
     e.preventDefault();
-    if (/^\d{4}$/.test(newPinVal)) {
-      onUpdatePin(newPinVal);
-      if (onUpdateRecoveryAnswer && newRecoveryVal.trim()) {
-        onUpdateRecoveryAnswer(newRecoveryVal.trim());
+    if (/^\d{3,8}$/.test(cleanPin)) {
+      onUpdatePin(cleanPin);
+      if (onUpdateRecoveryAnswer && cleanRecovery) {
+        onUpdateRecoveryAnswer(cleanRecovery);
       }
       if (onUpdateAutolock) {
         onUpdateAutolock(selectedAutolockSec, lockOnMinimizeVal);
       }
+      const updated = persistStateDirectly({
+        pin: cleanPin,
+        recoveryAnswer: cleanRecovery || undefined,
+        autolockSeconds: selectedAutolockSec,
+        autolockMinutes: Math.round(selectedAutolockSec / 60),
+        lockOnMinimize: lockOnMinimizeVal
+      });
+      setCommittedSnapshot(prev => ({
+        ...prev,
+        pin: cleanPin,
+        recoveryAnswer: cleanRecovery,
+        autolockSeconds: selectedAutolockSec,
+        lockOnMinimize: lockOnMinimizeVal
+      }));
+      setLastCommittedAt(Date.now());
+      onForceSyncNow?.(updated || undefined);
+      triggerHaptic('success');
       setPinSavedMsg(true);
       setTimeout(() => setPinSavedMsg(false), 3000);
     }
@@ -629,18 +801,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+          {/* Explicit Save All Action Button */}
           <button
             type="button"
             onClick={handleSaveAllSettings}
-            className={`flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition active:scale-95 shadow-md cursor-pointer shrink-0 ${
+            className={`flex-1 sm:flex-initial justify-center flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition active:scale-95 shadow-md cursor-pointer shrink-0 ${
               allSettingsSavedMsg
                 ? 'bg-emerald-500 text-black shadow-emerald-500/20'
-                : 'bg-amber-400 hover:bg-amber-300 text-black shadow-amber-400/20'
+                : isDirty
+                ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-amber-500/30 ring-2 ring-amber-400/60 animate-pulse'
+                : 'bg-[var(--panel-raised)] border border-[var(--steel-line)] text-emerald-400 hover:border-emerald-500/50'
             }`}
-            title="Save all changes across branding, visual theme, security & printer"
+            title="Explicitly commit all settings changes directly to device local storage and cloud"
           >
-            {allSettingsSavedMsg ? <Check size={14} className="text-black" /> : <Save size={14} />}
-            <span>{allSettingsSavedMsg ? 'All Settings Saved!' : 'Save All Settings'}</span>
+            {allSettingsSavedMsg ? (
+              <>
+                <Check size={14} className="text-black" />
+                <span>Committed to Storage!</span>
+              </>
+            ) : isDirty ? (
+              <>
+                <Save size={14} className="text-black" />
+                <span>Save All ({dirtySections.length} Pending)</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={14} className="text-emerald-400" />
+                <span>All Saved (Clean)</span>
+              </>
+            )}
           </button>
 
           {/* Hidden Debug Logs Trigger Button */}
@@ -694,6 +883,115 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
+      {/* Dirty State Checker & Local Storage Persistence Visualizer */}
+      <div className={`p-3.5 sm:p-4 rounded-2xl border transition-all shadow-md ${
+        isDirty
+          ? 'bg-amber-500/10 border-amber-500/40 text-amber-100 shadow-amber-500/5 ring-1 ring-amber-500/20'
+          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100 shadow-emerald-500/5'
+      }`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-xl shrink-0 border mt-0.5 ${
+              isDirty
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+            }`}>
+              {isDirty ? (
+                <AlertCircle size={20} className="animate-pulse" />
+              ) : (
+                <CheckCircle2 size={20} />
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs font-black uppercase tracking-wider ${
+                  isDirty ? 'text-amber-300' : 'text-emerald-300'
+                }`}>
+                  {isDirty
+                    ? `Uncommitted Changes Detected (${dirtySections.length} section${dirtySections.length > 1 ? 's' : ''})`
+                    : 'All Settings Committed to Local Storage'}
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${
+                  isDirty
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                }`}>
+                  {isDirty ? 'Dirty · Unsaved to disk' : 'Clean · Synchronized'}
+                </span>
+              </div>
+
+              <div className="text-[11px] mt-1 text-[var(--text-dim)] leading-relaxed">
+                {isDirty ? (
+                  <span>
+                    The following sections have changes not yet committed to device storage:{' '}
+                    <span className="text-[var(--text)] font-semibold">
+                      {dirtySections.map(s => s.name).join(', ')}
+                    </span>
+                    . Click <strong className="text-amber-300">Save All</strong> below to guarantee changes survive app closure or reopening.
+                  </span>
+                ) : (
+                  <span>
+                    Device local storage and current configuration are fully synchronized. Verified saved at{' '}
+                    <span className="text-[var(--text)] font-semibold font-mono">
+                      {new Date(lastCommittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </span>
+                    .
+                  </span>
+                )}
+              </div>
+
+              {/* Dirty category jump chips */}
+              {isDirty && (
+                <div className="flex items-center gap-1.5 flex-wrap mt-2 pt-1 border-t border-amber-500/20">
+                  <span className="text-[10px] uppercase font-bold text-amber-400/80">Pending Sections:</span>
+                  {dirtySections.map(s => (
+                    <button
+                      key={s.sectionId}
+                      type="button"
+                      onClick={() => setActiveSection(s.sectionId as any)}
+                      className="px-2 py-0.5 rounded-md text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{s.name}</span>
+                      <span>→</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <button
+              type="button"
+              onClick={handleSaveAllSettings}
+              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition active:scale-95 flex items-center gap-1.5 shadow-md cursor-pointer ${
+                isDirty
+                  ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-amber-500/20 ring-2 ring-amber-400/40'
+                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+              }`}
+            >
+              {allSettingsSavedMsg ? (
+                <>
+                  <Check size={14} className="text-black" />
+                  <span>✓ Saved to Storage!</span>
+                </>
+              ) : isDirty ? (
+                <>
+                  <Save size={14} />
+                  <span>Save All Changes Now</span>
+                </>
+              ) : (
+                <>
+                  <HardDrive size={14} />
+                  <span>Force Re-save All</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Sub-navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none scroll-smooth">
         {[
@@ -715,6 +1013,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         ].map(tab => {
           const Icon = tab.icon;
           const isSelected = activeSection === tab.id;
+          const isTabUnsaved = (
+            (tab.id === 'branding' && isBrandingDirty) ||
+            ((tab.id === 'visual_studio' || tab.id === 'logo') && isVisualDirty) ||
+            (tab.id === 'security' && isSecurityDirty) ||
+            (tab.id === 'printer' && isPrinterDirty) ||
+            (tab.id === 'export_studio' && isExportDirty) ||
+            (tab.id === 'all' && isDirty)
+          );
+
           return (
             <button
               key={tab.id}
@@ -729,12 +1036,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition border cursor-pointer ${
                 isSelected
                   ? 'bg-amber-400 text-black border-amber-400 font-bold shadow-md'
+                  : isTabUnsaved
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 hover:border-amber-400'
                   : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] hover:border-[var(--steel-line)]/80'
               }`}
             >
-              <Icon size={14} className={isSelected ? 'text-black' : 'text-amber-400'} />
+              <Icon size={14} className={isSelected ? 'text-black' : isTabUnsaved ? 'text-amber-400' : 'text-amber-400'} />
               <span>{tab.label}</span>
-              {tab.badge && (
+              {isTabUnsaved && (
+                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider ${
+                  isSelected ? 'bg-black text-amber-300' : 'bg-amber-500 text-black animate-pulse'
+                }`}>
+                  Unsaved
+                </span>
+              )}
+              {tab.badge && !isTabUnsaved && (
                 <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase ${
                   isSelected ? 'bg-black/20 text-black' : 'bg-amber-400/20 text-amber-300'
                 }`}>

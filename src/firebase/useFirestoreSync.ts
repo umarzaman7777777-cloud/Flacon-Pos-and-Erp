@@ -57,8 +57,19 @@ export function useFirestoreSync(
     localStorage.setItem('falcon_pos_terminal_name', name);
   };
 
+  const getInitialVersion = (): number => {
+    if (typeof window !== 'undefined') {
+      const v = localStorage.getItem('falcon_erp_state_version');
+      if (v) {
+        const num = Number(v);
+        if (!isNaN(num) && num > 0) return num;
+      }
+    }
+    return Date.now();
+  };
+
   const isRemoteUpdateRef = useRef(false);
-  const localVersionRef = useRef<number>(Date.now());
+  const localVersionRef = useRef<number>(getInitialVersion());
   const debounceTimerRef = useRef<any>(null);
   const isFlushingQueueRef = useRef<boolean>(false);
   const latestStateRef = useRef<AppState>(state);
@@ -163,13 +174,44 @@ export function useFirestoreSync(
         const data = snapshot.data();
         if (!data || !data.statePayload) return;
 
-        // If the update came from another terminal or has a newer timestamp
-        if (data.updatedByTerminal !== terminalId) {
+        const incomingVersion = Number(data.version) || 0;
+
+        // Only accept update if from another terminal and strictly newer than our local version
+        if (data.updatedByTerminal !== terminalId && incomingVersion > localVersionRef.current) {
           try {
             const parsed = JSON.parse(data.statePayload);
             if (parsed && typeof parsed === 'object') {
+              // Ensure user settings from localStorage aren't stripped if remote payload was missing them
+              const localRaw = typeof window !== 'undefined' ? localStorage.getItem('falcon_rod_erp_state_v1') : null;
+              if (localRaw) {
+                try {
+                  const localParsed = JSON.parse(localRaw);
+                  if (!parsed.companyName && localParsed?.companyName) {
+                    parsed.companyName = localParsed.companyName;
+                  }
+                  if (!parsed.companyTagline && localParsed?.companyTagline) {
+                    parsed.companyTagline = localParsed.companyTagline;
+                  }
+                  if (!parsed.pin && localParsed?.pin) {
+                    parsed.pin = localParsed.pin;
+                  }
+                  if (localParsed?.visualSettings) {
+                    parsed.visualSettings = {
+                      ...(parsed.visualSettings || {}),
+                      ...localParsed.visualSettings
+                    };
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              }
+
               isRemoteUpdateRef.current = true;
-              localVersionRef.current = data.version || Date.now();
+              localVersionRef.current = incomingVersion;
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('falcon_erp_state_version', String(incomingVersion));
+                localStorage.setItem('falcon_rod_erp_state_v1', JSON.stringify(parsed));
+              }
               setState(parsed);
               setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
               setSyncState(pendingQueueCount > 0 ? 'offline' : 'synced');
@@ -179,6 +221,10 @@ export function useFirestoreSync(
             console.error('Error parsing remote sync payload:', e);
           }
         } else {
+          // If our local state is newer than the cloud doc, push local state to cloud
+          if (data.updatedByTerminal !== terminalId && localVersionRef.current > incomingVersion) {
+            pushStateToCloud(latestStateRef.current);
+          }
           setSyncState(pendingQueueCount > 0 ? 'offline' : 'synced');
         }
       },
@@ -257,8 +303,11 @@ export function useFirestoreSync(
     setSyncState('syncing');
     const path = 'sync_states/falcon_workshop';
     try {
-      const version = Date.now();
+      const version = Math.max(Date.now(), (localVersionRef.current || 0) + 1);
       localVersionRef.current = version;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('falcon_erp_state_version', String(version));
+      }
 
       const payload = {
         workspaceId: 'falcon_rod_maker',
@@ -333,7 +382,8 @@ export function useFirestoreSync(
         isRemoteUpdateRef.current = true;
         localVersionRef.current = docData.version || Date.now();
         setState(parsed);
-        localStorage.setItem('falcon_pos_state', JSON.stringify(parsed));
+        localStorage.setItem('falcon_rod_erp_state_v1', JSON.stringify(parsed));
+        localStorage.setItem('falcon_erp_state_version', String(docData.version || Date.now()));
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         setLastSyncTime(now);
         setSyncState('synced');
@@ -413,14 +463,25 @@ export function useFirestoreSync(
     };
   }, [state, pushStateToCloud]);
 
-  const forceSyncNow = () => {
+  const forceSyncNow = useCallback((overrideState?: AppState) => {
     const queue = getOfflineQueue();
     if (queue.length > 0) {
       flushOfflineQueue();
     } else {
-      pushStateToCloud(state);
+      let targetState = overrideState;
+      if (!targetState && typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('falcon_rod_erp_state_v1');
+          if (raw) {
+            targetState = JSON.parse(raw);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      pushStateToCloud(targetState || latestStateRef.current || state);
     }
-  };
+  }, [flushOfflineQueue, pushStateToCloud, state]);
 
   return {
     syncState,
