@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { doc, collection, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, collection, onSnapshot, setDoc, getDoc, enableNetwork } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { db, handleFirestoreError, OperationType } from './config';
 import { AppState } from '../types';
 import { storeSheetsToken, setStoredSpreadsheetId, setStoredSpreadsheetTitle, setStoredSpreadsheetUrl, notifyWorkspaceSyncUpdated } from '../utils/googleSheetsSync';
@@ -406,16 +408,11 @@ export function useFirestoreSync(
   // 5. Detect Online / Offline network transitions & automatically flush queue
   useEffect(() => {
     const handleOnline = () => {
-      console.info('[Falcon Sync] Network connection restored. Auto-flushing offline queue...');
+      console.info('[Falcon Sync] Network restored. Triggering cloud reconciliation...');
       setIsOnline(true);
       setSyncErrorMsg(null);
-      // Flush queued updates or current state immediately
-      const queue = getOfflineQueue();
-      if (queue.length > 0) {
-        flushOfflineQueue();
-      } else {
-        pushStateToCloud(latestStateRef.current);
-      }
+      setSyncState('syncing');
+      reconcileWithCloudOnResume(true);
     };
 
     const handleOffline = () => {
@@ -442,7 +439,167 @@ export function useFirestoreSync(
     };
   }, [flushOfflineQueue, pushStateToCloud]);
 
-  // 6. State change debounced push
+  // Active cloud reconciliation upon returning from background / reopening app
+  const isReconcilingRef = useRef(false);
+  const lastResumeReconcileTimestamp = useRef(0);
+
+  const reconcileWithCloudOnResume = useCallback(async (forced: boolean = false) => {
+    const now = Date.now();
+    // 2-second cooldown to avoid jitter across duplicate focus/visibility events
+    if (!forced && now - lastResumeReconcileTimestamp.current < 2000) return;
+    if (isReconcilingRef.current) return;
+    lastResumeReconcileTimestamp.current = now;
+    isReconcilingRef.current = true;
+
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setIsOnline(false);
+        setSyncState('offline');
+        return;
+      }
+
+      setIsOnline(true);
+      setSyncState('syncing');
+
+      // 1. Wake Firestore network socket up immediately
+      try {
+        await enableNetwork(db);
+      } catch (_) {
+        // Ignore if already active
+      }
+
+      // 2. Flush pending offline queue if any
+      const queue = getOfflineQueue();
+      if (queue.length > 0) {
+        await flushOfflineQueue();
+      }
+
+      // 3. Proactively check latest Firestore cloud document to reconcile any changes made while suspended
+      const syncDocRef = doc(db, 'sync_states', 'falcon_workshop');
+      const snap = await getDoc(syncDocRef);
+
+      if (snap.exists()) {
+        const data = snap.data();
+        const incomingVersion = Number(data.version) || 0;
+
+        if (data.updatedByTerminal !== terminalId && incomingVersion > localVersionRef.current) {
+          try {
+            const parsed = JSON.parse(data.statePayload);
+            if (parsed && typeof parsed === 'object') {
+              // Preserve locally configured branding and visual settings from disk
+              const localRaw = typeof window !== 'undefined' ? localStorage.getItem('falcon_rod_erp_state_v1') : null;
+              if (localRaw) {
+                try {
+                  const localParsed = JSON.parse(localRaw);
+                  if (localParsed?.companyName) parsed.companyName = localParsed.companyName;
+                  if (localParsed?.companyTagline) parsed.companyTagline = localParsed.companyTagline;
+                  if (localParsed?.pin) parsed.pin = localParsed.pin;
+                  if (localParsed?.visualSettings) {
+                    parsed.visualSettings = {
+                      ...(parsed.visualSettings || {}),
+                      ...localParsed.visualSettings
+                    };
+                  }
+                } catch (_) {}
+              }
+
+              isRemoteUpdateRef.current = true;
+              localVersionRef.current = incomingVersion;
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('falcon_erp_state_version', String(incomingVersion));
+                localStorage.setItem('falcon_rod_erp_state_v1', JSON.stringify(parsed));
+              }
+              setState(parsed);
+              console.info('[Falcon Sync] Reopen auto-sync smoothly loaded latest cloud state.');
+            }
+          } catch (parseErr) {
+            console.warn('[Falcon Sync] Error parsing remote state on reopen:', parseErr);
+          }
+        } else if (localVersionRef.current > incomingVersion) {
+          // Local has newer changes that didn't reach cloud yet: push immediately
+          await pushStateToCloud(latestStateRef.current);
+        }
+      }
+
+      // 4. Update terminal heartbeat
+      setDoc(doc(db, 'terminals', terminalId), {
+        id: terminalId,
+        name: terminalName,
+        lastSeen: new Date().toISOString(),
+        role: 'POS Terminal'
+      }, { merge: true }).catch(() => {});
+
+      setSyncState(getOfflineQueue().length > 0 ? 'offline' : 'synced');
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setSyncErrorMsg(null);
+    } catch (err: any) {
+      console.warn('[Falcon Sync] Foreground auto-sync reconciliation warning:', err);
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setSyncState('offline');
+        setSyncErrorMsg('Offline');
+      } else {
+        setSyncState(getOfflineQueue().length > 0 ? 'offline' : 'synced');
+      }
+    } finally {
+      isReconcilingRef.current = false;
+    }
+  }, [terminalId, terminalName, flushOfflineQueue, pushStateToCloud, setState]);
+
+  // Flush pending changes before the browser process is backgrounded or suspended
+  const handleAppSuspend = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    try {
+      localStorage.setItem('falcon_rod_erp_state_v1', JSON.stringify(latestStateRef.current));
+      localStorage.setItem('falcon_erp_state_version', String(localVersionRef.current || Date.now()));
+    } catch (_) {}
+    pushStateToCloud(latestStateRef.current).catch(() => {});
+  }, [pushStateToCloud]);
+
+  // 6. Seamless Background / Foreground and App Reopen Listeners
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        reconcileWithCloudOnResume();
+      } else if (document.visibilityState === 'hidden') {
+        handleAppSuspend();
+      }
+    };
+
+    const handleFocus = () => {
+      reconcileWithCloudOnResume();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pageshow', handleFocus);
+
+    let capacitorAppListener: (() => void) | null = null;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            reconcileWithCloudOnResume(true);
+          } else {
+            handleAppSuspend();
+          }
+        }).then(h => {
+          capacitorAppListener = () => h.remove();
+        }).catch(() => {});
+      }
+    } catch (_) {}
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pageshow', handleFocus);
+      if (capacitorAppListener) capacitorAppListener();
+    };
+  }, [reconcileWithCloudOnResume, handleAppSuspend]);
+
+  // 7. State change debounced push
   useEffect(() => {
     // If this update was triggered by incoming remote data, don't echo it back
     if (isRemoteUpdateRef.current) {

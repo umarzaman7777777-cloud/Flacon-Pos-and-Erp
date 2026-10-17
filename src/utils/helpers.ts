@@ -191,15 +191,20 @@ export function downloadCSV(filename: string, headers: string[], rows: (string |
   rows.forEach(r => lines.push(r.map(csvEscape).join(',')));
   if (footer) lines.push(footer);
   const csvContent = '\ufeff' + lines.join('\r\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' });
   const cleanName = filename.endsWith('.csv') ? filename : filename + '.csv';
-  const dataUrl = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
+  let dataUrl: string;
+  try {
+    dataUrl = `data:text/csv;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(csvContent)))}`;
+  } catch (_) {
+    dataUrl = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
+  }
 
   triggerUniversalDownload({
     fileName: cleanName,
     content: blob,
     dataUrl,
-    mimeType: 'text/csv;charset=utf-8',
+    mimeType: 'text/csv',
     format: 'csv',
     rawContent: csvContent,
     title: cleanName

@@ -120,8 +120,7 @@ export const ExportDownloadToast: React.FC = () => {
         blobUrl: activeExport.blobUrl,
         mimeType: activeExport.mimeType,
         format: activeExport.format,
-        title: activeExport.fileName,
-        targetApp: 'whatsapp'
+        title: activeExport.fileName
       });
       if (res.success) {
         setShared(true);
@@ -208,10 +207,10 @@ export const ExportDownloadToast: React.FC = () => {
             type="button"
             onClick={handleShare}
             className="flex-1 min-w-[130px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
-            title="Share via WhatsApp, Drive, Bluetooth or Email"
+            title="Share actual file to WhatsApp, Gmail, Drive, Bluetooth or device apps"
           >
             {shared ? <Check size={14} className="text-black" /> : <Share2 size={14} />}
-            <span>{shared ? 'Opening Share...' : 'Share (WhatsApp)'}</span>
+            <span>{shared ? 'File Shared!' : 'Share File (Apps)'}</span>
           </button>
 
           {/* Download to Device */}

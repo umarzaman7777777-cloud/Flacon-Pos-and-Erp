@@ -227,109 +227,158 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
     else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
     else if (lower.endsWith('.png')) mime = 'image/png';
     else if (lower.endsWith('.csv')) mime = 'text/csv';
+    else if (lower.endsWith('.json')) mime = 'application/json';
     else mime = 'application/octet-stream';
   }
 
+  // 1. Clean MIME type (remove parameters like charset) and ensure correct file extension
+  let cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith('.pdf')) cleanMime = 'application/pdf';
+  else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) cleanMime = 'image/jpeg';
+  else if (lowerName.endsWith('.png')) cleanMime = 'image/png';
+  else if (lowerName.endsWith('.csv')) cleanMime = 'text/csv';
+  else if (lowerName.endsWith('.json')) cleanMime = 'application/json';
+  else if (!cleanMime) cleanMime = 'application/octet-stream';
+
   let dataUrl = explicitDataUrl;
-  if (!dataUrl) {
-    if (typeof content === 'string' && content.startsWith('data:')) {
-      dataUrl = content;
-    } else if (content instanceof Blob) {
-      dataUrl = await blobToDataUri(content);
-    } else if (payload.blobUrl) {
-      try {
-        const resp = await fetch(payload.blobUrl);
-        const b = await resp.blob();
-        dataUrl = await blobToDataUri(b);
-      } catch (_) {}
-    }
-  }
 
-  // 0. Direct Native WhatsApp Strategy: If explicitly targeting WhatsApp, bypass chooser dialogs and launch WhatsApp directly
-  if (payload.targetApp === 'whatsapp') {
+  // 2. Resolve Binary Blob from content, dataUrl, blobUrl, or rawContent
+  let blob: Blob;
+  if (content instanceof Blob) {
+    blob = content;
+  } else if (dataUrl) {
+    blob = dataUriToBlob(dataUrl, cleanMime);
+  } else if (payload.blobUrl) {
     try {
-      const textMsg = encodeURIComponent(
-        `*Falcon Rod Maker — Export Archive*\n📄 *File:* ${fileName}\n${
-          payload.title ? `📝 ${payload.title}\n` : ''
-        }Generated from Falcon POS & ERP Terminal`
-      );
-      const waUrl = `whatsapp://send?text=${textMsg}`;
-      await openExternalUrl(waUrl, 'whatsapp');
-      triggerHaptic('success');
-      return { success: true, method: 'whatsapp-direct' };
-    } catch (waErr) {
-      console.warn('Direct WhatsApp launch notice:', waErr);
+      const resp = await fetch(payload.blobUrl);
+      blob = await resp.blob();
+    } catch (_) {
+      blob = new Blob([payload.rawContent || ''], { type: cleanMime });
     }
+  } else if (payload.rawContent) {
+    blob = new Blob([payload.rawContent], { type: cleanMime });
+  } else if (typeof content === 'string') {
+    if (content.startsWith('data:')) {
+      blob = dataUriToBlob(content, cleanMime);
+      if (!dataUrl) dataUrl = content;
+    } else {
+      blob = new Blob([content], { type: cleanMime });
+    }
+  } else {
+    blob = new Blob([''], { type: cleanMime });
   }
 
-  // 1. Android Capacitor Native Strategy (Direct System Share Intent -> WhatsApp / Drive / Files)
+  // Ensure dataUrl is converted to valid base64 data URI (required for Capacitor Android native intent)
+  if (!dataUrl || !dataUrl.includes(';base64,')) {
+    try {
+      dataUrl = await blobToDataUri(blob);
+    } catch (_) {}
+  }
+
+  // 3. Construct standard HTML5 File object for real attachment sharing
+  let file: File | null = null;
+  try {
+    file = new File([blob], fileName, {
+      type: cleanMime,
+      lastModified: Date.now()
+    });
+  } catch (fileErr) {
+    console.warn('Could not construct File object for native sharing:', fileErr);
+  }
+
+  // -----------------------------------------------------------------------------------------
+  // Strategy 1: Capacitor Native Sharing (Android / iOS app wrapper)
+  // Sends the real file bytes directly into Android ACTION_SEND intent with EXTRA_STREAM
+  // -----------------------------------------------------------------------------------------
   if (Capacitor.isNativePlatform() && dataUrl) {
     try {
       const ok = await shareFileNatively({
         fileName,
         base64Data: dataUrl,
-        mimeType: mime
+        mimeType: cleanMime
       });
       if (ok) {
         triggerHaptic('success');
-        return { success: true, method: 'capacitor-native' };
+        return { success: true, method: 'capacitor-native-file' };
       }
     } catch (err) {
-      console.warn('Native share failed, attempting web share fallback:', err);
+      console.warn('Native Capacitor file share error, proceeding to Web Share:', err);
     }
   }
 
-  // 2. Web Share API Strategy (Mobile Chrome / Safari / Samsung Internet)
-  if (typeof navigator !== 'undefined' && navigator.share) {
+  // -----------------------------------------------------------------------------------------
+  // Strategy 2: Web Share API Level 2 (files support)
+  // Supported in Chrome on Android, Safari on iOS/macOS, Samsung Internet, Edge
+  // This opens the OS native share dialog (WhatsApp, Gmail, Telegram, Drive, Bluetooth, etc.)
+  // and hands over the ACTUAL ATTACHED FILE (not plain text)!
+  // -----------------------------------------------------------------------------------------
+  if (file && typeof navigator !== 'undefined' && navigator.share) {
+    let canShareFiles = false;
     try {
-      let blob: Blob;
-      if (content instanceof Blob) {
-        blob = content;
-      } else if (dataUrl) {
-        blob = dataUriToBlob(dataUrl, mime);
-      } else {
-        blob = new Blob([payload.rawContent || ''], { type: mime });
-      }
-
-      const file = new File([blob], fileName, { type: mime });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        canShareFiles = true;
+      }
+    } catch (canErr) {
+      console.warn('navigator.canShare check failed:', canErr);
+    }
+
+    if (canShareFiles) {
+      try {
+        // CRITICAL FIX: Share ONLY { files: [file] } without 'title' or 'text'.
+        // When 'title' or 'text' is included alongside 'files', native Android apps (especially WhatsApp)
+        // prioritize the text string and DROP the file attachment, sending only text words!
+        // Sending ONLY 'files: [file]' guarantees that WhatsApp, Gmail, and native apps attach the ACTUAL file!
         await navigator.share({
-          files: [file],
-          title: title || fileName,
-          text: `Falcon Rod Maker — ${title || fileName}`
+          files: [file]
         });
         triggerHaptic('success');
         return { success: true, method: 'web-share-file' };
-      } else {
-        // Fallback to native text share intent (directly shows WhatsApp, Drive, Gmail in Android system share sheet)
-        await navigator.share({
-          title: title || fileName,
-          text: `Falcon Rod Maker — ${title || fileName}\n📄 ${fileName}`
-        });
-        triggerHaptic('success');
-        return { success: true, method: 'web-share-text' };
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') {
+          // User intentionally closed or cancelled the share chooser
+          return { success: false, method: 'cancelled' };
+        }
+        console.warn('Web Share file failed, falling back to guaranteed download:', shareErr);
       }
-    } catch (shareErr: any) {
-      if (shareErr?.name === 'AbortError') {
-        return { success: false, method: 'cancelled' };
-      }
-      console.warn('Web Share file failed:', shareErr);
     }
   }
 
-  // 3. Fallback: Direct Native WhatsApp Deep Link (whatsapp:// scheme directly opens native app)
+  // -----------------------------------------------------------------------------------------
+  // Strategy 3: Guaranteed Real File Delivery Fallback
+  // If the browser/environment does not support sharing files via Web Share:
+  // NEVER send text words or details! Instead:
+  // 1. Download the ACTUAL file to device storage so the user has the PDF/JPEG/CSV.
+  // 2. Dispatch a notification that the real file is ready and saved.
+  // -----------------------------------------------------------------------------------------
   try {
-    const textMsg = encodeURIComponent(
-      `*Falcon Rod Maker — Export Archive*\n📄 *File:* ${fileName}\n${
-        payload.title ? `📝 ${payload.title}\n` : ''
-      }Generated from Falcon POS & ERP Terminal`
-    );
-    // Directly use whatsapp:// custom scheme so the operating system opens native WhatsApp without an intermediate browser tab
-    const waUrl = `whatsapp://send?text=${textMsg}`;
-    await openExternalUrl(waUrl, 'whatsapp');
-    triggerHaptic('click');
-    return { success: true, method: 'whatsapp-direct' };
-  } catch (_) {
+    // 1. Deliver the file to user's device
+    await triggerUniversalDownload({
+      fileName,
+      content: blob,
+      dataUrl,
+      mimeType: cleanMime,
+      format: payload.format,
+      title
+    });
+
+    // 2. Inform user clearly that the real file is downloaded
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('falcon:toast', {
+          detail: {
+            type: 'success',
+            title: 'File Downloaded to Device',
+            message: `"${fileName}" has been saved. You can now attach this file directly in WhatsApp, Gmail, or your apps.`
+          }
+        })
+      );
+    }
+
+    triggerHaptic('success');
+    return { success: true, method: 'download-and-attach-guidance' };
+  } catch (fallbackErr) {
+    console.error('Fallback export delivery failed:', fallbackErr);
     return { success: false, method: 'failed' };
   }
 }

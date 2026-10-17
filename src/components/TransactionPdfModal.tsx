@@ -74,30 +74,55 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
   const isPartial = totalPaid > 0 && dueAmount > 0;
   const items = parseTransactionItems(transaction);
 
-  const handleShareInvoice = async () => {
+  const [isSharingPdf, setIsSharingPdf] = useState(false);
+  const [sharePdfSuccess, setSharePdfSuccess] = useState(false);
+
+  const handleShareInvoice = async (targetFormat: 'jpg' | 'pdf' = 'jpg') => {
     try {
-      setIsSharing(true);
-      const dataUrl = await exportSingleTransactionJPG({
-        transaction,
-        customerPayments,
-        companyName
-      });
-      const cleanCustomer = (transaction.factory || 'WalkIn').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const fileName = `Invoice_${transaction.id}_${cleanCustomer}.jpg`;
-      await shareExportFile({
-        fileName,
-        dataUrl,
-        title: `Invoice #${transaction.id} — ${transaction.factory || 'Walk-in'} (Rs ${fmt(transaction.total)})`,
-        format: 'jpg',
-        mimeType: 'image/jpeg',
-        targetApp: 'whatsapp'
-      });
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 2500);
+      if (targetFormat === 'pdf') {
+        setIsSharingPdf(true);
+        const res = await exportSingleTransactionPDF({
+          transaction,
+          customerPayments,
+          companyName,
+          pageSetup
+        });
+        if (res?.blob) {
+          await shareExportFile({
+            fileName: res.fileName,
+            content: res.blob,
+            dataUrl: res.dataUrl,
+            title: `Invoice #${transaction.id} — ${transaction.factory || 'Walk-in'} (Rs ${fmt(transaction.total)})`,
+            format: 'pdf',
+            mimeType: 'application/pdf'
+          });
+          setSharePdfSuccess(true);
+          setTimeout(() => setSharePdfSuccess(false), 2500);
+        }
+      } else {
+        setIsSharing(true);
+        const dataUrl = await exportSingleTransactionJPG({
+          transaction,
+          customerPayments,
+          companyName
+        });
+        const cleanCustomer = (transaction.factory || 'WalkIn').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const fileName = `Invoice_${transaction.id}_${cleanCustomer}.jpg`;
+        await shareExportFile({
+          fileName,
+          dataUrl,
+          title: `Invoice #${transaction.id} — ${transaction.factory || 'Walk-in'} (Rs ${fmt(transaction.total)})`,
+          format: 'jpg',
+          mimeType: 'image/jpeg'
+        });
+        setShareSuccess(true);
+        setTimeout(() => setShareSuccess(false), 2500);
+      }
     } catch (err) {
       console.warn('Share invoice error:', err);
     } finally {
       setIsSharing(false);
+      setIsSharingPdf(false);
     }
   };
 
@@ -259,11 +284,42 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
               )}
             </button>
 
+            {/* Share PDF Button */}
             <button
               type="button"
-              onClick={handleShareInvoice}
-              disabled={isSharing}
-              title="Share Invoice directly to WhatsApp, Gmail, or device apps"
+              onClick={() => handleShareInvoice('pdf')}
+              disabled={isSharingPdf || isGeneratingPdf}
+              title="Send actual PDF Invoice file to WhatsApp, Gmail, Drive, or native apps"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 ${
+                sharePdfSuccess
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                  : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500 hover:text-black'
+              }`}
+            >
+              {isSharingPdf ? (
+                <>
+                  <Loader2 size={14} className="animate-spin text-emerald-400" />
+                  <span>Sharing PDF...</span>
+                </>
+              ) : sharePdfSuccess ? (
+                <>
+                  <Check size={14} className="text-emerald-400" />
+                  <span>PDF Shared!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 size={14} />
+                  <span>Share PDF</span>
+                </>
+              )}
+            </button>
+
+            {/* Share JPG Image Button */}
+            <button
+              type="button"
+              onClick={() => handleShareInvoice('jpg')}
+              disabled={isSharing || isGeneratingJpg}
+              title="Send actual JPG Invoice image to WhatsApp, Gmail, Drive, or native apps"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 ${
                 shareSuccess
                   ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
@@ -273,17 +329,17 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
               {isSharing ? (
                 <>
                   <Loader2 size={14} className="animate-spin text-emerald-400" />
-                  <span>Sharing...</span>
+                  <span>Sharing JPG...</span>
                 </>
               ) : shareSuccess ? (
                 <>
                   <Check size={14} className="text-emerald-400" />
-                  <span>Shared!</span>
+                  <span>JPG Shared!</span>
                 </>
               ) : (
                 <>
                   <Share2 size={14} />
-                  <span>Share (WhatsApp)</span>
+                  <span>Share JPG</span>
                 </>
               )}
             </button>

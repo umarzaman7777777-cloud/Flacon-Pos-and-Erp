@@ -1027,8 +1027,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         dataUrl,
         format: item.format,
         title: item.title,
-        mimeType: item.format === 'jpg' ? 'image/jpeg' : item.format === 'pdf' ? 'application/pdf' : 'text/csv',
-        targetApp: 'whatsapp'
+        mimeType: item.format === 'jpg' ? 'image/jpeg' : item.format === 'pdf' ? 'application/pdf' : 'text/csv'
       });
       setTimeout(() => setSharingFeedbackId(null), 2500);
     } catch (err) {

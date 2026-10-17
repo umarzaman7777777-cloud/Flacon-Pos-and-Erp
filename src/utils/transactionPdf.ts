@@ -457,6 +457,12 @@ export function exportSingleTransactionPDF({
     totalAmount: transaction.total,
     customerName: transaction.factory || 'Walk-in'
   });
+
+  return {
+    blob: pdfBlob,
+    dataUrl: pdfDataUrl,
+    fileName: filename
+  };
 }
 
 /**
