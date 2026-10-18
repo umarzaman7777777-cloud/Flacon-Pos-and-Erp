@@ -699,6 +699,10 @@ export const App: React.FC = () => {
     }).catch(() => {});
   }, [workspaceSync]);
 
+  // Keep stable reference to state for background sync engine
+  const bgStateRef = useRef(state);
+  bgStateRef.current = state;
+
   // Connection health verification and PWA background service worker on boot
   useEffect(() => {
     testConnection();
@@ -707,11 +711,11 @@ export const App: React.FC = () => {
     // Proactively request persistent storage to protect local database
     requestStoragePersistence().catch(e => console.debug('Storage persist init:', e));
     // Initialize Continuous Background Sync Engine (keeps syncing even when app is minimized or backgrounded)
-    const cleanupSync = initBackgroundSyncEngine(() => state);
+    const cleanupSync = initBackgroundSyncEngine(() => bgStateRef.current);
     return () => {
       cleanupSync();
     };
-  }, [state]);
+  }, []);
 
   // Auto-save to localStorage with version timestamp
   useEffect(() => {

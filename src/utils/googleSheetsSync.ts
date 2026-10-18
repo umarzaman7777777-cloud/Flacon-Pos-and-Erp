@@ -127,16 +127,15 @@ export function getStoredSheetsToken(allowGracePeriod: boolean = true): SheetsTo
       return null;
     }
 
-    const defaultForeverExpires = Date.now() + (315360000 * 1000); // 10 years
-    let expiresAt = expiresStr ? parseInt(expiresStr, 10) : defaultForeverExpires;
-    // If the stored expiresAt was set to a past timestamp, automatically heal it forward
-    if (expiresAt < Date.now() + 86400000) {
-      expiresAt = defaultForeverExpires;
-      setPersistent(STORAGE_KEY_SHEETS_EXPIRES, defaultForeverExpires.toString());
-      setPersistent('falcon_gdrive_expires_at', defaultForeverExpires.toString());
+    const expiresAt = expiresStr ? parseInt(expiresStr, 10) : 0;
+    // Real expiration check: Google OAuth access tokens expire after 1 hour (3600 seconds).
+    // Only strictly reject expired tokens when allowGracePeriod is explicitly false.
+    // When allowGracePeriod is true (default), return the token so silent cloud reconciliation and background flush can execute.
+    if (!allowGracePeriod && expiresAt > 0 && Date.now() >= expiresAt - 30000) {
+      return null;
     }
 
-    return { token, expiresAt, userEmail };
+    return { token, expiresAt: expiresAt || (Date.now() + 3600 * 1000), userEmail };
   } catch {
     return null;
   }
@@ -144,10 +143,9 @@ export function getStoredSheetsToken(allowGracePeriod: boolean = true): SheetsTo
 
 /**
  * Persist access token in both localStorage and native Android SharedPreferences
- * Stores with a permanent, non-expiring multi-year window (10 years) so background app & reopening
- * never hits false token expiry and always maintains seamless auto-connect.
+ * Tracks actual token lifetime (1 hour) to prevent stale 401 unauthorized errors on app resume.
  */
-export function storeSheetsToken(token: string, expiresInSeconds: number = 315360000, email?: string): void {
+export function storeSheetsToken(token: string, expiresInSeconds: number = 3600, email?: string): void {
   // CRITICAL: Strictly reject non-Google pseudo-tokens to prevent corrupting workspace auth
   if (!isRealGoogleOAuthToken(token)) {
     console.debug('[SheetsSync] Refusing to persist non-Google token:', token?.substring(0, 15));
@@ -155,8 +153,7 @@ export function storeSheetsToken(token: string, expiresInSeconds: number = 31536
   }
 
   try {
-    // 10 years non-expiring window (315360000s) unless explicitly overridden
-    const validDuration = expiresInSeconds > 0 ? expiresInSeconds : 315360000;
+    const validDuration = expiresInSeconds > 0 && expiresInSeconds <= 86400 ? expiresInSeconds : 3600;
     const expiresAt = Date.now() + (validDuration * 1000);
     setPersistent(STORAGE_KEY_SHEETS_TOKEN, token);
     setPersistent(STORAGE_KEY_SHEETS_EXPIRES, expiresAt.toString());
@@ -350,11 +347,16 @@ export function setManualSheetsToken(
 /**
  * Acquire Google Sheets OAuth token directly and securely on this device.
  */
-export async function requestGoogleSheetsToken(preferredEmail: string = ALLOWED_SHEETS_OWNER_EMAIL): Promise<string> {
-  // 0. Return existing active token if valid
-  const cached = getStoredSheetsToken();
-  if (cached && cached.token && !cached.token.startsWith('falcon_offline_session_')) {
-    return cached.token;
+export async function requestGoogleSheetsToken(
+  preferredEmail: string = ALLOWED_SHEETS_OWNER_EMAIL,
+  forceRefresh: boolean = false
+): Promise<string> {
+  // 0. Return existing active token if valid and not force-refreshing
+  if (!forceRefresh) {
+    const cached = getStoredSheetsToken();
+    if (cached && cached.token && !cached.token.startsWith('falcon_offline_session_')) {
+      return cached.token;
+    }
   }
 
   // 1. Direct Universal Google Authentication
@@ -362,7 +364,8 @@ export async function requestGoogleSheetsToken(preferredEmail: string = ALLOWED_
     const { performUniversalGoogleSignIn } = await import('./googleAuthHelper');
     const authResult = await performUniversalGoogleSignIn({
       preferredEmail: preferredEmail || ALLOWED_SHEETS_OWNER_EMAIL,
-      scopes: SHEETS_SCOPES.split(' ')
+      scopes: SHEETS_SCOPES.split(' '),
+      forceRefresh
     });
 
     const accessToken = authResult.accessToken;
@@ -946,28 +949,24 @@ export async function writeSheetValues(
     })
   }, 10000);
 
-  // Handle 401 (token expired) with auto-refresh
+  // Handle 401 (token expired or invalidated)
   if (response.status === 401) {
+    console.warn('[SheetsSync] HTTP 401 encountered. Attempting smooth cloud recovery before notifying...');
     try {
       const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
-      await autoSyncWorkspaceFromCloud();
-      const fresh = getStoredSheetsToken();
-      if (fresh?.token && fresh.token !== currentToken) {
-        currentToken = fresh.token;
-        response = await fetchWithTimeout(url, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            range,
-            majorDimension: 'ROWS',
-            values
-          })
-        }, 10000);
+      const cloudRes = await autoSyncWorkspaceFromCloud();
+      if (cloudRes.sheetsSynced || cloudRes.driveSynced) {
+        const fresh = getStoredSheetsToken();
+        if (fresh?.token && fresh.token !== currentToken) {
+          console.info('[SheetsSync] Recovered fresh token from cloud sync; retrying write...');
+          return writeSheetValues(fresh.token, cleanId, sheetTitle, values);
+        }
       }
     } catch {}
+
+    // Preserve credentials in persistent storage for background renewal & 1-tap re-auth
+    notifyWorkspaceSyncUpdated();
+    throw new Error('Google Sheets session expired (HTTP 401). Please tap Reconnect to refresh credentials.');
   }
 
   // Handle 400 (e.g. sheet tab does not exist yet) -> auto-create tab and retry
@@ -1450,22 +1449,17 @@ export async function appendTransactionToSheet(
   });
 
   if (appendRes.status === 401) {
+    console.warn('[SheetsSync] HTTP 401 on single transaction append. Attempting smooth cloud recovery...');
     try {
       const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
       await autoSyncWorkspaceFromCloud();
       const fresh = getStoredSheetsToken();
       if (fresh?.token && fresh.token !== currentToken) {
-        currentToken = fresh.token;
-        appendRes = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${currentToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ values: [row] })
-        });
+        return appendTransactionToSheet(fresh.token, cleanId, transaction);
       }
     } catch {}
+    notifyWorkspaceSyncUpdated();
+    throw new Error('Google Sheets session expired (HTTP 401). Please tap Reconnect to refresh credentials.');
   }
 
   if (!appendRes.ok) {

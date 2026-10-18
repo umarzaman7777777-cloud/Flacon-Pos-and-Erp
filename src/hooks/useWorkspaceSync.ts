@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App } from '@capacitor/app';
 import { AppState, Transaction } from '../types';
 import {
   getStoredSheetsToken,
@@ -306,9 +308,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           const msg = String(sErr?.message || sErr || '');
           const lower = msg.toLowerCase();
           const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
-          if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
-            // Keep token intact and silently restore credentials in background without disrupting UI
+          if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid credentials') || lower.includes('unauthenticated'))) {
+            // Do NOT delete tokens from persistent storage! Preserving them allows smooth background recovery & 1-tap re-auth
             refreshGoogleWorkspaceTokenSilently().catch(() => {});
+            setSheetsError('Google Workspace session expired (HTTP 401). Tap Reconnect to refresh.');
+            notifyWorkspaceSyncUpdated();
           }
         } finally {
           setIsSyncingSheets(false);
@@ -336,9 +340,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           const msg = String(dErr?.message || dErr || '');
           const lower = msg.toLowerCase();
           const isNetworkBlip = lower.includes('timeout') || lower.includes('abort') || lower.includes('network') || lower.includes('failed to fetch');
-          if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid value'))) {
-            // Keep token intact and silently restore credentials in background without disrupting UI
+          if (!isNetworkBlip && (msg.includes('401') || lower.includes('invalid_token') || lower.includes('invalid credentials') || lower.includes('unauthenticated'))) {
+            // Do NOT delete tokens from persistent storage!
             refreshGoogleWorkspaceTokenSilently().catch(() => {});
+            setDriveError('Google Workspace session expired (HTTP 401). Tap Reconnect to refresh.');
+            notifyWorkspaceSyncUpdated();
           }
         } finally {
           setIsUploadingDrive(false);
@@ -403,8 +409,8 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
   useEffect(() => {
     const handleAppResume = () => {
       const now = Date.now();
-      // Enforce 20-second cooldown to avoid duplicate triggers between focus & visibilitychange
-      if (now - lastResumeSyncTimeRef.current < 20000) {
+      // Enforce 10-second cooldown to avoid duplicate triggers between focus & visibilitychange
+      if (now - lastResumeSyncTimeRef.current < 10000) {
         return;
       }
       lastResumeSyncTimeRef.current = now;
@@ -419,10 +425,27 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
     };
 
     window.addEventListener('focus', handleAppResume);
+    window.addEventListener('pageshow', handleAppResume);
     document.addEventListener('visibilitychange', handleVisibility);
+
+    let capacitorAppListener: (() => void) | null = null;
+    try {
+      if (Capacitor.isNativePlatform()) {
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) {
+            handleAppResume();
+          }
+        }).then(h => {
+          capacitorAppListener = () => h.remove();
+        }).catch(() => {});
+      }
+    } catch (_) {}
+
     return () => {
       window.removeEventListener('focus', handleAppResume);
+      window.removeEventListener('pageshow', handleAppResume);
       document.removeEventListener('visibilitychange', handleVisibility);
+      if (capacitorAppListener) capacitorAppListener();
     };
   }, [autoSyncNow]);
 

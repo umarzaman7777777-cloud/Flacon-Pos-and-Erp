@@ -42,6 +42,7 @@ export interface GoogleAuthOptions {
   scopes?: string[];
   preferredEmail?: string;
   forceSystemBrowser?: boolean;
+  forceRefresh?: boolean;
 }
 
 export function isAuthorizedOwnerEmail(email?: string | null): boolean {
@@ -373,22 +374,24 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
   const preferredEmail = options.preferredEmail || 'umarzaman7777777@gmail.com';
   const scopes = options.scopes || DEFAULT_GOOGLE_SCOPES;
 
-  // 1. Check if a valid real token is already cached in local memory
-  const localSheets = getStoredSheetsToken();
-  if (localSheets?.token && isRealGoogleOAuthToken(localSheets.token)) {
-    return {
-      accessToken: localSheets.token,
-      expiresIn: 315360000,
-      userEmail: localSheets.userEmail || preferredEmail
-    };
-  }
-  const localDrive = getStoredDriveToken();
-  if (localDrive?.token && isRealGoogleOAuthToken(localDrive.token)) {
-    return {
-      accessToken: localDrive.token,
-      expiresIn: 315360000,
-      userEmail: localDrive.userEmail || preferredEmail
-    };
+  // 1. Check if a valid real token is already cached in local memory (skip if forceRefresh is true)
+  if (!options.forceRefresh) {
+    const localSheets = getStoredSheetsToken();
+    if (localSheets?.token && isRealGoogleOAuthToken(localSheets.token)) {
+      return {
+        accessToken: localSheets.token,
+        expiresIn: 3600,
+        userEmail: localSheets.userEmail || preferredEmail
+      };
+    }
+    const localDrive = getStoredDriveToken();
+    if (localDrive?.token && isRealGoogleOAuthToken(localDrive.token)) {
+      return {
+        accessToken: localDrive.token,
+        expiresIn: 3600,
+        userEmail: localDrive.userEmail || preferredEmail
+      };
+    }
   }
 
   // 2. Interactive Google Sign-In with Firebase Auth GoogleAuthProvider
@@ -416,8 +419,8 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     const userEmail = cred.user?.email || preferredEmail;
 
     if (accessToken && isRealGoogleOAuthToken(accessToken)) {
-      storeSheetsToken(accessToken, 315360000, userEmail);
-      storeDriveToken(accessToken, 315360000, userEmail);
+      storeSheetsToken(accessToken, 3600, userEmail);
+      storeDriveToken(accessToken, 3600, userEmail);
     }
     if (typeof window !== 'undefined') {
       localStorage.setItem('falcon_verified_owner_session', 'true');
@@ -428,7 +431,7 @@ export async function performUniversalGoogleSignIn(options: GoogleAuthOptions = 
     return {
       accessToken,
       idToken,
-      expiresIn: 315360000,
+      expiresIn: 3600,
       userEmail,
       firebaseUser: cred.user
     };

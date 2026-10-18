@@ -65,15 +65,15 @@ export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveToke
       return null;
     }
     
-    const defaultForeverExpires = Date.now() + (315360000 * 1000); // 10 years
-    let expiresAt = expiresStr ? parseInt(expiresStr, 10) : defaultForeverExpires;
-    if (expiresAt < Date.now() + 86400000) {
-      expiresAt = defaultForeverExpires;
-      setPersistent(STORAGE_KEY_EXPIRES, defaultForeverExpires.toString());
-      setPersistent('falcon_gsheets_expires_at', defaultForeverExpires.toString());
+    const expiresAt = expiresStr ? parseInt(expiresStr, 10) : 0;
+    // Real expiration check: Google OAuth access tokens expire after 1 hour (3600 seconds).
+    // Only strictly reject expired tokens when allowGracePeriod is explicitly false.
+    // When allowGracePeriod is true (default), return the token so background sync and cloud renewal can proceed smoothly.
+    if (!allowGracePeriod && expiresAt > 0 && Date.now() >= expiresAt - 30000) {
+      return null;
     }
     
-    return { token, expiresAt, userEmail };
+    return { token, expiresAt: expiresAt || (Date.now() + 3600 * 1000), userEmail };
   } catch {
     return null;
   }
@@ -81,10 +81,9 @@ export function getStoredDriveToken(allowGracePeriod: boolean = true): DriveToke
 
 /**
  * Persist access token to both localStorage and native Android SharedPreferences
- * Stores with a permanent, non-expiring multi-year window (10 years) so background app & reopening
- * never hits false token expiry and always maintains seamless auto-connect.
+ * Tracks actual token lifetime (1 hour) to prevent stale 401 unauthorized errors on app resume.
  */
-export function storeDriveToken(token: string, expiresInSeconds: number = 315360000, email?: string): void {
+export function storeDriveToken(token: string, expiresInSeconds: number = 3600, email?: string): void {
   // CRITICAL: Strictly reject non-Google pseudo-tokens
   if (!isRealGoogleOAuthToken(token)) {
     console.debug('[DriveBackup] Refusing to persist non-Google token:', token?.substring(0, 15));
@@ -92,8 +91,7 @@ export function storeDriveToken(token: string, expiresInSeconds: number = 315360
   }
 
   try {
-    // 10 years non-expiring window (315360000s) unless explicitly overridden
-    const validDuration = expiresInSeconds > 0 ? expiresInSeconds : 315360000;
+    const validDuration = expiresInSeconds > 0 && expiresInSeconds <= 86400 ? expiresInSeconds : 3600;
     const expiresAt = Date.now() + (validDuration * 1000);
     setPersistent(STORAGE_KEY_TOKEN, token);
     setPersistent(STORAGE_KEY_EXPIRES, expiresAt.toString());
@@ -287,11 +285,16 @@ export function setManualDriveToken(
 /**
  * Acquire Google Drive OAuth token directly and securely on this device.
  */
-export async function requestGoogleDriveToken(preferredEmail?: string): Promise<string> {
-  // 0. Return existing active token if valid
-  const cached = getStoredDriveToken();
-  if (cached && cached.token && !cached.token.startsWith('falcon_offline_session_')) {
-    return cached.token;
+export async function requestGoogleDriveToken(
+  preferredEmail?: string,
+  forceRefresh: boolean = false
+): Promise<string> {
+  // 0. Return existing active token if valid and not force-refreshing
+  if (!forceRefresh) {
+    const cached = getStoredDriveToken();
+    if (cached && cached.token && !cached.token.startsWith('falcon_offline_session_')) {
+      return cached.token;
+    }
   }
 
   // 1. Direct Universal Google Authentication
@@ -303,7 +306,8 @@ export async function requestGoogleDriveToken(preferredEmail?: string): Promise<
       scopes: [
         'https://www.googleapis.com/auth/spreadsheets',
         'https://www.googleapis.com/auth/drive.file'
-      ]
+      ],
+      forceRefresh
     });
 
     const accessToken = authResult.accessToken;
@@ -357,17 +361,17 @@ export async function getOrCreateBackupFolder(accessToken: string): Promise<{ id
   }, 10000);
 
   if (searchRes.status === 401) {
+    console.warn('[DriveBackup] HTTP 401 on folder query. Attempting smooth cloud recovery...');
     try {
       const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
       await autoSyncWorkspaceFromCloud();
       const fresh = getStoredDriveToken();
       if (fresh?.token && fresh.token !== currentToken) {
-        currentToken = fresh.token;
-        searchRes = await fetchWithTimeout(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&spaces=drive`, {
-          headers: { Authorization: `Bearer ${currentToken}` }
-        }, 10000);
+        return getOrCreateBackupFolder(fresh.token);
       }
     } catch {}
+    notifyWorkspaceSyncUpdated();
+    throw new Error('Google Drive session expired (HTTP 401). Please tap Reconnect to refresh credentials.');
   }
 
   if (!searchRes.ok) {
@@ -464,22 +468,17 @@ export async function uploadBackupToGoogleDrive(
   }, 15000);
 
   if (uploadRes.status === 401) {
+    console.warn('[DriveBackup] HTTP 401 on upload. Attempting smooth cloud recovery...');
     try {
       const { autoSyncWorkspaceFromCloud } = await import('./persistentStorage');
       await autoSyncWorkspaceFromCloud();
       const fresh = getStoredDriveToken();
       if (fresh?.token && fresh.token !== currentUploadToken) {
-        currentUploadToken = fresh.token;
-        uploadRes = await fetchWithTimeout('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,createdTime,modifiedTime,description,webViewLink', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${currentUploadToken}`,
-            'Content-Type': `multipart/related; boundary=${boundary}`
-          },
-          body: multipartRequestBody
-        }, 15000);
+        return uploadBackupToGoogleDrive(fresh.token, options);
       }
     } catch {}
+    notifyWorkspaceSyncUpdated();
+    throw new Error('Google Drive session expired (HTTP 401). Please tap Reconnect to refresh credentials.');
   }
 
   if (!uploadRes.ok) {
