@@ -338,13 +338,24 @@ export function subscribeToExports(callback: (items: ExportedItem[]) => void): (
 /**
  * Helper to trigger immediate browser file download with blob conversion and error recovery
  */
-export function triggerFileDownload(dataUrlOrBlob: string | Blob, fileName: string) {
+export function triggerFileDownload(
+  dataUrlOrBlob: string | Blob,
+  fileName: string,
+  options?: {
+    format?: string;
+    title?: string;
+    tableData?: any;
+  }
+) {
   try {
     const isDataUrl = typeof dataUrlOrBlob === 'string' && dataUrlOrBlob.startsWith('data:');
     triggerUniversalDownload({
       fileName,
       content: dataUrlOrBlob,
-      dataUrl: isDataUrl ? (dataUrlOrBlob as string) : undefined
+      dataUrl: isDataUrl ? (dataUrlOrBlob as string) : undefined,
+      format: options?.format || (fileName.toLowerCase().endsWith('.jpg') ? 'jpg' : fileName.toLowerCase().endsWith('.png') ? 'png' : 'file'),
+      title: options?.title || fileName,
+      tableData: options?.tableData
     });
   } catch (err) {
     console.warn('Direct file download warning:', err);
@@ -1023,7 +1034,20 @@ export async function exportTableJPG(
 
   // Trigger Download
   try {
-    triggerFileDownload(dataUrl, cleanFileName);
+    triggerFileDownload(dataUrl, cleanFileName, {
+      format: 'jpg',
+      title: `${title} Report`,
+      tableData: {
+        title,
+        headers,
+        rows,
+        companyName: cfg.companyName,
+        subtitle: cfg.subtitle,
+        customNote: cfg.customNote,
+        paperSize: cfg.paperSize,
+        orientation: cfg.orientation
+      }
+    });
   } catch (err) {
     console.warn('Auto download error', err);
   }

@@ -23,5 +23,19 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "src",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-apk",
+    "android",
+    "build",
+    ".gradle",
+    "scripts",
+    "public"
+  ]
 }

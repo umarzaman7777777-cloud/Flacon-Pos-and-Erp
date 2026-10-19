@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { saveFileNatively, shareFileNatively } from './nativeFileSaver';
-import { openExternalUrl } from './openExternalUrl';
+import { saveFileNatively, shareFileNatively, openFileNatively } from './nativeFileSaver';
 import { triggerHaptic } from './haptics';
 
 /**
@@ -19,6 +18,17 @@ export interface UniversalDownloadPayload {
   rawContent?: string;
   title?: string;
   targetApp?: 'whatsapp' | 'auto';
+  tableData?: {
+    title?: string;
+    headers?: string[];
+    rows?: (string | number)[][];
+    footer?: string;
+    orientation?: string;
+    companyName?: string;
+    subtitle?: string;
+    customNote?: string;
+    paperSize?: string;
+  };
 }
 
 // Global active blob URLs to prevent premature garbage collection
@@ -100,15 +110,11 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
       finalDataUrl = content;
     } else {
       finalBlob = new Blob([content], { type: mime });
-      if (!finalDataUrl) {
-        finalDataUrl = `data:${mime},${encodeURIComponent(content)}`;
-      }
     }
   } else if (finalDataUrl) {
     finalBlob = dataUriToBlob(finalDataUrl, mime);
   } else if (rawContent) {
     finalBlob = new Blob([rawContent], { type: mime });
-    finalDataUrl = `data:${mime},${encodeURIComponent(rawContent)}`;
   } else {
     finalBlob = new Blob([''], { type: mime });
   }
@@ -121,12 +127,12 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
     activeBlobUrls.delete(blobUrl);
   }, 300000); // 5 minutes
 
-  // Ensure data URL is populated
-  if (!finalDataUrl) {
+  // Ensure data URL is populated with valid Base64 URI (essential for Native Android MediaStore and File Sharing)
+  if (!finalDataUrl || !finalDataUrl.includes(';base64,')) {
     try {
       finalDataUrl = await blobToDataUri(finalBlob);
     } catch (_) {
-      finalDataUrl = blobUrl;
+      if (!finalDataUrl) finalDataUrl = blobUrl;
     }
   }
 
@@ -192,6 +198,7 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
       mimeType: mime,
       savedLocally: savedNatively,
       rawContent: rawContent || (typeof content === 'string' && !content.startsWith('data:') ? content : undefined),
+      tableData: payload.tableData,
       timestamp: Date.now()
     };
 
@@ -382,3 +389,117 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
     return { success: false, method: 'failed' };
   }
 }
+
+/**
+ * Universal Native File Opener
+ * Opens exported PDF, CSV, JPG, or JSON directly into the device's default native viewer application
+ * (e.g. Adobe Acrobat / Drive PDF Viewer for PDF, Google Sheets / Excel for CSV, Gallery for JPG)
+ * via Android Intent.ACTION_VIEW or browser window without glitches.
+ */
+export async function openExportFile(payload: UniversalDownloadPayload): Promise<{
+  success: boolean;
+  method: string;
+}> {
+  const { fileName, content, dataUrl: explicitDataUrl } = payload;
+
+  let mime = payload.mimeType;
+  if (!mime) {
+    const lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) mime = 'application/pdf';
+    else if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) mime = 'image/jpeg';
+    else if (lower.endsWith('.png')) mime = 'image/png';
+    else if (lower.endsWith('.csv')) mime = 'text/csv';
+    else if (lower.endsWith('.json')) mime = 'application/json';
+    else mime = 'application/octet-stream';
+  }
+
+  let cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
+  const lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith('.pdf')) cleanMime = 'application/pdf';
+  else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) cleanMime = 'image/jpeg';
+  else if (lowerName.endsWith('.png')) cleanMime = 'image/png';
+  else if (lowerName.endsWith('.csv')) cleanMime = 'text/csv';
+  else if (lowerName.endsWith('.json')) cleanMime = 'application/json';
+  else if (!cleanMime) cleanMime = 'application/octet-stream';
+
+  let dataUrl = explicitDataUrl;
+
+  // Resolve Binary Blob from content, dataUrl, blobUrl, or rawContent
+  let blob: Blob;
+  if (content instanceof Blob) {
+    blob = content;
+  } else if (dataUrl) {
+    blob = dataUriToBlob(dataUrl, cleanMime);
+  } else if (payload.blobUrl) {
+    try {
+      const resp = await fetch(payload.blobUrl);
+      blob = await resp.blob();
+    } catch (_) {
+      blob = new Blob([payload.rawContent || ''], { type: cleanMime });
+    }
+  } else if (payload.rawContent) {
+    blob = new Blob([payload.rawContent], { type: cleanMime });
+  } else if (typeof content === 'string') {
+    if (content.startsWith('data:')) {
+      blob = dataUriToBlob(content, cleanMime);
+      if (!dataUrl) dataUrl = content;
+    } else {
+      blob = new Blob([content], { type: cleanMime });
+    }
+  } else {
+    blob = new Blob([''], { type: cleanMime });
+  }
+
+  // Ensure valid base64 data URI for Capacitor native intent
+  if (!dataUrl || !dataUrl.includes(';base64,')) {
+    try {
+      dataUrl = await blobToDataUri(blob);
+    } catch (_) {}
+  }
+
+  // Strategy 1: Capacitor Native Action View (Android native viewer apps)
+  if (Capacitor.isNativePlatform() && dataUrl) {
+    try {
+      const ok = await openFileNatively({
+        fileName,
+        base64Data: dataUrl,
+        mimeType: cleanMime
+      });
+      if (ok) {
+        triggerHaptic('success');
+        return { success: true, method: 'capacitor-native-view' };
+      }
+    } catch (err) {
+      console.warn('Native Capacitor file open error:', err);
+    }
+  }
+
+  // Strategy 2: Web Browser opening
+  try {
+    const objectUrl = URL.createObjectURL(blob);
+    activeBlobUrls.add(objectUrl);
+    setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+      activeBlobUrls.delete(objectUrl);
+    }, 180000);
+
+    const newWin = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    if (!newWin) {
+      // Popup blocked or mobile browser: trigger direct download fallback
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+      }, 1500);
+    }
+    triggerHaptic('click');
+    return { success: true, method: 'browser-tab' };
+  } catch (err) {
+    console.warn('Browser open failed:', err);
+    return { success: false, method: 'failed' };
+  }
+}
+

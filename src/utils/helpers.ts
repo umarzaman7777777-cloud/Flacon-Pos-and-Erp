@@ -207,7 +207,13 @@ export function downloadCSV(filename: string, headers: string[], rows: (string |
     mimeType: 'text/csv',
     format: 'csv',
     rawContent: csvContent,
-    title: cleanName
+    title: cleanName,
+    tableData: {
+      title: filename.replace(/_/g, ' '),
+      headers,
+      rows,
+      footer
+    }
   });
 
   recordExport({
@@ -416,7 +422,17 @@ export function exportTablePDF(
     dataUrl: pdfDataUrl,
     mimeType: 'application/pdf',
     format: 'pdf',
-    title: `${title} Report`
+    title: `${title} Report`,
+    tableData: {
+      title,
+      headers,
+      rows,
+      orientation: effectiveOrientation,
+      companyName: cfg.companyName,
+      subtitle: cfg.subtitle,
+      customNote: noteToRender,
+      paperSize: cfg.paperSize
+    }
   });
 
   recordExport({

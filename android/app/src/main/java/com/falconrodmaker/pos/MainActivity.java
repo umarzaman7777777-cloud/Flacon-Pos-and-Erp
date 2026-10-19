@@ -96,7 +96,8 @@ public class MainActivity extends BridgeActivity {
                                 public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                                     super.onPageStarted(view, url, favicon);
                                     if (url != null && (url.startsWith("whatsapp://") || url.contains("api.whatsapp.com") || url.contains("wa.me")
-                                        || url.contains("docs.google.com/spreadsheets") || url.contains("drive.google.com"))) {
+                                        || url.contains("docs.google.com/spreadsheets") || url.contains("drive.google.com")
+                                        || url.startsWith("blob:") || url.startsWith("data:"))) {
                                         return;
                                     }
                                     if (!authDialog.isShowing() && !MainActivity.this.isFinishing()) {
@@ -716,13 +717,39 @@ public class MainActivity extends BridgeActivity {
             }
 
             try {
-                byte[] fileBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                byte[] fileBytes;
+                try {
+                    fileBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                } catch (IllegalArgumentException base64Err) {
+                    try {
+                        String decoded = java.net.URLDecoder.decode(base64Data, "UTF-8");
+                        fileBytes = decoded.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (Exception ex) {
+                        fileBytes = base64Data.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                }
+
+                String lower = fileName.toLowerCase();
+                String resolvedMime = "application/octet-stream";
+                if (lower.endsWith(".pdf")) {
+                    resolvedMime = "application/pdf";
+                } else if (lower.endsWith(".csv")) {
+                    resolvedMime = "text/csv";
+                } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+                    resolvedMime = "image/jpeg";
+                } else if (lower.endsWith(".png")) {
+                    resolvedMime = "image/png";
+                } else if (lower.endsWith(".json")) {
+                    resolvedMime = "application/json";
+                } else if (mimeType != null && !mimeType.isEmpty() && !mimeType.equals("application/octet-stream")) {
+                    resolvedMime = mimeType.split(";")[0].trim().toLowerCase();
+                }
 
                 // Android 10+ (API 29+): MediaStore directly into Downloads
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                     android.content.ContentValues values = new android.content.ContentValues();
                     values.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName);
-                    values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType);
+                    values.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, resolvedMime);
                     values.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS);
 
                     android.content.ContentResolver resolver = getContext().getContentResolver();
@@ -758,7 +785,7 @@ public class MainActivity extends BridgeActivity {
                 android.media.MediaScannerConnection.scanFile(
                     getContext(),
                     new String[]{destFile.getAbsolutePath()},
-                    new String[]{mimeType},
+                    new String[]{resolvedMime},
                     null
                 );
 
@@ -789,10 +816,22 @@ public class MainActivity extends BridgeActivity {
             }
 
             try {
-                byte[] fileBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                byte[] fileBytes;
+                try {
+                    fileBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                } catch (IllegalArgumentException base64Err) {
+                    try {
+                        String decoded = java.net.URLDecoder.decode(base64Data, "UTF-8");
+                        fileBytes = decoded.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (Exception ex) {
+                        fileBytes = base64Data.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                }
+
                 java.io.File cacheDir = new java.io.File(getContext().getCacheDir(), "exports");
                 if (!cacheDir.exists()) cacheDir.mkdirs();
                 java.io.File tempFile = new java.io.File(cacheDir, fileName);
+                if (tempFile.exists()) tempFile.delete();
                 try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile)) {
                     fos.write(fileBytes);
                     fos.flush();
@@ -804,27 +843,47 @@ public class MainActivity extends BridgeActivity {
                     tempFile
                 );
 
+                String lower = fileName.toLowerCase();
+                String resolvedMime = "application/octet-stream";
+                if (lower.endsWith(".pdf")) {
+                    resolvedMime = "application/pdf";
+                } else if (lower.endsWith(".csv")) {
+                    resolvedMime = "text/csv";
+                } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+                    resolvedMime = "image/jpeg";
+                } else if (lower.endsWith(".png")) {
+                    resolvedMime = "image/png";
+                } else if (lower.endsWith(".json")) {
+                    resolvedMime = "application/json";
+                } else if (mimeType != null && !mimeType.isEmpty() && !mimeType.equals("application/octet-stream")) {
+                    resolvedMime = mimeType.split(";")[0].trim().toLowerCase();
+                }
+
                 Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                String resolvedMime = (mimeType != null && !mimeType.isEmpty() && !mimeType.equals("application/octet-stream"))
-                    ? mimeType
-                    : (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) ? "image/jpeg"
-                    : fileName.endsWith(".png") ? "image/png"
-                    : fileName.endsWith(".pdf") ? "application/pdf"
-                    : "image/jpeg";
                 shareIntent.setType(resolvedMime);
                 shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
-                shareIntent.setClipData(android.content.ClipData.newRawUri("Export File", contentUri));
+                shareIntent.setClipData(android.content.ClipData.newRawUri(fileName, contentUri));
                 shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-                java.util.List<android.content.pm.ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(shareIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-                for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
-                    String packageName = resolveInfo.activityInfo.packageName;
-                    getContext().grantUriPermission(packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                }
+                shareIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
                 Intent chooser = Intent.createChooser(shareIntent, "Share " + fileName);
                 chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                // Grant explicit read URI permissions to WhatsApp and WhatsApp Business
+                try {
+                    getContext().grantUriPermission("com.whatsapp", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    getContext().grantUriPermission("com.whatsapp.w4b", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (Exception ignored) {}
+
+                try {
+                    java.util.List<android.content.pm.ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(shareIntent, 0);
+                    for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
+                        if (resolveInfo.activityInfo != null && resolveInfo.activityInfo.packageName != null) {
+                            getContext().grantUriPermission(resolveInfo.activityInfo.packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        }
+                    }
+                } catch (Exception ignored) {}
 
                 getActivity().runOnUiThread(new Runnable() {
                     @Override
@@ -845,6 +904,108 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) {
                 e.printStackTrace();
                 call.reject("Error sharing file: " + e.getMessage());
+            }
+        }
+
+        @PluginMethod
+        public void openFile(PluginCall call) {
+            String fileName = call.getString("fileName");
+            String base64Data = call.getString("base64Data");
+            String mimeType = call.getString("mimeType", "application/octet-stream");
+
+            if (fileName == null || base64Data == null) {
+                call.reject("fileName and base64Data are required");
+                return;
+            }
+
+            if (base64Data.contains(",")) {
+                base64Data = base64Data.substring(base64Data.indexOf(",") + 1);
+            }
+
+            try {
+                byte[] fileBytes;
+                try {
+                    fileBytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT);
+                } catch (IllegalArgumentException base64Err) {
+                    try {
+                        String decoded = java.net.URLDecoder.decode(base64Data, "UTF-8");
+                        fileBytes = decoded.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (Exception ex) {
+                        fileBytes = base64Data.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                }
+
+                java.io.File cacheDir = new java.io.File(getContext().getCacheDir(), "exports");
+                if (!cacheDir.exists()) cacheDir.mkdirs();
+                java.io.File tempFile = new java.io.File(cacheDir, fileName);
+                if (tempFile.exists()) tempFile.delete();
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile)) {
+                    fos.write(fileBytes);
+                    fos.flush();
+                }
+
+                android.net.Uri contentUri = androidx.core.content.FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    tempFile
+                );
+
+                String lower = fileName.toLowerCase();
+                String resolvedMime = "application/octet-stream";
+                if (lower.endsWith(".pdf")) {
+                    resolvedMime = "application/pdf";
+                } else if (lower.endsWith(".csv")) {
+                    resolvedMime = "text/csv";
+                } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+                    resolvedMime = "image/jpeg";
+                } else if (lower.endsWith(".png")) {
+                    resolvedMime = "image/png";
+                } else if (lower.endsWith(".json")) {
+                    resolvedMime = "application/json";
+                } else if (mimeType != null && !mimeType.isEmpty() && !mimeType.equals("application/octet-stream")) {
+                    resolvedMime = mimeType.split(";")[0].trim().toLowerCase();
+                }
+
+                Intent viewIntent = new Intent(Intent.ACTION_VIEW);
+                viewIntent.setDataAndType(contentUri, resolvedMime);
+                viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                viewIntent.setClipData(android.content.ClipData.newRawUri(fileName, contentUri));
+
+                // Grant explicit URI read permission to all matching activities
+                try {
+                    java.util.List<android.content.pm.ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(viewIntent, 0);
+                    for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
+                        if (resolveInfo.activityInfo != null && resolveInfo.activityInfo.packageName != null) {
+                            getContext().grantUriPermission(resolveInfo.activityInfo.packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                Intent chooser = Intent.createChooser(viewIntent, "Open " + fileName);
+                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            getActivity().startActivity(chooser);
+                        } catch (Exception actErr) {
+                            try {
+                                getContext().startActivity(chooser);
+                            } catch (Exception ignored) {}
+                        }
+                    }
+                });
+
+                JSObject ret = new JSObject();
+                ret.put("success", true);
+                ret.put("uri", contentUri.toString());
+                call.resolve(ret);
+            } catch (Exception e) {
+                e.printStackTrace();
+                call.reject("Error opening file: " + e.getMessage());
             }
         }
     }

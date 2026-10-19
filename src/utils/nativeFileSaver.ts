@@ -11,6 +11,11 @@ export interface NativeFileSaverPlugin {
     base64Data: string;
     mimeType: string;
   }): Promise<{ success: boolean }>;
+  openFile(options: {
+    fileName: string;
+    base64Data: string;
+    mimeType: string;
+  }): Promise<{ success: boolean; uri?: string; message?: string }>;
 }
 
 export const NativeFileSaver = registerPlugin<NativeFileSaverPlugin>('NativeFileSaver');
@@ -41,6 +46,21 @@ export async function shareFileNatively(options: {
     return !!(res && res.success);
   } catch (err) {
     console.warn('NativeFileSaver shareFile error:', err);
+    return false;
+  }
+}
+
+export async function openFileNatively(options: {
+  fileName: string;
+  base64Data: string;
+  mimeType: string;
+}): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const res = await NativeFileSaver.openFile(options);
+    return !!(res && res.success);
+  } catch (err) {
+    console.warn('NativeFileSaver openFile error:', err);
     return false;
   }
 }
