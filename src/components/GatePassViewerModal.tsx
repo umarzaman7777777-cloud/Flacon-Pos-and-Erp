@@ -8,16 +8,8 @@ import {
   RotateCw,
   FileText,
   Image as ImageIcon,
-  Check,
-  Calendar,
-  Truck,
-  User,
-  Building,
   ShieldCheck,
-  ExternalLink,
   UserCheck,
-  Hash,
-  Layers
 } from 'lucide-react';
 import { Transaction, AppLanguage } from '../types';
 import { fmt } from '../utils/helpers';
@@ -34,8 +26,6 @@ interface GatePassViewerModalProps {
 export const GatePassViewerModal: React.FC<GatePassViewerModalProps> = ({
   transaction,
   receipt,
-  language,
-  companyName,
   onClose
 }) => {
   const gatePass = transaction?.gatePass;

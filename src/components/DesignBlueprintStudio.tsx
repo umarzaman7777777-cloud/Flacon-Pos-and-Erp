@@ -1,31 +1,15 @@
 import React, { useState, useRef } from 'react';
 import {
   X,
-  Wrench,
-  Sliders,
   Check,
-  Download,
-  Printer,
   ShoppingCart,
-  Maximize2,
-  RefreshCw,
-  Layers,
-  Sparkles,
-  Info,
-  Shield,
-  Circle,
-  Hash,
-  Eye,
-  Settings2,
-  Copy,
   CheckCircle2,
   SlidersHorizontal,
-  ChevronRight,
   FileText,
   Loader2
 } from 'lucide-react';
 import { Product, RodBlueprintSpecs, AppLanguage } from '../types';
-import { fmt, STANDARD_DIAMETER_OPTIONS, parseDiameterToInches, formatDiameterMm } from '../utils/helpers';
+import { STANDARD_DIAMETER_OPTIONS, parseDiameterToInches, formatDiameterMm } from '../utils/helpers';
 import { exportRodBlueprintPDF } from '../utils/blueprintPdfExport';
 
 export interface DesignBlueprintStudioProps {

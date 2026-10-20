@@ -5,28 +5,19 @@ import {
   Printer,
   Image as ImageIcon,
   CreditCard,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
   UploadCloud,
   Eye,
   Check,
-  Lock,
   Building,
-  Calendar,
   Clock,
-  UserCheck,
   Truck,
-  Hash,
   DollarSign,
   Package,
   Layers,
-  ArrowRight,
-  FileCheck
 } from 'lucide-react';
 import { Transaction, AppLanguage, CustomerPayment } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
+import { fmt } from '../utils/helpers';
 import { parseTransactionItems, printThermalReceiptDocument } from '../utils/transactionPdf';
 import { exportSingleTransactionJPG } from '../utils/exportManager';
 
@@ -55,7 +46,6 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   onOpenGatePassView,
   onOpenInvoicePdf,
   onConfirmOrder,
-  onNilOrder
 }) => {
   const [isExportingJpg, setIsExportingJpg] = useState(false);
 

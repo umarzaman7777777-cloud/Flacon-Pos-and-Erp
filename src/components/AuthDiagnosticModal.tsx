@@ -11,14 +11,10 @@ import {
   Download,
   Smartphone,
   ShieldCheck,
-  Database,
-  FileSpreadsheet,
   Cloud,
   ChevronDown,
   ChevronUp,
   X,
-  ExternalLink,
-  Terminal,
   Zap
 } from 'lucide-react';
 import {
@@ -26,7 +22,6 @@ import {
   runInteractiveSignInProbe,
   runOAuthRedirectCallbackDiagnostic,
   AuthDiagnosticReport,
-  DiagnosticStepResult
 } from '../utils/authDiagnosticEngine';
 import { AppLanguage } from '../types';
 import { purgeAndResetAllGoogleTokens } from '../utils/googleAuthHelper';

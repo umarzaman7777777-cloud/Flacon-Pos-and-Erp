@@ -10,19 +10,15 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  WifiOff,
   CloudCheck,
   FileSpreadsheet,
   Cloud,
   CheckCircle2,
-  Clock,
-  Sparkles,
   Zap
 } from 'lucide-react';
 import { AppLanguage } from '../types';
 import { AuthDiagnosticModal } from './AuthDiagnosticModal';
 import {
-  WorkspaceServiceType,
   OAuthVerificationResult,
   verifyWorkspaceOAuth,
   reauthenticateWorkspaceService,
@@ -33,7 +29,7 @@ import { WORKSPACE_SYNC_EVENT, ALLOWED_SHEETS_OWNER_EMAIL } from '../utils/googl
 import { openExternalUrl } from '../utils/openExternalUrl';
 import { auth } from '../firebase/config';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { getOAuthDebugLogs, exportOAuthDebugLogsJSON, OAUTH_LOG_EVENT, OAuthDebugLogEntry } from '../utils/oauthDebugLogger';
+import { getOAuthDebugLogs, OAUTH_LOG_EVENT, OAuthDebugLogEntry } from '../utils/oauthDebugLogger';
 
 export interface AuthStatusProps {
   service?: 'sheets' | 'drive' | 'all';

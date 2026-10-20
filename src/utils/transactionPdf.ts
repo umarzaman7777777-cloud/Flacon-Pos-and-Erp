@@ -130,8 +130,6 @@ export function exportSingleTransactionPDF({
   customerPayments,
   companyName = 'Falcon Rod Maker',
   companyTagline = 'Industrial Fan Accessories & Workshop ERP · Gujrat, Pakistan',
-  signatureUrl,
-  stampUrl,
   pageSetup,
   customExportConfig
 }: ExportTransactionPdfOptions) {

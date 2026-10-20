@@ -1,4 +1,3 @@
-import { FALCON_LOGO_PNG } from '../utils/logoData';
 import React, { useState, useEffect } from 'react';
 import {
   Search,
@@ -8,16 +7,12 @@ import {
   Mic,
   Lock,
   Menu,
-  Printer,
   Wifi,
   Bluetooth,
   Usb,
-  FileSpreadsheet,
   Cloud,
   CloudOff,
   RefreshCw,
-  UploadCloud,
-  HardDrive,
   Database,
   Trash2,
   Grid,
@@ -81,7 +76,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   isAutoAuthenticating = false,
   onOpenWorkspaceModal,
   onToggleTheme,
-  onToggleLanguage,
   onOpenSearch,
   onOpenVoice,
   onOpenNotifications,
@@ -93,7 +87,6 @@ export const TopBar: React.FC<TopBarProps> = ({
   isPrinterConfigActive = false,
   recycleBinCount = 0,
   onOpenRecycleBin,
-  onOpenGmailVault,
   showBlueprintGrid = false,
   onToggleBlueprintGrid
 }) => {

@@ -11,7 +11,6 @@ import {
   Trash2,
   X,
   Sparkles,
-  ExternalLink
 } from 'lucide-react';
 import { AppState, AppView } from '../types';
 import { fmt } from '../utils/helpers';

@@ -5,15 +5,10 @@ import {
   Download,
   Copy,
   Check,
-  AlertTriangle,
   Info,
-  ShieldAlert,
   Clock,
-  ExternalLink,
-  RefreshCw,
   Search,
   Filter,
-  Activity,
   Zap
 } from 'lucide-react';
 import {
@@ -33,7 +28,6 @@ interface OAuthDebugLogsSectionProps {
 
 export const OAuthDebugLogsSection: React.FC<OAuthDebugLogsSectionProps> = ({
   language = 'en',
-  onNavigateToBackup
 }) => {
   const [logs, setLogs] = useState<OAuthDebugLogEntry[]>(() => getOAuthDebugLogs());
   const [filterService, setFilterService] = useState<'all' | 'sheets' | 'drive'>('all');

@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   Eye, EyeOff, Fingerprint, ShieldCheck, Mail, ArrowLeft, KeyRound,
-  Loader2, CheckCircle2, AlertCircle, LogIn, LogOut, Smartphone,
-  RotateCcw, ArrowRight, Shield, Lock, Unlock, Check, Sparkles, ChevronRight, X
+  Loader2, CheckCircle2, AlertCircle, Smartphone,
+  RotateCcw, Shield, ChevronRight, X
 } from 'lucide-react';
-import { AppLanguage, VisualSettings, LogoTheme } from '../types';
+import { AppLanguage, VisualSettings } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { Capacitor } from '@capacitor/core';
-import { FalconLogo } from './FalconLogo';
 import { FALCON_LOGO_PNG } from '../utils/logoData';
-import { auth, googleProvider } from '../firebase/config';
-import { isLocalhostOrMobileApp, performUniversalGoogleSignIn, checkRedirectAuthResult } from '../utils/googleAuthHelper';
+import { auth } from '../firebase/config';
+import { performUniversalGoogleSignIn, checkRedirectAuthResult } from '../utils/googleAuthHelper';
 import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, isRealGoogleOAuthToken } from '../utils/googleSheetsSync';
 import { storeDriveToken, getStoredDriveToken } from '../utils/googleDriveBackup';
 import {

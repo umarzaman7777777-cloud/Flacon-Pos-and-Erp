@@ -9,12 +9,8 @@ import {
   X, 
   CheckCircle2, 
   AlertCircle, 
-  FileSpreadsheet, 
-  Database, 
-  Lock, 
   Mail, 
   HelpCircle,
-  ExternalLink
 } from 'lucide-react';
 import { ALLOWED_SHEETS_OWNER_EMAIL } from '../utils/googleSheetsSync';
 
@@ -48,8 +44,6 @@ export const GmailCloudVaultModal: React.FC<GmailCloudVaultModalProps> = ({
   onForceSyncNow,
   onRestoreFromCloud,
   onRestoreFromVault,
-  onOpenGoogleSheets,
-  onOpenGoogleDrive
 }) => {
   if (isOpen === false) return null;
   const isUrdu = language === 'ur';

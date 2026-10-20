@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { RotateCcw, AlertTriangle, CheckCircle, Plus, Wrench, Trash2, Download, Image as ImageIcon } from 'lucide-react';
+import { RotateCcw, Plus, Wrench, Image as ImageIcon } from 'lucide-react';
 import { ProductReturn, Factory, Product, AppLanguage } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
 
 interface ProductReturnsViewProps {

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { CustomLedger, CustomLedgerEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG } from '../utils/helpers';
+import { fmt, todayISO, downloadCSV } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import {
   buildLedgerExportTableData,
   getStoredLedgerColumnConfig,
   saveStoredLedgerColumnConfig
 } from '../utils/ledgerExportHelper';
-import { Trash2, Download, FileText, AlertCircle, Sliders, Edit2, Image as ImageIcon } from 'lucide-react';
+import { Trash2, Download, FileText, Sliders, Edit2, Image as ImageIcon } from 'lucide-react';
 import { EditLedgerEntryModal } from './EditLedgerEntryModal';
 import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 
@@ -41,7 +41,7 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
   const [rate, setRate] = useState('');
   const [debit, setDebit] = useState('');
   const [credit, setCredit] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date] = useState(todayISO());
 
   // Detailed payment & Studio states
   const [editingEntry, setEditingEntry] = useState<CustomLedgerEntry | null>(null);

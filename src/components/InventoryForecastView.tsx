@@ -8,12 +8,9 @@ import {
   Boxes,
   FileSpreadsheet,
   Download,
-  Sliders,
   Calendar,
   Layers,
   Sparkles,
-  ChevronRight,
-  Info,
   CheckCircle2,
   RefreshCw,
   Phone,
@@ -22,14 +19,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ShoppingCart,
-  Send,
   SlidersHorizontal,
   X,
-  Plus,
   HelpCircle,
-  FileText
 } from 'lucide-react';
-import { AppState, AppLanguage, RawStockItem } from '../types';
+import { AppState, AppLanguage } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, downloadCSV, exportTablePDF } from '../utils/helpers';
 import {
@@ -39,7 +33,6 @@ import {
   loadSavedSafetyBuffers,
   saveSafetyBuffers,
   MaterialForecastItem,
-  DailyTrajectoryPoint
 } from '../utils/inventoryForecastEngine';
 
 interface InventoryForecastViewProps {
@@ -55,9 +48,7 @@ export const InventoryForecastView: React.FC<InventoryForecastViewProps> = ({
   state,
   language,
   companyName,
-  onNavigate,
   onAddRawEntry,
-  onUpdateRawStock
 }) => {
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
@@ -130,7 +121,7 @@ export const InventoryForecastView: React.FC<InventoryForecastViewProps> = ({
   };
 
   // Handler to adjust safety buffer for a material
-  const handleSafetyBufferChange = (materialKey: string, newDays: number) => {
+  const handleAdjustSafetyBuffer = (materialKey: string, newDays: number) => {
     const val = Math.max(0, Math.min(30, Math.round(newDays)));
     const updated = { ...customSafetyBuffers, [materialKey]: val };
     setCustomSafetyBuffers(updated);

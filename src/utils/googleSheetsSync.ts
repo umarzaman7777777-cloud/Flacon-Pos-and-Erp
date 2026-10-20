@@ -1,7 +1,3 @@
-import firebaseConfig from '../../firebase-applet-config.json';
-import { auth, db } from '../firebase/config';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { AppState, Transaction, Product, CustomerLedgerAccount, RawStockItem, Expense, Factory } from '../types';
 import { getPersistent, setPersistent, removePersistent, publishWorkspaceTokensToFirestore, autoSyncWorkspaceFromCloud } from './persistentStorage';
 

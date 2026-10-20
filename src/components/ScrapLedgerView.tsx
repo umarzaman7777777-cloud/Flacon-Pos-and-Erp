@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Recycle, Plus, Trash2, Edit2, Download, Image as ImageIcon, Sliders } from 'lucide-react';
+import { Recycle, Plus, Trash2, Edit2, Image as ImageIcon, Sliders } from 'lucide-react';
 import { ScrapBuyer, ScrapEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG } from '../utils/helpers';
+import { fmt, todayISO, downloadCSV } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeScrapBuyerLedgerDetails } from '../utils/mathEngine';
 import {
@@ -40,12 +40,12 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
 
   // Form State
   const [desc, setDesc] = useState('');
-  const [itemName, setItemName] = useState('Steel Wire Scrap');
+  const [itemName] = useState('Steel Wire Scrap');
   const [weight, setWeight] = useState('');
   const [rate, setRate] = useState('');
   const [debit, setDebit] = useState('');
   const [credit, setCredit] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date] = useState(todayISO());
 
   // Detailed payment & Studio states
   const [editingEntry, setEditingEntry] = useState<ScrapEntry | null>(null);

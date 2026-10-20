@@ -20,11 +20,7 @@ import {
   PieChart,
   Calendar,
   Activity,
-  ArrowUpRight,
-  ArrowDownRight,
-  ShieldAlert,
   Boxes,
-  Users
 } from 'lucide-react';
 import { AppState, AppLanguage } from '../types';
 import { fmt, parseDMY } from '../utils/helpers';
@@ -48,7 +44,6 @@ export type DateRangePreset =
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
   state,
-  language,
   onNavigate,
   onOpenCustomerLedger
 }) => {
@@ -68,8 +63,8 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   });
-  const [chartTimespan, setChartTimespan] = useState<'7days' | '30days'>('30days');
-  const [monthlyRange, setMonthlyRange] = useState<'6months' | '12months'>('6months');
+  const [chartTimespan] = useState<'7days' | '30days'>('30days');
+  const [monthlyRange] = useState<'6months' | '12months'>('6months');
   const [activeChartBar, setActiveChartBar] = useState<number | null>(null);
 
   // Calendar Calculation

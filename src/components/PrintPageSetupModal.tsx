@@ -5,23 +5,10 @@ import {
   Check,
   RotateCcw,
   Sliders,
-  Layers,
-  FileText,
-  FileCheck,
-  Minimize2,
-  Maximize2,
-  Percent,
-  CheckSquare,
-  Square,
   Sparkles,
-  Info
 } from 'lucide-react';
 import {
   PrintPageSetup,
-  PrinterPaperSize,
-  PrintOrientation,
-  PrintMargins,
-  PrintColorMode,
   AppLanguage
 } from '../types';
 import {

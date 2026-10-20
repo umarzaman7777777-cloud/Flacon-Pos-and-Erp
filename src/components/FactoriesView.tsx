@@ -7,9 +7,6 @@ import {
   Edit2,
   Trash2,
   Plus,
-  Download,
-  Printer,
-  Sparkles,
   Image as ImageIcon,
   Sliders
 } from 'lucide-react';
@@ -23,8 +20,7 @@ import {
   ExportDocumentConfig
 } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
-import { exportTableJPG } from '../utils/exportManager';
+import { fmt, todayISO, downloadCSV, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeCustomerLedgerDetails } from '../utils/mathEngine';
 import {
@@ -87,7 +83,7 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
   const [entryChequeNo, setEntryChequeNo] = useState('');
   const [entryDetail, setEntryDetail] = useState('');
   const [entryTax, setEntryTax] = useState('0');
-  const [entryDate, setEntryDate] = useState(todayISO());
+  const [entryDate] = useState(todayISO());
   const [showExtendedPaymentFields, setShowExtendedPaymentFields] = useState(false);
 
   // Column Customizer & Studio State

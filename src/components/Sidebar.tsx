@@ -1,4 +1,3 @@
-import { FALCON_LOGO_PNG } from '../utils/logoData';
 import React, { useState } from 'react';
 import {
   LayoutDashboard,
@@ -20,7 +19,6 @@ import {
   Settings,
   Info,
   ChevronRight,
-  Menu,
   X,
   FolderDown,
   Printer,
@@ -30,7 +28,6 @@ import {
 } from 'lucide-react';
 import { AppLanguage, AppView } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { FalconLogo } from './FalconLogo';
 
 interface SidebarProps {
   currentView: AppView;

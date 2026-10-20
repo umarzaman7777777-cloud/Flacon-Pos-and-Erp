@@ -5,7 +5,6 @@ import {
   Check,
   RotateCcw,
   Trash2,
-  Cloud,
   ShoppingCart
 } from 'lucide-react';
 import {
@@ -20,10 +19,7 @@ import {
   RawEntry,
   Worker,
   ScrapBuyer,
-  WithdrawalEntry,
   ProductReturn,
-  Expense,
-  Inquiry,
   VisualSettings,
   CartLine,
   CustomLedger,
@@ -3085,7 +3081,7 @@ export const App: React.FC = () => {
           language={state.language}
           companyName={state.companyName}
           onClose={() => setIsUnifiedGateReceiptsOpen(false)}
-          onOpenGatePassUploadForTxn={txn => {
+          onOpenGatePassUploadForTxn={_txn => {
             setIsUnifiedGateReceiptsOpen(false);
             setActiveView('transactions');
           }}

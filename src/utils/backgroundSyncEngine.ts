@@ -7,12 +7,10 @@ import {
   getStoredSpreadsheetId,
   populateAllSheets,
   syncSingleTransactionWithSheet,
-  getSheetsAutoSyncEnabled,
   notifyWorkspaceSyncUpdated
 } from './googleSheetsSync';
 import {
   getStoredDriveToken,
-  getDriveAutoBackupEnabled,
   uploadBackupToGoogleDrive,
   setLastDriveBackupTime
 } from './googleDriveBackup';

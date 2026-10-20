@@ -1,8 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
-import { auth, googleProvider } from '../firebase/config';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { auth } from '../firebase/config';
 import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, User } from 'firebase/auth';
 import { storeSheetsToken, notifyWorkspaceSyncUpdated, getStoredSheetsToken, clearSheetsToken, isRealGoogleOAuthToken } from './googleSheetsSync';
 import { storeDriveToken, getStoredDriveToken, clearDriveToken } from './googleDriveBackup';
@@ -212,7 +211,6 @@ export async function autoAuthenticateAndGetActiveToken(preferredEmail: string =
     await initPersistentStorage();
   } catch {}
 
-  const now = Date.now();
   const currentSheets = getStoredSheetsToken();
   const currentDrive = getStoredDriveToken();
 

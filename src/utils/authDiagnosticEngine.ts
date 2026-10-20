@@ -8,7 +8,7 @@
 
 import { auth } from '../firebase/config';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { getRedirectResult, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import {
   getStoredSheetsToken,
@@ -22,7 +22,7 @@ import {
   getStoredDriveFolderId,
   BACKUP_FOLDER_NAME
 } from './googleDriveBackup';
-import { logOAuthError, OAuthDebugLogEntry } from './oauthDebugLogger';
+import { logOAuthError } from './oauthDebugLogger';
 import { performUniversalGoogleSignIn } from './googleAuthHelper';
 
 export interface DiagnosticStepResult {
@@ -534,7 +534,6 @@ export async function runOAuthRedirectCallbackDiagnostic(): Promise<{
   }
 
   let errorMessage = '';
-  let errorCode: string | undefined = undefined;
 
   if (redirectResult) {
     const cred = GoogleAuthProvider.credentialFromResult(redirectResult);

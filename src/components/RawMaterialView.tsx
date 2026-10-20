@@ -4,23 +4,18 @@ import {
   Plus,
   Trash2,
   Edit2,
-  Download,
-  Check,
   Image as ImageIcon,
   ShieldCheck,
   Eye,
   Upload,
-  FileText,
   UserCheck,
   Hash,
   Sliders,
-  CreditCard,
   TrendingUp
 } from 'lucide-react';
 import { RawSupplier, RawEntry, AppLanguage, Transaction, GatePassData, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
-import { exportTableJPG } from '../utils/exportManager';
+import { fmt, todayISO, downloadCSV } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeSupplierLedgerDetails } from '../utils/mathEngine';
 import { getNextGateSequence, UnifiedGateReceipt } from '../utils/gateSequenceManager';
@@ -85,7 +80,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
   const [method, setMethod] = useState('Cash');
   const [detail, setDetail] = useState('');
   const [receivedBy, setReceivedBy] = useState('Gate Officer: M. Tariq');
-  const [date, setDate] = useState(todayISO());
+  const [date] = useState(todayISO());
 
   // Detailed payment & Studio states
   const [editingEntry, setEditingEntry] = useState<RawEntry | null>(null);

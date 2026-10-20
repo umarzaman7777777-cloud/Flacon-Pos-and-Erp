@@ -6,9 +6,6 @@ import {
   LabourEntry,
   ScrapEntry,
   Worker,
-  Product,
-  RawStockItem,
-  Transaction
 } from '../types';
 
 /**

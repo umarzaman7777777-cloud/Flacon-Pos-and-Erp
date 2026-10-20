@@ -12,10 +12,9 @@ import {
   BiometricAuth,
   BiometryType,
   AndroidBiometryStrength,
-  BiometryError,
   BiometryErrorType
 } from '@aparajita/capacitor-biometric-auth';
-import { hapticTap, hapticTransactionComplete, hapticError } from './haptics';
+import { hapticTransactionComplete, hapticError } from './haptics';
 
 export interface BiometricStatus {
   supported: boolean;

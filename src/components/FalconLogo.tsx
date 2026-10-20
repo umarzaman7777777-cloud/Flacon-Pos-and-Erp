@@ -1,5 +1,4 @@
 import React from 'react';
-import { FALCON_LOGO_PNG } from '../utils/logoData';
 
 export interface FalconLogoProps {
   variant?: 'full' | 'emblem' | 'icon' | 'badge' | 'image' | 'horizontal';

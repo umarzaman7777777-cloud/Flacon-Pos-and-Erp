@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cloud, RefreshCw, Smartphone, Laptop, Wifi, WifiOff, X, Check, Server, ShieldCheck, Activity, FileSpreadsheet, ArrowRight } from 'lucide-react';
+import { RefreshCw, Laptop, Wifi, WifiOff, X, Check, Server, ShieldCheck, Activity, FileSpreadsheet, ArrowRight } from 'lucide-react';
 import { AppLanguage } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { testConnection } from '../firebase/config';

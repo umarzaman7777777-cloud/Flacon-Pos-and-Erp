@@ -1,4 +1,4 @@
-import { AppState, Product, Transaction, RawStockItem, RawSupplier, RecipeItem } from '../types';
+import { AppState, Product, Transaction, RawStockItem } from '../types';
 import { parseDMY } from './helpers';
 
 export interface ConsumingProductShare {

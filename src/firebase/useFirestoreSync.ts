@@ -4,8 +4,6 @@ import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { db, handleFirestoreError, OperationType } from './config';
 import { AppState } from '../types';
-import { storeSheetsToken, setStoredSpreadsheetId, setStoredSpreadsheetTitle, setStoredSpreadsheetUrl, notifyWorkspaceSyncUpdated } from '../utils/googleSheetsSync';
-import { storeDriveToken, setStoredDriveFolderId } from '../utils/googleDriveBackup';
 
 export interface ConnectedTerminal {
   id: string;

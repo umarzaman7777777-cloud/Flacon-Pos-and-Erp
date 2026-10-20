@@ -1,20 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   BellRing,
-  Mic,
-  HardDrive,
-  ShieldAlert,
   ChevronRight,
   X,
   ExternalLink,
   Sparkles,
-  CheckCircle2
 } from 'lucide-react';
 import {
   checkAllMobilePermissions,
   requestNotificationPermission,
-  isInsideIframe,
-  isMobileDevice,
   MobilePermissionsState
 } from '../utils/mobilePermissions';
 import { AppLanguage } from '../types';
@@ -27,7 +21,6 @@ interface MobilePermissionsBannerProps {
 
 export const MobilePermissionsBanner: React.FC<MobilePermissionsBannerProps> = ({
   language,
-  onOpenSettings,
   onOpenNotifications
 }) => {
   const [state, setState] = useState<MobilePermissionsState | null>(null);

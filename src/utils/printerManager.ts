@@ -1,8 +1,6 @@
-import { PrinterSettings, PrinterConnectionType, PrinterPaperSize, PrintPageSetup } from '../types';
-import { FALCON_LOGO_WHITE_BG_PNG } from './logoData';
+import { PrinterSettings, PrintPageSetup } from '../types';
 import {
   PAPER_SIZE_SPECS,
-  MARGIN_SPECS,
   calculatePrintPageStyles,
   getEffectivePageSetup
 } from './printSetupHelper';

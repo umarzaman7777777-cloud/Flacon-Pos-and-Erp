@@ -6,19 +6,16 @@ import {
   Edit2,
   Calendar,
   CheckSquare,
-  Download,
   Sliders,
-  CreditCard,
-  Image as ImageIcon,
+  Image as 
   Package,
-  Wrench,
   CheckCircle2,
   Clock,
   AlertCircle
 } from 'lucide-react';
-import { Worker, LabourEntry, AppLanguage, LabourPieceRate, LedgerColumnConfig, ExportDocumentConfig, Product } from '../types';
+import { Worker, LabourEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig, Product } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG } from '../utils/helpers';
+import { fmt, todayISO, downloadCSV } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computeWorkerLedgerDetails } from '../utils/mathEngine';
 import {

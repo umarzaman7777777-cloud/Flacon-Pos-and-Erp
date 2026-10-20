@@ -1,7 +1,3 @@
-import firebaseConfig from '../../firebase-applet-config.json';
-import { auth, db, googleProvider } from '../firebase/config';
-import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { notifyWorkspaceSyncUpdated, isNativeOrLocalEnvironment, storeSheetsToken, isRealGoogleOAuthToken, fetchWithTimeout } from './googleSheetsSync';
 import { getPersistent, setPersistent, removePersistent, publishWorkspaceTokensToFirestore, autoSyncWorkspaceFromCloud } from './persistentStorage';
 

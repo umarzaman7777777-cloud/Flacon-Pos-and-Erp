@@ -9,7 +9,6 @@ import {
   Building,
   Calendar,
   Clock,
-  ExternalLink,
   Image as ImageIcon,
   Loader2,
   ShieldCheck,
@@ -29,7 +28,6 @@ import {
 } from '../utils/transactionPdf';
 import { exportSingleTransactionJPG } from '../utils/exportManager';
 import { shareExportFile } from '../utils/universalDownloader';
-import { FalconLogo } from './FalconLogo';
 import { GatePassViewerModal } from './GatePassViewerModal';
 import { PrintPageSetupModal } from './PrintPageSetupModal';
 import { getEffectivePageSetup, PAPER_SIZE_SPECS } from '../utils/printSetupHelper';

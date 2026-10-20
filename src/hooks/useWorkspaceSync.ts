@@ -20,7 +20,6 @@ import {
   WORKSPACE_SYNC_EVENT,
   notifyWorkspaceSyncUpdated,
   ALLOWED_SHEETS_OWNER_EMAIL,
-  extractSpreadsheetId,
   isRealGoogleOAuthToken
 } from '../utils/googleSheetsSync';
 import {

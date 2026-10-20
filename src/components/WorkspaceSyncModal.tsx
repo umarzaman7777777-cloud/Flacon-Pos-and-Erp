@@ -4,17 +4,13 @@ import {
   FileSpreadsheet,
   Cloud,
   CheckCircle2,
-  AlertCircle,
   RefreshCw,
   ExternalLink,
   UploadCloud,
-  Database,
   ShieldCheck,
   Zap,
   ArrowRight,
-  HardDrive,
   Clock,
-  Timer
 } from 'lucide-react';
 import { AppState } from '../types';
 import { AuthStatus } from './AuthStatus';

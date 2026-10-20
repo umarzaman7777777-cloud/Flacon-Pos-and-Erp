@@ -3,21 +3,13 @@ import {
   X,
   FileText,
   Image as ImageIcon,
-  CheckCircle,
   Truck,
   Layers,
   UserCheck,
-  Calendar,
   Search,
-  Filter,
   Download,
   Eye,
   ShieldCheck,
-  Building,
-  ArrowUpDown,
-  ExternalLink,
-  Lock,
-  Plus
 } from 'lucide-react';
 import { Transaction, RawSupplier, AppLanguage } from '../types';
 import { fmt, downloadCSV, exportTablePDF } from '../utils/helpers';
@@ -41,10 +33,8 @@ interface UnifiedGateReceiptsModalProps {
 export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> = ({
   transactions,
   rawSuppliers,
-  language,
   companyName,
   onClose,
-  onOpenGatePassUploadForTxn
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'factory_customer' | 'raw_material_supplier'>('all');
   const [searchTerm, setSearchTerm] = useState('');

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, CheckCircle, XCircle, Search, ShieldAlert, SlidersHorizontal, Scale, ShoppingCart } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, SlidersHorizontal, Scale, ShoppingCart } from 'lucide-react';
 import { Product, AppLanguage, RecipeItem } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt } from '../utils/helpers';

@@ -2,26 +2,20 @@ import React, { useState } from 'react';
 import {
   Sliders,
   Check,
-  RotateCcw,
   FileSpreadsheet,
   FileText,
   Image as ImageIcon,
   Palette,
   Layout,
-  Type,
   Eye,
   X,
-  Sparkles,
-  Printer
 } from 'lucide-react';
 import { LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import {
   EXPORT_THEME_PRESETS,
-  DEFAULT_EXPORT_CONFIG,
   getSavedExportConfig,
   saveExportConfig
 } from '../utils/exportSettingsHelper';
-import { fmt } from '../utils/helpers';
 import { hapticTransactionComplete } from '../utils/haptics';
 
 export const DEFAULT_LEDGER_COLUMNS: LedgerColumnConfig = {

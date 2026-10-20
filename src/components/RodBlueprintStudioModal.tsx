@@ -2,23 +2,13 @@ import React, { useState } from 'react';
 import {
   X,
   Wrench,
-  Sliders,
   Check,
-  Download,
   Printer,
   ShoppingCart,
-  Maximize2,
   RefreshCw,
-  Layers,
-  Sparkles,
-  Info,
-  Shield,
-  Circle,
-  Hash,
-  Eye
 } from 'lucide-react';
 import { Product, RodBlueprintSpecs, AppLanguage } from '../types';
-import { fmt, STANDARD_DIAMETER_OPTIONS, parseDiameterToInches, formatDiameterMm } from '../utils/helpers';
+import { STANDARD_DIAMETER_OPTIONS, parseDiameterToInches, formatDiameterMm } from '../utils/helpers';
 
 interface RodBlueprintStudioModalProps {
   product: Product | null;
@@ -61,8 +51,6 @@ export const defaultBlueprintSpecs = (product?: Product | null): RodBlueprintSpe
 
 export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = ({
   product,
-  language,
-  companyName,
   isOpen,
   onClose,
   onSaveBlueprint,

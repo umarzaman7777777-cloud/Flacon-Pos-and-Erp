@@ -9,18 +9,13 @@ import {
   ShieldAlert,
   Truck,
   Trash2,
-  FileCheck,
-  Building,
-  Calendar,
-  Lock,
   Loader2,
   Eye,
   UserCheck,
-  Hash,
   Layers
 } from 'lucide-react';
 import { Transaction, GatePassData, AppLanguage, RawEntry } from '../types';
-import { fmt, todayISO } from '../utils/helpers';
+import { todayISO } from '../utils/helpers';
 import { formatGateSequence } from '../utils/gateSequenceManager';
 import { hapticTransactionComplete, hapticWarning } from '../utils/haptics';
 
@@ -40,8 +35,6 @@ interface GatePassUploadModalProps {
 export const GatePassUploadModal: React.FC<GatePassUploadModalProps> = ({
   transaction,
   rawEntry,
-  language,
-  companyName,
   nextGateSequence = 1,
   onClose,
   onConfirmUpload
@@ -50,7 +43,7 @@ export const GatePassUploadModal: React.FC<GatePassUploadModalProps> = ({
   const targetId = transaction?.id || rawEntry?.entry.id || 'GEN';
   const partyName = transaction ? (transaction.factory || 'Walk-in Customer') : (rawEntry?.supplierName || 'Supplier');
   const orderTitle = transaction ? `Order #${transaction.id}` : `Raw Inward #${rawEntry?.entry.id.slice(-6)}`;
-  const orderSummary = transaction ? transaction.itemsSummary : `${rawEntry?.entry.desc || 'Raw material'} (${rawEntry?.entry.stockName || 'Material'})`;
+  const itemSubtitle = transaction ? transaction.itemsSummary : `${rawEntry?.entry.desc || 'Raw material'} (${rawEntry?.entry.stockName || 'Material'})`;
 
   // Gate Sequence & Receiver
   const assignedSeq = nextGateSequence;
@@ -61,7 +54,7 @@ export const GatePassUploadModal: React.FC<GatePassUploadModalProps> = ({
   const [receivedBy, setReceivedBy] = useState(
     transaction?.gateReceivedBy || rawEntry?.entry.receivedBy || 'Gate Officer: M. Tariq'
   );
-  const [receiverRole, setReceiverRole] = useState('Gate Officer / Receiver');
+  const [receiverRole] = useState('Gate Officer / Receiver');
   const [gatePost, setGatePost] = useState(isRaw ? 'Raw Material Inward Gate' : 'Main Dispatch Gate 1');
   const [vehicleNo, setVehicleNo] = useState('');
   const [driverName, setDriverName] = useState('');

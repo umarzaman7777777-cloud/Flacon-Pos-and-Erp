@@ -12,7 +12,7 @@ import {
   Check,
   X
 } from 'lucide-react';
-import { todayISO, fmt } from '../utils/helpers';
+import { todayISO } from '../utils/helpers';
 import { hapticTransactionComplete } from '../utils/haptics';
 
 export interface EditableLedgerEntryData {

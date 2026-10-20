@@ -3,7 +3,6 @@ import {
   PrinterPaperSize,
   PrintOrientation,
   PrintMargins,
-  PrintColorMode
 } from '../types';
 
 export interface PaperSizeSpec {

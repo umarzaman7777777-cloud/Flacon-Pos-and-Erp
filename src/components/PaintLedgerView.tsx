@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Brush, Plus, Trash2, Edit2, Download, CheckCircle, AlertTriangle, Sliders } from 'lucide-react';
+import { Brush, Plus, Trash2, Edit2, Sliders } from 'lucide-react';
 import { Painter, PaintEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
+import { fmt, todayISO, downloadCSV } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import { computePainterLedgerDetails } from '../utils/mathEngine';
 import {
@@ -34,7 +34,6 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   onAddPaintEntry,
   onDeletePaintEntry,
   onUpdatePaintEntry,
-  onToggleChequeStatus
 }) => {
   const [selectedPainterIdx, setSelectedPainterIdx] = useState<number | null>(null);
   const [addPainterModal, setAddPainterModal] = useState(false);
@@ -44,16 +43,16 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   const [desc, setDesc] = useState('');
   const [color, setColor] = useState('Black');
   const [itemSize, setItemSize] = useState('18 inch');
-  const [itemType, setItemType] = useState('American Plain');
-  const [itemFactory, setItemFactory] = useState('');
+  const [itemType] = useState('American Plain');
+  const [itemFactory] = useState('');
   const [itemCount, setItemCount] = useState('');
   const [ratePerItem, setRatePerItem] = useState('');
   const [debit, setDebit] = useState('');
   const [credit, setCredit] = useState('');
   const [isDamage, setIsDamage] = useState(false);
   const [method, setMethod] = useState('Cash');
-  const [detail, setDetail] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [detail] = useState('');
+  const [date] = useState(todayISO());
 
   // Detailed payment & Studio states
   const [editingEntry, setEditingEntry] = useState<PaintEntry | null>(null);

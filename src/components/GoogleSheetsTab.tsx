@@ -8,22 +8,16 @@ import {
   Cloud,
   Database,
   ShieldCheck,
-  AlertCircle,
   AlertTriangle,
   CheckCircle2,
   Trash2,
   Plus,
-  Link2,
   Unlink,
   Eye,
   Settings2,
-  ArrowRight,
   Search,
   Zap,
   Clock,
-  KeyRound,
-  Layers,
-  ChevronRight
 } from 'lucide-react';
 import { AppState, AppLanguage } from '../types';
 import { AuthStatus } from './AuthStatus';
@@ -34,7 +28,6 @@ import {
   SpreadsheetInfo,
   SheetSyncResult,
   getStoredSheetsToken,
-  storeSheetsToken,
   clearSheetsToken,
   getStoredSpreadsheetId,
   setStoredSpreadsheetId,
@@ -47,18 +40,15 @@ import {
   createMasterFalconSpreadsheet,
   ensureRequiredSheetsExist,
   formatSpreadsheetHeaders,
-  populateAllSheets,
   syncSmartSpreadsheet,
   writeSheetValues,
   readSheetValues,
   buildTabValues,
   getAllApplicableSheetTabs,
-  ALL_EXTENDED_SHEET_TABS,
   DEFAULT_SHEET_TABS,
   extractSpreadsheetId,
   syncSheetsTokenFromCloud,
   publishSheetsTokenToCloud,
-  setManualSheetsToken,
   isNativeOrLocalEnvironment
 } from '../utils/googleSheetsSync';
 
@@ -239,7 +229,7 @@ export const GoogleSheetsTab: React.FC<GoogleSheetsTabProps> = ({
 
   const [isPushingCloud, setIsPushingCloud] = useState(false);
   const [cloudSyncLoading, setCloudSyncLoading] = useState(false);
-  const isNativeApp = isNativeOrLocalEnvironment();
+  const isNative = isNativeOrLocalEnvironment();
 
   const handleSyncFromPC = async () => {
     setCloudSyncLoading(true);

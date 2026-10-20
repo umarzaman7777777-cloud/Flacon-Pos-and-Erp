@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Trash2, Plus, Minus, Check, SlidersHorizontal, Scale } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, SlidersHorizontal, Scale } from 'lucide-react';
 import { CartLine, Factory, AppLanguage } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO } from '../utils/helpers';

@@ -4,11 +4,9 @@ import {
   Download,
   Upload,
   ShieldCheck,
-  FileCheck,
   Stamp,
-  Image as ImageIcon,
+  Image as 
   Cloud,
-  CloudCheck,
   RefreshCw,
   Server,
   UserCheck,
@@ -29,8 +27,6 @@ import {
   Activity,
   Layers,
   ArrowDownToLine,
-  Share2,
-  RefreshCcw,
   RotateCcw,
   Folder,
   FolderArchive,
@@ -39,7 +35,6 @@ import {
   Clock,
   KeyRound,
   Zap,
-  ShieldAlert,
   UploadCloud,
   FileSpreadsheet,
   X
@@ -70,7 +65,6 @@ import {
   DriveTokenInfo,
   syncDriveTokenFromCloud,
   publishDriveTokenToCloud,
-  setManualDriveToken,
   getDriveAutoBackupIntervalHours,
   setDriveAutoBackupIntervalHours,
   getNextDriveBackupDate,
@@ -242,7 +236,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
 
   const [isPushingDriveCloud, setIsPushingDriveCloud] = useState(false);
   const [cloudDriveSyncLoading, setCloudDriveSyncLoading] = useState(false);
-  const isNativeApp = isNativeOrLocalEnvironment();
+  const isNative = isNativeOrLocalEnvironment();
 
   const handleSyncDriveFromPC = async () => {
     setCloudDriveSyncLoading(true);

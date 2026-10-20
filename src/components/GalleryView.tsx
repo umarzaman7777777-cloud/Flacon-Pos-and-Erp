@@ -13,23 +13,17 @@ import {
   Sliders,
   Scale,
   Ruler,
-  Info,
-  ChevronRight,
   Plus,
   Compass,
   Download,
   Trash2,
-  ExternalLink,
   FileSpreadsheet,
   Image as ImageIcon,
   Filter,
-  Calendar,
   Clock,
-  ArrowDownToLine,
   CheckCircle2,
   AlertTriangle,
   Loader2,
-  RotateCcw,
   Wrench,
   Share2,
   Maximize2,
@@ -42,7 +36,6 @@ import {
 } from 'lucide-react';
 import { Product, AppLanguage, RecipeItem, ExportedItem, RodBlueprintSpecs } from '../types';
 import { DesignBlueprintStudio, RodBlueprintSvgOverlay } from './DesignBlueprintStudio';
-import { RodBlueprintStudioModal, defaultBlueprintSpecs } from './RodBlueprintStudioModal';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, parseDiameterToInches, formatDiameterMm, STANDARD_DIAMETER_OPTIONS } from '../utils/helpers';
 import { exportRodBlueprintPDF } from '../utils/blueprintPdfExport';

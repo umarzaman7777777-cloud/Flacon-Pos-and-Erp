@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Receipt, Plus, Trash2, Download, Tag, Image as ImageIcon, Sliders, Edit2 } from 'lucide-react';
+import { Receipt, Plus, Trash2, Image as ImageIcon, Sliders, Edit2 } from 'lucide-react';
 import { Expense, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, exportTablePDF, exportTableJPG } from '../utils/helpers';
+import { fmt, todayISO, downloadCSV } from '../utils/helpers';
 import { openExportModal } from '../utils/exportSettingsHelper';
 import {
   buildLedgerExportTableData,

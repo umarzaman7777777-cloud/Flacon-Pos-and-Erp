@@ -70,18 +70,22 @@ export const ExportDownloadToast: React.FC = () => {
     };
   }, []);
 
-  if (!activeExport) return null;
+  const isPdf = activeExport
+    ? activeExport.fileName.toLowerCase().endsWith('.pdf') || activeExport.format === 'pdf'
+    : false;
+  const isJpg = activeExport
+    ? activeExport.fileName.toLowerCase().endsWith('.jpg') ||
+      activeExport.fileName.toLowerCase().endsWith('.jpeg') ||
+      activeExport.format === 'jpg'
+    : false;
+  const isCsv = activeExport
+    ? activeExport.fileName.toLowerCase().endsWith('.csv') || activeExport.format === 'csv'
+    : false;
 
-  const isPdf = activeExport.fileName.toLowerCase().endsWith('.pdf') || activeExport.format === 'pdf';
-  const isJpg =
-    activeExport.fileName.toLowerCase().endsWith('.jpg') ||
-    activeExport.fileName.toLowerCase().endsWith('.jpeg') ||
-    activeExport.format === 'jpg';
-  const isCsv = activeExport.fileName.toLowerCase().endsWith('.csv') || activeExport.format === 'csv';
-
-  const downloadUrl = activeExport.dataUrl || activeExport.blobUrl || '#';
+  const downloadUrl = activeExport?.dataUrl || activeExport?.blobUrl || '#';
 
   const handleSaveFile = async () => {
+    if (!activeExport) return;
     if (Capacitor.isNativePlatform() && activeExport.dataUrl) {
       try {
         const ok = await saveFileNatively({
@@ -117,6 +121,7 @@ export const ExportDownloadToast: React.FC = () => {
   };
 
   const getDecodedCsvText = (): string => {
+    if (!activeExport) return '';
     if (activeExport.rawContent) return activeExport.rawContent;
     if (!activeExport.dataUrl) return '';
     try {
@@ -139,6 +144,7 @@ export const ExportDownloadToast: React.FC = () => {
   };
 
   const handleCopyContent = async () => {
+    if (!activeExport) return;
     try {
       const textToCopy = isCsv ? getDecodedCsvText() : activeExport.rawContent || activeExport.dataUrl || '';
       if (textToCopy) {
@@ -152,6 +158,7 @@ export const ExportDownloadToast: React.FC = () => {
   };
 
   const handleShare = async () => {
+    if (!activeExport) return;
     try {
       const res = await shareExportFile({
         fileName: activeExport.fileName,
@@ -172,6 +179,7 @@ export const ExportDownloadToast: React.FC = () => {
 
   // Direct native app open (e.g. Adobe/Google Drive PDF viewer, Google Sheets/Excel for CSV, Gallery for JPG)
   const handleOpenNatively = async () => {
+    if (!activeExport) return;
     try {
       const res = await openExportFile({
         fileName: activeExport.fileName,
@@ -191,6 +199,7 @@ export const ExportDownloadToast: React.FC = () => {
   };
 
   const parsedCsv = useMemo(() => {
+    if (!activeExport || !isCsv) return { headers: [], rows: [] };
     if (activeExport.tableData?.headers && activeExport.tableData?.rows) {
       return {
         headers: activeExport.tableData.headers,
@@ -198,7 +207,6 @@ export const ExportDownloadToast: React.FC = () => {
         footer: activeExport.tableData.footer
       };
     }
-    if (!isCsv) return { headers: [], rows: [] };
     const raw = getDecodedCsvText();
     if (!raw) return { headers: [], rows: [] };
     const clean = raw.replace(/^\ufeff/, '').trim();
@@ -249,12 +257,14 @@ export const ExportDownloadToast: React.FC = () => {
 
   // Structured table data for rendering PDF preview sheet
   const pdfSheetData = useMemo(() => {
-    if (!isPdf) return null;
+    if (!activeExport || !isPdf) return null;
     if (activeExport.tableData) {
       return activeExport.tableData;
     }
     return null;
   }, [activeExport, isPdf]);
+
+  if (!activeExport) return null;
 
   return (
     <>

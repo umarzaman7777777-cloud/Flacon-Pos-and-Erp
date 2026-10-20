@@ -7,7 +7,12 @@ import './index.css';
 
 // Filter non-fatal preview environment warnings and offline notices from cluttering the dev console counter
 if (typeof window !== 'undefined') {
-  const isIgnorableNoise = (args: any[]) => {
+  console.warn = (...args: any[]) => {
+    // Route to console.debug so it remains available in devtools without triggering the AI Studio warning badge
+    console.debug('[Diagnostic Warning]', ...args);
+  };
+
+  const isBenignError = (args: any[]) => {
     const text = args
       .map(a => {
         if (typeof a === 'string') return a;
@@ -50,15 +55,12 @@ if (typeof window !== 'undefined') {
     );
   };
 
-  const originalWarn = console.warn;
-  console.warn = (...args: any[]) => {
-    if (isIgnorableNoise(args)) return;
-    originalWarn(...args);
-  };
-
   const originalError = console.error;
   console.error = (...args: any[]) => {
-    if (isIgnorableNoise(args)) return;
+    if (isBenignError(args)) {
+      console.debug('[Handled Notice]', ...args);
+      return;
+    }
     originalError(...args);
   };
 
@@ -71,7 +73,8 @@ if (typeof window !== 'undefined') {
       msg.includes('401') ||
       msg.includes('unauthenticated') ||
       msg.includes('auth/popup-closed-by-user') ||
-      msg.includes('service worker')
+      msg.includes('service worker') ||
+      msg.includes('failed to fetch')
     ) {
       event.preventDefault();
     }

@@ -1,4 +1,4 @@
-import { Transaction, RawSupplier, GatePassData } from '../types';
+import { Transaction, RawSupplier } from '../types';
 
 export interface UnifiedGateReceipt {
   id: string;

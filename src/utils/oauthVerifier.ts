@@ -1,7 +1,6 @@
 import { performUniversalGoogleSignIn, refreshGoogleWorkspaceTokenSilently } from './googleAuthHelper';
 import firebaseConfig from '../../firebase-applet-config.json';
 import {
-  requestGoogleSheetsToken,
   clearSheetsToken,
   ALLOWED_SHEETS_OWNER_EMAIL,
   notifyWorkspaceSyncUpdated,
@@ -10,7 +9,6 @@ import {
   isRealGoogleOAuthToken
 } from './googleSheetsSync';
 import {
-  requestGoogleDriveToken,
   clearDriveToken,
   syncDriveTokenFromCloud,
   storeDriveToken
@@ -750,8 +748,6 @@ export async function verifyWorkspaceOAuth(service: WorkspaceServiceType, forceN
 
   // Step 4: Live Probe of Target Workspace Resource
   try {
-    const liveStartTime = Date.now();
-
     if (service === 'sheets') {
       const spreadsheetId = localStorage.getItem(STORAGE_KEY_SHEETS_SPREADSHEET_ID);
       const spreadsheetTitle = localStorage.getItem('falcon_gsheets_spreadsheet_title') || undefined;

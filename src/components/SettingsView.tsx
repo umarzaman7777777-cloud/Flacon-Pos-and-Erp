@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   Settings,
   Sliders,
-  Sparkles,
   MoveHorizontal,
   MoveVertical,
   Minus,
@@ -18,35 +17,24 @@ import {
   EyeOff,
   ShieldCheck,
   Bell,
-  Layers,
   Grid,
   Ruler,
-  Image as ImageIcon,
+  Image as 
   Smartphone,
-  Volume2,
   Fingerprint,
   Mail,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  LogOut,
   Printer,
   Wifi,
   Bluetooth,
   Usb,
-  Radio,
   RefreshCw,
-  FileText,
   Database,
-  Download,
   HardDrive,
-  Code2,
   Activity,
-  AlertTriangle,
   Server,
-  ArrowDownToLine,
-  Copy,
-  WifiOff,
   Cloud,
   FileSpreadsheet,
   ArrowRight,
@@ -63,12 +51,7 @@ import {
   LogoTheme,
   AppLanguage,
   PrinterSettings,
-  PrinterConnectionType,
-  PrinterPaperSize,
   ExportDocumentConfig,
-  ExportPaperSize,
-  ExportOrientation,
-  ExportFontFamily
 } from '../types';
 import {
   getSavedExportConfig,
@@ -77,12 +60,9 @@ import {
   EXPORT_THEME_PRESETS
 } from '../utils/exportSettingsHelper';
 import { TRANSLATIONS } from '../utils/i18n';
-import { FalconLogo } from './FalconLogo';
-import { FALCON_LOGO_PNG } from '../utils/logoData';
-import { auth, googleProvider, db } from '../firebase/config';
+import { auth, db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { performUniversalGoogleSignIn } from '../utils/googleAuthHelper';
 import {
   calculateDatabaseMetrics,
@@ -90,7 +70,6 @@ import {
   exportLocalDatabaseJSON,
   exportLocalDatabaseSQL
 } from '../utils/syncReport';
-import { isNativeOrLocalEnvironment } from '../utils/googleSheetsSync';
 import {
   authenticateWithFingerprint,
   checkBiometricSupport,
@@ -108,14 +87,11 @@ import { PrintPageSetupModal } from './PrintPageSetupModal';
 import {
   PAPER_SIZE_SPECS,
   MARGIN_SPECS,
-  getEffectivePageSetup,
-  saveEffectivePageSetup
 } from '../utils/printSetupHelper';
 import {
   hapticAddToCart,
   hapticTransactionComplete,
   hapticPullComplete,
-  hapticTap,
   triggerHaptic
 } from '../utils/haptics';
 import { MobilePermissionsCard } from './MobilePermissionsCard';
@@ -587,21 +563,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const metrics = appState ? calculateDatabaseMetrics(appState) : null;
   const ownerAccount = currentUser?.email || 'umarzaman7777777@gmail.com';
 
-  const handleSettingsExportJSON = () => {
+  const handleExportJSON = () => {
     if (!appState) return;
     exportLocalDatabaseJSON(appState, ownerAccount, terminalId || 'default_terminal', !isFirebaseUnreachable);
     setSettingsExportNotice(`✓ Full JSON database exported (${metrics?.totalRecords || 0} records).`);
     setTimeout(() => setSettingsExportNotice(null), 4000);
   };
 
-  const handleSettingsExportSQL = () => {
+  const handleExportSQL = () => {
     if (!appState) return;
     exportLocalDatabaseSQL(appState, ownerAccount);
     setSettingsExportNotice(`✓ Relational ANSI SQL dump generated & downloaded.`);
     setTimeout(() => setSettingsExportNotice(null), 4000);
   };
 
-  const handleSettingsTestPing = async () => {
+  const handlePingFirebase = async () => {
     setIsSettingsPinging(true);
     const start = performance.now();
     try {
@@ -616,7 +592,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleSettingsCopyReport = () => {
+  const handleCopySyncReport = () => {
     if (!appState) return;
     const reportText = generateSyncDiagnosticReport({
       appState,
@@ -637,7 +613,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   // Derive lock logo values from visualSettings with sensible defaults
-  const [logoAsset, setLogoAsset] = useState<string>(() => {
+  const [logoAsset] = useState<string>(() => {
     const saved = localStorage.getItem('falcon_logo_asset');
     return saved || '/falcon-theme-rod-logo.svg';
   });
