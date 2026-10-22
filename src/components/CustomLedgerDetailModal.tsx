@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { CustomLedger, CustomLedgerEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import {
   buildLedgerExportTableData,
   getStoredLedgerColumnConfig,
@@ -134,17 +134,17 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
       })),
       effectiveCols
     );
-    openExportModal({
-      title: `${customLedger.name} — Job-Work & Ancillary Ledger`,
+    exportTablePDF(
+      `${customLedger.name} — Job-Work & Ancillary Ledger`,
       headers,
       rows,
-      filename: `${customLedger.name.replace(/\s+/g, '_')}_JobWork_Ledger`,
+      `${customLedger.name.replace(/\s+/g, '_')}_JobWork_Ledger`,
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Factory Ancillary & Job-Work Ledger',
-      balanceFooterText: `Net Balance: ${fmt(netBalance)}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Factory Ancillary & Job-Work Ledger',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(netBalance)}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -156,17 +156,16 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
       })),
       effectiveCols
     );
-    openExportModal({
-      title: `${customLedger.name} — Job-Work & Ancillary Ledger`,
+    exportTableJPG(
+      `${customLedger.name} — Job-Work & Ancillary Ledger`,
       headers,
       rows,
-      filename: `${customLedger.name.replace(/\s+/g, '_')}_JobWork_Ledger`,
+      `${customLedger.name.replace(/\s+/g, '_')}_JobWork_Ledger`,
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Factory Ancillary & Job-Work Ledger',
-      balanceFooterText: `Net Balance: ${fmt(netBalance)}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Factory Ancillary & Job-Work Ledger',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(netBalance)}`,
+      exportDocConfig
+    );
   };
 
   const handleDeleteLedger = () => {

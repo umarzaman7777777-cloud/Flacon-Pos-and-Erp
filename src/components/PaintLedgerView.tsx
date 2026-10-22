@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Brush, Plus, Trash2, Edit2, Sliders } from 'lucide-react';
 import { Painter, PaintEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import { computePainterLedgerDetails } from '../utils/mathEngine';
 import {
   buildLedgerExportTableData,
@@ -144,17 +144,17 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
     const effectiveCols = customCols || colConfig;
     const details = computePainterLedgerDetails(currentPainter.entries);
     const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
-    openExportModal({
-      title: `${currentPainter.name} — Paint Ledger`,
+    exportTablePDF(
+      `${currentPainter.name} — Paint Ledger`,
       headers,
       rows,
-      filename: `${currentPainter.name}_Paint_Ledger`,
+      `${currentPainter.name}_Paint_Ledger`,
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Paint & Powder Coating Services',
-      balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Paint & Powder Coating Services',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(currentBalance)}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -162,17 +162,16 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
     const effectiveCols = customCols || colConfig;
     const details = computePainterLedgerDetails(currentPainter.entries);
     const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
-    openExportModal({
-      title: `${currentPainter.name} — Paint Ledger`,
+    exportTableJPG(
+      `${currentPainter.name} — Paint Ledger`,
       headers,
       rows,
-      filename: `${currentPainter.name}_Paint_Ledger`,
+      `${currentPainter.name}_Paint_Ledger`,
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Paint & Powder Coating Services',
-      balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Paint & Powder Coating Services',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(currentBalance)}`,
+      exportDocConfig
+    );
   };
 
   return (

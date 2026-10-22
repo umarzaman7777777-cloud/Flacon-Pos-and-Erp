@@ -10,6 +10,7 @@ import {
   getEffectivePageSetup,
   PAPER_SIZE_SPECS
 } from './printSetupHelper';
+import { triggerDirectPrint } from './printPortal';
 
 export interface ParsedItemRow {
   name: string;
@@ -925,56 +926,10 @@ export function printStyledTransactionDocument({
 </html>
   `;
 
-  const isMobile = typeof navigator !== 'undefined' && (
-    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints && navigator.maxTouchPoints > 1 && window.innerWidth < 1024)
-  );
-
-  if (isMobile) {
-    // 1. Automatically trigger the PDF download so the file is saved directly to mobile Downloads
-    try {
-      exportSingleTransactionPDF({
-        transaction,
-        customerPayments,
-        companyName,
-        companyTagline,
-        pageSetup
-      });
-    } catch (_) {}
-
-    // 2. Open printable tab where mobile Chrome allows window.print()
-    try {
-      const printWin = window.open('', '_blank');
-      if (printWin) {
-        printWin.document.open();
-        printWin.document.write(htmlContent);
-        printWin.document.close();
-      }
-    } catch (_) {}
-    return;
-  }
-
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentWindow?.document || iframe.contentDocument;
-  if (!doc) return;
-
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
-
-  setTimeout(() => {
-    try {
-      document.body.removeChild(iframe);
-    } catch (_) {}
-  }, 60000);
+  triggerDirectPrint({
+    html: htmlContent,
+    title: `Invoice #${transaction.id} — ${transaction.factory || 'Order'}`
+  });
 }
 
 /**
@@ -1331,42 +1286,8 @@ export function printThermalReceiptDocument(options: ExportTransactionPdfOptions
 </html>
   `;
 
-  const isMobile = typeof navigator !== 'undefined' && (
-    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints && navigator.maxTouchPoints > 1 && window.innerWidth < 1024)
-  );
-
-  if (isMobile) {
-    try {
-      const printWin = window.open('', '_blank');
-      if (printWin) {
-        printWin.document.open();
-        printWin.document.write(htmlContent);
-        printWin.document.close();
-      }
-    } catch (_) {}
-    return;
-  }
-
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentWindow?.document || iframe.contentDocument;
-  if (!doc) return;
-
-  doc.open();
-  doc.write(htmlContent);
-  doc.close();
-
-  setTimeout(() => {
-    try {
-      document.body.removeChild(iframe);
-    } catch (_) {}
-  }, 60000);
+  triggerDirectPrint({
+    html: htmlContent,
+    title: `Receipt #${transaction.id} — ${companyName}`
+  });
 }

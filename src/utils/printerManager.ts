@@ -4,6 +4,7 @@ import {
   calculatePrintPageStyles,
   getEffectivePageSetup
 } from './printSetupHelper';
+import { triggerDirectPrint } from './printPortal';
 
 const PRINTER_STORAGE_KEY = 'falcon_printer_settings_v1';
 const PRINTER_EVENT_NAME = 'falcon-printer-settings-updated';
@@ -371,56 +372,10 @@ export function runTestPrint(settings?: PrinterSettings, companyName: string = '
 </html>
   `;
 
-  const isMobile = typeof navigator !== 'undefined' && (
-    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints && navigator.maxTouchPoints > 1 && window.innerWidth < 1024)
-  );
-
-  if (isMobile) {
-    try {
-      const printWin = window.open('', '_blank');
-      if (printWin) {
-        printWin.document.open();
-        printWin.document.write(html);
-        printWin.document.close();
-        return { success: true };
-      }
-    } catch (_) {}
-  }
-
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0px';
-  iframe.style.height = '0px';
-  iframe.style.border = 'none';
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
-    window.print();
-    return { success: true };
-  }
-
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  iframe.contentWindow?.focus();
-  setTimeout(() => {
-    try {
-      iframe.contentWindow?.print();
-    } catch (_) {
-      window.print();
-    }
-  }, 250);
-
-  setTimeout(() => {
-    try {
-      document.body.removeChild(iframe);
-    } catch (_) {}
-  }, 30000);
+  triggerDirectPrint({
+    html,
+    title: 'Falcon Printer Test Page'
+  });
 
   return { success: true };
 }

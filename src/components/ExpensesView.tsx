@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Receipt, Plus, Trash2, Image as ImageIcon, Sliders, Edit2 } from 'lucide-react';
 import { Expense, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import {
   buildLedgerExportTableData,
   getStoredLedgerColumnConfig,
@@ -126,17 +126,17 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       })),
       effectiveCols
     );
-    openExportModal({
-      title: 'Factory Overheads & Expenses Log',
+    exportTablePDF(
+      'Factory Overheads & Expenses Log',
       headers,
       rows,
-      filename: 'Factory_Expenses_Log',
+      'Factory_Expenses_Log',
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Operational & Overhead Expense Ledger',
-      balanceFooterText: `Total Expenses: ${fmt(totalExpense)}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Operational & Overhead Expense Ledger',
+      exportDocConfig?.customNote || `Total Expenses: ${fmt(totalExpense)}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -151,17 +151,16 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
       })),
       effectiveCols
     );
-    openExportModal({
-      title: 'Factory Overheads & Expenses Log',
+    exportTableJPG(
+      'Factory Overheads & Expenses Log',
       headers,
       rows,
-      filename: 'Factory_Expenses_Log',
+      'Factory_Expenses_Log',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Operational & Overhead Expense Ledger',
-      balanceFooterText: `Total Expenses: ${fmt(totalExpense)}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Operational & Overhead Expense Ledger',
+      exportDocConfig?.customNote || `Total Expenses: ${fmt(totalExpense)}`,
+      exportDocConfig
+    );
   };
 
   return (

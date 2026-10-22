@@ -8,7 +8,11 @@ import {
   FileSpreadsheet,
   Layers,
   Type,
-  Maximize2
+  Maximize2,
+  Download,
+  ExternalLink,
+  Printer,
+  Share2
 } from 'lucide-react';
 import {
   ExportTablePayload,
@@ -25,6 +29,8 @@ import {
 } from '../utils/exportSettingsHelper';
 import { exportTablePDF } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
+import { triggerDirectPrint } from '../utils/printPortal';
+import { shareExportFile } from '../utils/universalDownloader';
 import { FALCON_LOGO_WHITE_BG_PNG } from '../utils/logoData';
 
 interface ExportCustomizerModalProps {
@@ -46,9 +52,17 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
   const [savedNotification, setSavedNotification] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<'theme' | 'page' | 'typography' | 'content'>('theme');
+  const [exportSuccess, setExportSuccess] = useState<{
+    type: 'pdf' | 'jpg' | 'both';
+    pdfDataUrl?: string;
+    pdfFileName?: string;
+    jpgDataUrl?: string;
+    jpgFileName?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (payload && isOpen) {
+      setExportSuccess(null);
       const saved = getSavedExportConfig();
       setConfig(prev => ({
         ...prev,
@@ -107,7 +121,7 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         subtitle,
         customNote
       };
-      exportTablePDF(
+      const res = exportTablePDF(
         docTitle || payload.title,
         payload.headers,
         payload.rows,
@@ -118,7 +132,11 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         customNote,
         mergedConfig
       );
-      onClose();
+      setExportSuccess({
+        type: 'pdf',
+        pdfDataUrl: res?.dataUrl,
+        pdfFileName: res?.fileName || `${payload.filename}.pdf`
+      });
     } finally {
       setIsExporting(false);
     }
@@ -134,7 +152,8 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         subtitle,
         customNote
       };
-      await exportTableJPG(
+      const cleanJpgName = `${(payload.filename || 'Report').replace(/\.[^/.]+$/, '')}.jpg`;
+      const dataUrl = await exportTableJPG(
         docTitle || payload.title,
         payload.headers,
         payload.rows,
@@ -144,7 +163,11 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         customNote,
         mergedConfig
       );
-      onClose();
+      setExportSuccess({
+        type: 'jpg',
+        jpgDataUrl: dataUrl,
+        jpgFileName: cleanJpgName
+      });
     } finally {
       setIsExporting(false);
     }
@@ -160,7 +183,8 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         subtitle,
         customNote
       };
-      exportTablePDF(
+      const cleanJpgName = `${(payload.filename || 'Report').replace(/\.[^/.]+$/, '')}.jpg`;
+      const res = exportTablePDF(
         docTitle || payload.title,
         payload.headers,
         payload.rows,
@@ -171,7 +195,7 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         customNote,
         mergedConfig
       );
-      await exportTableJPG(
+      const dataUrl = await exportTableJPG(
         docTitle || payload.title,
         payload.headers,
         payload.rows,
@@ -181,9 +205,87 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
         customNote,
         mergedConfig
       );
-      onClose();
+      setExportSuccess({
+        type: 'both',
+        pdfDataUrl: res?.dataUrl,
+        pdfFileName: res?.fileName || `${payload.filename}.pdf`,
+        jpgDataUrl: dataUrl,
+        jpgFileName: cleanJpgName
+      });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handlePrintTable = () => {
+    if (!payload) return;
+    const tableHeadersHtml = payload.headers
+      .map(h => `<th style="border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; background: #f8fafc; font-size: 11px;">${h}</th>`)
+      .join('');
+    const tableRowsHtml = payload.rows
+      .map(r => `<tr>${r.map(c => `<td style="border: 1px solid #e2e8f0; padding: 5px 8px; font-size: 11px;">${c ?? ''}</td>`).join('')}</tr>`)
+      .join('');
+    const html = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #0f172a;">
+        <div style="border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 14px;">
+          <h2 style="margin: 0; font-size: 18px; font-weight: bold;">${companyName || 'Falcon Rod Maker'}</h2>
+          <p style="margin: 3px 0 0 0; color: #64748b; font-size: 12px;">${subtitle || 'Precision Fan Rod Manufacturing · Gujrat'}</p>
+          <h3 style="margin: 8px 0 0 0; font-size: 15px; font-weight: 600;">${docTitle || payload.title}</h3>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <thead><tr>${tableHeadersHtml}</tr></thead>
+          <tbody>${tableRowsHtml}</tbody>
+        </table>
+        ${customNote ? `<div style="margin-top: 14px; font-weight: bold; font-size: 12px; border-top: 1px solid #cbd5e1; padding-top: 8px;">${customNote}</div>` : ''}
+      </div>
+    `;
+    triggerDirectPrint({
+      html,
+      title: docTitle || payload.title
+    });
+  };
+
+  const [isSharing, setIsSharing] = useState(false);
+  const handleShareToApps = async () => {
+    if (!payload) return;
+    setIsSharing(true);
+    try {
+      let targetDataUrl = exportSuccess?.pdfDataUrl || exportSuccess?.jpgDataUrl;
+      let targetFileName = exportSuccess?.pdfFileName || exportSuccess?.jpgFileName;
+
+      if (!targetDataUrl) {
+        const mergedConfig: Partial<ExportDocumentConfig> = {
+          ...config,
+          companyName,
+          subtitle,
+          customNote
+        };
+        const res = exportTablePDF(
+          docTitle || payload.title,
+          payload.headers,
+          payload.rows,
+          payload.filename,
+          config.orientation,
+          companyName,
+          subtitle,
+          customNote,
+          mergedConfig
+        );
+        targetDataUrl = res?.dataUrl;
+        targetFileName = res?.fileName || `${payload.filename}.pdf`;
+      }
+
+      if (targetDataUrl) {
+        await shareExportFile({
+          fileName: targetFileName || `${payload.filename}.pdf`,
+          dataUrl: targetDataUrl,
+          title: docTitle || payload.title
+        });
+      }
+    } catch (err) {
+      console.warn('Share error', err);
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -860,20 +962,102 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
           </div>
         </div>
 
+        {/* Export Ready Success Banner */}
+        {exportSuccess && (
+          <div className="mx-5 my-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">✓</span>
+              <div>
+                <p className="text-xs font-bold text-emerald-300">Document generated successfully!</p>
+                <p className="text-[11px] text-[var(--text-dim)]">If your browser blocked the automatic download, click below:</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {exportSuccess.pdfDataUrl && (
+                <a
+                  href={exportSuccess.pdfDataUrl}
+                  download={exportSuccess.pdfFileName || `${payload.filename}.pdf`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition shadow"
+                >
+                  <Download size={13} />
+                  <span>Download PDF</span>
+                </a>
+              )}
+              {exportSuccess.jpgDataUrl && (
+                <a
+                  href={exportSuccess.jpgDataUrl}
+                  download={exportSuccess.jpgFileName || `${payload.filename}.jpg`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition shadow"
+                >
+                  <Download size={13} />
+                  <span>Download JPG</span>
+                </a>
+              )}
+              <button
+                type="button"
+                disabled={isSharing}
+                onClick={handleShareToApps}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow"
+                title="Send to WhatsApp, Gmail, Drive or native apps"
+              >
+                <Share2 size={13} />
+                <span>{isSharing ? 'Opening Apps...' : 'Share to Apps'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrintTable}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] hover:border-slate-400 text-xs font-semibold text-[var(--text)] transition"
+              >
+                <Printer size={13} />
+                <span>Print Document</span>
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Modal Action Footer */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]">
           <div className="text-xs text-[var(--text-dim)] font-mono">
             Output: <span className="text-[var(--text)] font-bold">{payload.filename}.[pdf/jpg]</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleShareToApps}
+              disabled={isExporting || isSharing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500 hover:text-black text-xs font-semibold text-emerald-400 transition"
+              title="Share document directly to WhatsApp, Drive, Gmail or native apps"
+            >
+              <Share2 size={14} />
+              <span>{isSharing ? 'Sharing...' : 'Share to Apps'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrintTable}
+              disabled={isExporting}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--steel-line)] hover:border-slate-400 text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition"
+              title="Print directly or preview paper output"
+            >
+              <Printer size={14} />
+              <span>Print</span>
+            </button>
+
             <button
               type="button"
               onClick={onClose}
               disabled={isExporting}
               className="px-3 py-2 rounded-xl border border-[var(--steel-line)] hover:border-slate-400 text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition"
             >
-              Cancel
+              {exportSuccess ? 'Close' : 'Cancel'}
             </button>
 
             <button

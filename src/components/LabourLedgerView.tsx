@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import { Worker, LabourEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig, Product } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import { computeWorkerLedgerDetails } from '../utils/mathEngine';
 import {
   buildLedgerExportTableData,
@@ -416,17 +416,17 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       })),
       activeCfg
     );
-    openExportModal({
-      title: `${currentWorker.name} — Labour Ledger`,
-      headers: tableData.headers,
-      rows: tableData.rows,
-      filename: `${currentWorker.name}_Labour_Ledger`,
+    exportTablePDF(
+      `${currentWorker.name} — Labour Ledger`,
+      tableData.headers,
+      tableData.rows,
+      `${currentWorker.name}_Labour_Ledger`,
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || `${currentWorker.workType} · Wages Account`,
-      balanceFooterText: `Net Dues: ${fmt(getWorkerDues(currentWorker))}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || `${currentWorker.workType} · Wages Account`,
+      exportDocConfig?.customNote || `Net Dues: ${fmt(getWorkerDues(currentWorker))}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (cfg?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -451,17 +451,16 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       })),
       activeCfg
     );
-    openExportModal({
-      title: `${currentWorker.name} — Labour Ledger`,
-      headers: tableData.headers,
-      rows: tableData.rows,
-      filename: `${currentWorker.name}_Labour_Ledger`,
+    exportTableJPG(
+      `${currentWorker.name} — Labour Ledger`,
+      tableData.headers,
+      tableData.rows,
+      `${currentWorker.name}_Labour_Ledger`,
       companyName,
-      subtitle: exportDocConfig?.subtitle || `${currentWorker.workType} · Wages Account`,
-      balanceFooterText: `Net Dues: ${fmt(getWorkerDues(currentWorker))}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || `${currentWorker.workType} · Wages Account`,
+      exportDocConfig?.customNote || `Net Dues: ${fmt(getWorkerDues(currentWorker))}`,
+      exportDocConfig
+    );
   };
 
   return (

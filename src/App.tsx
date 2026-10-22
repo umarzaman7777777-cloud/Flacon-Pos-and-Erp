@@ -42,6 +42,7 @@ import {
 } from './utils/haptics';
 
 import { ExportDownloadToast } from './components/ExportDownloadToast';
+import { PrintPreviewModal } from './components/PrintPreviewModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { LockScreen } from './components/LockScreen';
 import { AppOpeningSplash } from './components/AppOpeningSplash';
@@ -3165,6 +3166,8 @@ export const App: React.FC = () => {
       )}
       {/* Global Export Download Toast Notification */}
       <ExportDownloadToast />
+      {/* Global Print & Thermal Document Preview Modal */}
+      <PrintPreviewModal />
       {/* PWA Offline Connectivity Indicator */}
       <OfflineIndicator />
     </div>

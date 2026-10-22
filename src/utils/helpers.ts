@@ -445,6 +445,12 @@ export function exportTablePDF(
     description: `Exported customized PDF document for ${title} (${rows.length} records, ${cfg.paperSize.toUpperCase()} ${effectiveOrientation}).`,
     recordCount: rows.length
   });
+
+  return {
+    blob: pdfBlob,
+    dataUrl: pdfDataUrl,
+    fileName: cleanPdfName
+  };
 }
 
 

@@ -52,6 +52,7 @@ import {
 import { triggerUniversalDownload, shareExportFile } from '../utils/universalDownloader';
 import { getAllExportsFromIndexedDb } from '../utils/exportDb';
 import { triggerHaptic } from '../utils/haptics';
+import { triggerDirectPrint } from '../utils/printPortal';
 
 interface GalleryViewProps {
   products: Product[];
@@ -1089,7 +1090,40 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
   };
 
   const handlePrintSpecSheet = () => {
-    window.print();
+    const html = `
+      <div style="font-family: Arial, sans-serif; padding: 24px; color: #0f172a; max-width: 800px; margin: 0 auto;">
+        <div style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: bold;">Falcon Rod Maker</h1>
+          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Fan Rod Technical Specification & Catalog Engineering Spec Sheet</p>
+          <h2 style="margin: 12px 0 0 0; font-size: 17px; color: #b45309;">${currentBlueprintProduct.name}</h2>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; font-size: 13px;">
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <p style="margin: 0 0 6px 0;"><strong>Category:</strong> ${currentBlueprintProduct.cat}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Dimensions:</strong> ${currentBlueprintProduct.size}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Gauge:</strong> ${currentBlueprintProduct.gauge}</p>
+            <p style="margin: 0;"><strong>Finish:</strong> ${currentBlueprintProduct.color}</p>
+          </div>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <p style="margin: 0 0 6px 0;"><strong>Calculated Weight:</strong> ${currentBlueprintProduct.weight}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Wholesale Price:</strong> Rs ${fmt(currentBlueprintProduct.price)}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Stock Status:</strong> In Stock (${currentBlueprintProduct.stock} pcs)</p>
+            <p style="margin: 0;"><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed #cbd5e1; padding: 12px; text-align: center; border-radius: 8px; margin-top: 16px;">
+          <p style="margin: 0; font-size: 11px; color: #64748b;">
+            Falcon Rod Maker · Precision Fan Down Rod Manufacturer · Gujrat Industrial Estate
+          </p>
+        </div>
+      </div>
+    `;
+    triggerDirectPrint({
+      html,
+      title: `${currentBlueprintProduct.name} Spec Sheet`
+    });
   };
 
   return (

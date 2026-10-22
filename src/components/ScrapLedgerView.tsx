@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Recycle, Plus, Trash2, Edit2, Image as ImageIcon, Sliders } from 'lucide-react';
 import { ScrapBuyer, ScrapEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import { computeScrapBuyerLedgerDetails } from '../utils/mathEngine';
 import {
   buildLedgerExportTableData,
@@ -133,17 +133,17 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
     const effectiveCols = customCols || colConfig;
     const details = computeScrapBuyerLedgerDetails(currentBuyer.entries);
     const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
-    openExportModal({
-      title: `${currentBuyer.name} — Scrap Ledger`,
+    exportTablePDF(
+      `${currentBuyer.name} — Scrap Ledger`,
       headers,
       rows,
-      filename: `${currentBuyer.name}_Scrap_Ledger`,
+      `${currentBuyer.name}_Scrap_Ledger`,
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Industrial Scrap & Metal Offcut Sales',
-      balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Industrial Scrap & Metal Offcut Sales',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(currentBalance)}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -151,17 +151,16 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
     const effectiveCols = customCols || colConfig;
     const details = computeScrapBuyerLedgerDetails(currentBuyer.entries);
     const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
-    openExportModal({
-      title: `${currentBuyer.name} — Scrap Ledger`,
+    exportTableJPG(
+      `${currentBuyer.name} — Scrap Ledger`,
       headers,
       rows,
-      filename: `${currentBuyer.name}_Scrap_Ledger`,
+      `${currentBuyer.name}_Scrap_Ledger`,
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Industrial Scrap & Metal Offcut Sales',
-      balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Industrial Scrap & Metal Offcut Sales',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(currentBalance)}`,
+      exportDocConfig
+    );
   };
 
   return (

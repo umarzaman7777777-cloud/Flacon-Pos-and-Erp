@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Transaction, AppLanguage } from '../types';
 import { fmt } from '../utils/helpers';
+import { triggerImagePrint, triggerDirectPrint } from '../utils/printPortal';
 import { UnifiedGateReceipt } from '../utils/gateSequenceManager';
 
 interface GatePassViewerModalProps {
@@ -71,35 +72,16 @@ export const GatePassViewerModal: React.FC<GatePassViewerModalProps> = ({
 
   const handlePrint = () => {
     if (isPdf) {
-      const printWindow = window.open(fileData);
-      if (printWindow) {
-        printWindow.focus();
-        setTimeout(() => printWindow.print(), 500);
-      }
+      triggerDirectPrint({
+        html: `<div style="text-align: center; padding: 20px;"><iframe src="${fileData}" style="width: 100%; height: 90vh; border: 0;"></iframe></div>`,
+        title: `Gate Pass Receipt - ${seqNo} (${partyName})`
+      });
     } else {
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Gate Pass Receipt - ${seqNo} (${partyName})</title>
-              <style>
-                body { margin: 0; display: flex; align-items: center; justify-content: center; background: #fff; font-family: monospace; }
-                .container { text-align: center; padding: 20px; }
-                img { max-width: 100%; max-height: 90vh; object-fit: contain; }
-                .meta { margin-top: 10px; font-size: 12px; color: #333; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <img src="${fileData}" onload="window.print();window.close()" />
-                <div class="meta">Gate Sequence: ${seqNo} | Received by: ${receiverName}</div>
-              </div>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }
+      triggerImagePrint({
+        imageUrl: fileData,
+        title: `Gate Pass Receipt - ${seqNo}`,
+        subtitle: `${partyName} · Received by: ${receiverName}`
+      });
     }
   };
 

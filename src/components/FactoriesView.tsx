@@ -20,8 +20,8 @@ import {
   ExportDocumentConfig
 } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV, amountInWordsEnglish, amountInWordsUrdu } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, amountInWordsEnglish, amountInWordsUrdu, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import { computeCustomerLedgerDetails } from '../utils/mathEngine';
 import {
   buildLedgerExportTableData,
@@ -198,18 +198,17 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
     const effectiveCols = customCols || colConfig;
     const details = computeCustomerLedgerDetails(activeAccount.entries);
     const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
-    openExportModal({
-      title: `${activeAccount.name} — Customer Ledger`,
+    exportTablePDF(
+      `${activeAccount.name} — Customer Ledger`,
       headers,
       rows,
-      filename: `${activeAccount.name}_Ledger`,
+      `${activeAccount.name}_Ledger`,
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: 'Fan Accessories · Gujrat',
-      balanceFooterText: `Net Balance: ${fmt(activeBalance)} (${amountInWordsEnglish(activeBalance)})`,
-      defaultFormat: 'pdf',
-      initialOrientation: exportDocConfig?.orientation || 'landscape',
-      initialPaperSize: exportDocConfig?.paperSize || 'a4'
-    });
+      exportDocConfig?.subtitle || 'Fan Accessories · Gujrat',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(activeBalance)} (${amountInWordsEnglish(activeBalance)})`,
+      exportDocConfig
+    );
   };
 
   const handleExportLedgerJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -217,18 +216,16 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
     const effectiveCols = customCols || colConfig;
     const details = computeCustomerLedgerDetails(activeAccount.entries);
     const { headers, rows } = buildLedgerExportTableData(details.entriesWithBalance, effectiveCols);
-    openExportModal({
-      title: `${activeAccount.name} — Customer Ledger`,
+    exportTableJPG(
+      `${activeAccount.name} — Customer Ledger`,
       headers,
       rows,
-      filename: `${activeAccount.name}_Ledger`,
+      `${activeAccount.name}_Ledger`,
       companyName,
-      subtitle: 'Authorized Factory Customer Ledger Account',
-      balanceFooterText: `Net Balance: ${fmt(activeBalance)} (${activeBalance > 0 ? 'Receivable' : activeBalance < 0 ? 'Advance' : 'Settled'})`,
-      defaultFormat: 'jpg',
-      initialOrientation: exportDocConfig?.orientation || 'landscape',
-      initialPaperSize: exportDocConfig?.paperSize || 'a4'
-    });
+      exportDocConfig?.subtitle || 'Authorized Factory Customer Ledger Account',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(activeBalance)} (${activeBalance > 0 ? 'Receivable' : activeBalance < 0 ? 'Advance' : 'Settled'})`,
+      exportDocConfig
+    );
   };
 
   return (

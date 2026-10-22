@@ -11,12 +11,14 @@ import {
   FileSpreadsheet,
   Eye,
   Search,
-  Layers
+  Layers,
+  Printer
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { saveFileNatively } from '../utils/nativeFileSaver';
 import { shareExportFile, openExportFile } from '../utils/universalDownloader';
 import { triggerHaptic } from '../utils/haptics';
+import { triggerDirectPrint } from '../utils/printPortal';
 
 export interface ExportReadyEventDetail {
   fileName: string;
@@ -384,16 +386,40 @@ export const ExportDownloadToast: React.FC = () => {
             <span>Inspect</span>
           </button>
 
-          {/* Download to Device */}
-          <button
-            type="button"
-            onClick={handleSaveFile}
-            className="whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-            title="Save file to local Downloads folder"
+          {/* Direct Print Button for PDF/Reports */}
+          {isPdf && (
+            <button
+              type="button"
+              onClick={() => {
+                if (activeExport.blobUrl || activeExport.dataUrl) {
+                  triggerDirectPrint({
+                    html: `<div style="text-align: center; padding: 20px;"><iframe src="${activeExport.dataUrl || activeExport.blobUrl}" style="width: 100%; height: 90vh; border: 0;"></iframe></div>`,
+                    title: activeExport.fileName
+                  });
+                }
+              }}
+              className="whitespace-nowrap shrink-0 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              title="Print document"
+            >
+              <Printer size={13} />
+              <span>Print</span>
+            </button>
+          )}
+
+          {/* Direct Download Anchor to guarantee download in all browsers and iframes */}
+          <a
+            href={downloadUrl}
+            download={activeExport.fileName}
+            onClick={() => {
+              triggerHaptic('success');
+              setSavedSuccess(true);
+            }}
+            className="whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer no-underline"
+            title="Download file directly to device"
           >
             {savedSuccess ? <Check size={13} className="text-black" /> : <Download size={13} />}
-            <span>{savedSuccess ? 'Saved' : 'Save'}</span>
-          </button>
+            <span>{savedSuccess ? 'Saved' : 'Download'}</span>
+          </a>
         </div>
       </aside>
 

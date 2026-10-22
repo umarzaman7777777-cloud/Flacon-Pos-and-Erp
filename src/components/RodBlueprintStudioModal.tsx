@@ -6,9 +6,12 @@ import {
   Printer,
   ShoppingCart,
   RefreshCw,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Product, RodBlueprintSpecs, AppLanguage } from '../types';
 import { STANDARD_DIAMETER_OPTIONS, parseDiameterToInches, formatDiameterMm } from '../utils/helpers';
+import { triggerDirectPrint } from '../utils/printPortal';
+import { exportBlueprintJPG } from '../utils/exportManager';
 
 interface RodBlueprintStudioModalProps {
   product: Product | null;
@@ -131,8 +134,63 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
     }
   };
 
+  const [isExportingJpg, setIsExportingJpg] = useState(false);
+
   const handlePrintBlueprint = () => {
-    window.print();
+    const html = `
+      <div style="font-family: Arial, sans-serif; padding: 24px; color: #0f172a; max-width: 800px; margin: 0 auto;">
+        <div style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: bold;">Falcon Rod Maker</h1>
+          <p style="margin: 4px 0 0 0; color: #64748b; font-size: 13px;">Precision Industrial Fan Down-Rod & Engineering CAD Spec Sheet</p>
+          <h2 style="margin: 12px 0 0 0; font-size: 17px; color: #b45309;">${product.name} — Technical Specification</h2>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; font-size: 13px;">
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <p style="margin: 0 0 6px 0;"><strong>Rod Length:</strong> ${specs.lengthInches}" (${Math.round(specs.lengthInches * 25.4)} mm)</p>
+            <p style="margin: 0 0 6px 0;"><strong>Pipe OD:</strong> ${specs.diameterInches || '3/4"'}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Pipe Gauge:</strong> ${specs.gauge}</p>
+            <p style="margin: 0;"><strong>Finish Color:</strong> ${specs.finishColor || 'Standard'}</p>
+          </div>
+          <div style="background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <p style="margin: 0 0 6px 0;"><strong>Clamp Style:</strong> ${specs.clampStyle} (${specs.clampGauge || '16 Gauge'})</p>
+            <p style="margin: 0 0 6px 0;"><strong>Clamps:</strong> Top: ${specs.hasTopClamp ? 'Yes' : 'No'} · Bottom: ${specs.hasBottomClamp ? 'Yes' : 'No'}</p>
+            <p style="margin: 0 0 6px 0;"><strong>Holes:</strong> Ø${specs.holeSizeMm}mm (Top: ${specs.topHoleCount}, Bottom: ${specs.bottomHoleCount})</p>
+            <p style="margin: 0;"><strong>Weight:</strong> ${product.weight || '0.45 kg'}</p>
+          </div>
+        </div>
+
+        <div style="border: 1px dashed #cbd5e1; padding: 12px; text-align: center; border-radius: 8px; margin-top: 16px;">
+          <p style="margin: 0; font-size: 11px; color: #64748b;">
+            CAD Technical Drawing generated from Falcon Rod Studio · Gujrat Industrial Estate
+          </p>
+        </div>
+      </div>
+    `;
+    triggerDirectPrint({
+      html,
+      title: `${product.name} Blueprint Spec Sheet`
+    });
+  };
+
+  const handleExportJpg = async () => {
+    setIsExportingJpg(true);
+    try {
+      const parsedWeight = parseFloat(product.weight || '0.45') || 0.45;
+      await exportBlueprintJPG({
+        diameter: specs.lengthInches,
+        pipeDiameter: specs.diameterInches || '3/4"',
+        gauge: specs.gauge,
+        color: specs.finishColor || 'Standard',
+        weightKg: parsedWeight,
+        price: product.price || 0,
+        companyName: 'Falcon Rod Maker'
+      });
+    } catch (err) {
+      console.warn('Blueprint JPG export error', err);
+    } finally {
+      setIsExportingJpg(false);
+    }
   };
 
   return (
@@ -1294,6 +1352,17 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
                 >
                   <Printer size={13} className="text-amber-400" />
                   <span>Print Spec</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isExportingJpg}
+                  onClick={handleExportJpg}
+                  className="px-3 py-2 rounded-xl text-xs font-mono text-[var(--text)] bg-[var(--panel)] hover:bg-[var(--panel-hover)] border border-[var(--steel-line)] transition flex items-center gap-1.5 disabled:opacity-50"
+                  title="Export High-Resolution Blueprint JPG"
+                >
+                  <ImageIcon size={13} className="text-amber-400" />
+                  <span>{isExportingJpg ? 'Exporting...' : 'Export JPG'}</span>
                 </button>
               </div>
 

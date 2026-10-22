@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Wallet, ArrowUpRight, RotateCcw, Image as ImageIcon, Sliders, Edit2 } from 'lucide-react';
 import { WithdrawalEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import {
   buildLedgerExportTableData,
   getStoredLedgerColumnConfig,
@@ -121,17 +121,17 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
       })),
       effectiveCols
     );
-    openExportModal({
-      title: 'Owner Drawings & Withdrawals',
+    exportTablePDF(
+      'Owner Drawings & Withdrawals',
       headers,
       rows,
-      filename: 'Owner_Withdrawals',
+      'Owner_Withdrawals',
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Proprietor Drawings & Capital Withdrawals',
-      balanceFooterText: `Total Drawings: ${fmt(totalWithdrawn)}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Proprietor Drawings & Capital Withdrawals',
+      exportDocConfig?.customNote || `Total Drawings: ${fmt(totalWithdrawn)}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (customCols?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -148,17 +148,16 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
       })),
       effectiveCols
     );
-    openExportModal({
-      title: 'Owner Drawings & Withdrawals',
+    exportTableJPG(
+      'Owner Drawings & Withdrawals',
       headers,
       rows,
-      filename: 'Owner_Withdrawals',
+      'Owner_Withdrawals',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Proprietor Drawings & Capital Withdrawals',
-      balanceFooterText: `Total Drawings: ${fmt(totalWithdrawn)}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Proprietor Drawings & Capital Withdrawals',
+      exportDocConfig?.customNote || `Total Drawings: ${fmt(totalWithdrawn)}`,
+      exportDocConfig
+    );
   };
 
   return (

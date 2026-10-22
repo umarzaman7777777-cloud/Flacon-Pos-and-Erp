@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 import { RawSupplier, RawEntry, AppLanguage, Transaction, GatePassData, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
-import { fmt, todayISO, downloadCSV } from '../utils/helpers';
-import { openExportModal } from '../utils/exportSettingsHelper';
+import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
+import { exportTableJPG } from '../utils/exportManager';
 import { computeSupplierLedgerDetails } from '../utils/mathEngine';
 import { getNextGateSequence, UnifiedGateReceipt } from '../utils/gateSequenceManager';
 import {
@@ -179,17 +179,17 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
       })),
       activeCfg
     );
-    openExportModal({
-      title: `${currentSupplier.name} — Raw Material Ledger`,
-      headers: tableData.headers,
-      rows: tableData.rows,
-      filename: `${currentSupplier.name}_Raw_Ledger`,
+    exportTablePDF(
+      `${currentSupplier.name} — Raw Material Ledger`,
+      tableData.headers,
+      tableData.rows,
+      `${currentSupplier.name}_Raw_Ledger`,
+      exportDocConfig?.orientation || 'landscape',
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Raw Material Supplier Account',
-      balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
-      defaultFormat: 'pdf',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Raw Material Supplier Account',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(currentBalance)}`,
+      exportDocConfig
+    );
   };
 
   const handleExportJPG = (cfg?: LedgerColumnConfig, exportDocConfig?: Partial<ExportDocumentConfig>) => {
@@ -202,17 +202,16 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
       })),
       activeCfg
     );
-    openExportModal({
-      title: `${currentSupplier.name} — Raw Material Ledger`,
-      headers: tableData.headers,
-      rows: tableData.rows,
-      filename: `${currentSupplier.name}_Raw_Ledger`,
+    exportTableJPG(
+      `${currentSupplier.name} — Raw Material Ledger`,
+      tableData.headers,
+      tableData.rows,
+      `${currentSupplier.name}_Raw_Ledger`,
       companyName,
-      subtitle: exportDocConfig?.subtitle || 'Raw Material Supply & Inward Ledger',
-      balanceFooterText: `Net Balance: ${fmt(currentBalance)}`,
-      defaultFormat: 'jpg',
-      initialOrientation: 'landscape'
-    });
+      exportDocConfig?.subtitle || 'Raw Material Supply & Inward Ledger',
+      exportDocConfig?.customNote || `Net Balance: ${fmt(currentBalance)}`,
+      exportDocConfig
+    );
   };
 
   return (
