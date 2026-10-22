@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { doc, collection, onSnapshot, setDoc, getDoc, enableNetwork } from 'firebase/firestore';
+import { doc, collection, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { db, handleFirestoreError, OperationType } from './config';
@@ -459,14 +459,7 @@ export function useFirestoreSync(
       setIsOnline(true);
       setSyncState('syncing');
 
-      // 1. Wake Firestore network socket up immediately
-      try {
-        await enableNetwork(db);
-      } catch (_) {
-        // Ignore if already active
-      }
-
-      // 2. Flush pending offline queue if any
+      // 1. Flush pending offline queue if any
       const queue = getOfflineQueue();
       if (queue.length > 0) {
         await flushOfflineQueue();

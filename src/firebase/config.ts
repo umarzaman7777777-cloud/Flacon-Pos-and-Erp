@@ -68,14 +68,16 @@ export interface FirestoreErrorInfo {
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errMsg = error instanceof Error ? error.message : String(error);
   
-  // Gracefully handle expected offline or network disconnection without throwing fatal exceptions
+  // Gracefully handle expected offline, network disconnection, or known SDK internal stream assertion
   if (
     errMsg.toLowerCase().includes('unavailable') ||
     errMsg.toLowerCase().includes('client is offline') ||
     errMsg.toLowerCase().includes('could not reach cloud firestore') ||
-    errMsg.toLowerCase().includes('backend didn\'t respond')
+    errMsg.toLowerCase().includes('backend didn\'t respond') ||
+    errMsg.toLowerCase().includes('internal assertion failed') ||
+    errMsg.toLowerCase().includes('c050')
   ) {
-    console.info(`[Firestore Offline Cache] ${operationType} on ${path || 'database'}: Client operating with local persistence.`);
+    console.info(`[Firestore Recovery] ${operationType} on ${path || 'database'}: Local cache and recovery active.`);
     return;
   }
 

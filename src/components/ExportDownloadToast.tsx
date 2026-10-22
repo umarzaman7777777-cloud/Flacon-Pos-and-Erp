@@ -322,8 +322,8 @@ export const ExportDownloadToast: React.FC = () => {
               </div>
               <p className="text-[11px] text-slate-300 truncate mt-0.5">
                 {savedSuccess
-                  ? 'Saved to Downloads. Tap below to Open or Share.'
-                  : 'Tap below to Open in Native App, Share, or Inspect:'}
+                  ? 'Saved to device. Tap below to Share or Inspect.'
+                  : 'Tap below to Share (WhatsApp/Apps), Inspect, or Download:'}
               </p>
             </div>
           </div>
@@ -339,40 +339,15 @@ export const ExportDownloadToast: React.FC = () => {
 
         {/* Action Buttons Row */}
         <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          {/* Open Native File in Viewer (Adobe, Sheets, Excel, Gallery) */}
-          <button
-            type="button"
-            onClick={handleOpenNatively}
-            className={`flex-1 min-w-[130px] whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-white font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer ${
-              isPdf
-                ? 'bg-rose-600 hover:bg-rose-500'
-                : isCsv
-                ? 'bg-emerald-600 hover:bg-emerald-500'
-                : 'bg-amber-600 hover:bg-amber-500'
-            }`}
-            title="Open directly in native viewer app without glitches"
-          >
-            {openedNatively ? <Check size={14} className="text-white" /> : <ExternalLink size={14} />}
-            <span>
-              {openedNatively
-                ? 'Opened!'
-                : isPdf
-                ? 'Open PDF App'
-                : isCsv
-                ? 'Open Sheets/Excel'
-                : 'Open Native'}
-            </span>
-          </button>
-
-          {/* Share Button (WhatsApp / System Intent) */}
+          {/* Primary Share Button (WhatsApp / System Intent) */}
           <button
             type="button"
             onClick={handleShare}
-            className="whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+            className="flex-1 min-w-[150px] whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
             title="Share real file to WhatsApp, Gmail, Drive, Bluetooth or device apps"
           >
             {shared ? <Check size={14} className="text-black" /> : <Share2 size={14} />}
-            <span>{shared ? 'Shared!' : 'Share File'}</span>
+            <span>{shared ? 'Shared!' : 'Share (WhatsApp / Apps)'}</span>
           </button>
 
           {/* In-App Preview / Inspect Modal Trigger */}

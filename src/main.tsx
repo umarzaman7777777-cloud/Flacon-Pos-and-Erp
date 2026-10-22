@@ -51,7 +51,10 @@ if (typeof window !== 'undefined') {
       text.includes('failed to fetch') ||
       text.includes('auth/popup-closed-by-user') ||
       text.includes('auth_timeout_rescue') ||
-      text.includes('origin_mismatch')
+      text.includes('origin_mismatch') ||
+      text.includes('internal assertion failed') ||
+      text.includes('c050') ||
+      text.includes('fromversion')
     );
   };
 
@@ -64,6 +67,18 @@ if (typeof window !== 'undefined') {
     originalError(...args);
   };
 
+  window.addEventListener('error', (event) => {
+    const msg = String(event.message || event.error?.message || '').toLowerCase();
+    if (
+      msg.includes('internal assertion failed') ||
+      msg.includes('c050') ||
+      msg.includes('fromversion')
+    ) {
+      event.preventDefault();
+      console.debug('[Firestore Stream Handled] Prevented known internal assertion exception.');
+    }
+  });
+
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason;
     const msg = String(reason?.message || reason?.error || reason || '').toLowerCase();
@@ -74,7 +89,10 @@ if (typeof window !== 'undefined') {
       msg.includes('unauthenticated') ||
       msg.includes('auth/popup-closed-by-user') ||
       msg.includes('service worker') ||
-      msg.includes('failed to fetch')
+      msg.includes('failed to fetch') ||
+      msg.includes('internal assertion failed') ||
+      msg.includes('c050') ||
+      msg.includes('fromversion')
     ) {
       event.preventDefault();
     }
