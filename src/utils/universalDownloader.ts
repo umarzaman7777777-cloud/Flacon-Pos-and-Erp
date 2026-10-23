@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
 import { saveFileNatively, shareFileNatively, openFileNatively } from './nativeFileSaver';
 import { triggerHaptic } from './haptics';
 
@@ -31,8 +32,11 @@ export interface UniversalDownloadPayload {
   };
 }
 
-// Global active blob URLs to prevent premature garbage collection
+// Global active blob URLs and synchronous export caches
 const activeBlobUrls: Set<string> = new Set();
+export const exportBlobCache: Map<string, Blob> = new Map();
+export const exportFileCache: Map<string, File> = new Map();
+export const exportDataUrlCache: Map<string, string> = new Map();
 
 /**
  * Converts a base64 or Data URI string to a Blob
@@ -99,6 +103,8 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
     else mime = 'application/octet-stream';
   }
 
+  const cleanMime = (mime || '').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
+
   let finalBlob: Blob;
   let finalDataUrl = payload.dataUrl || '';
 
@@ -106,17 +112,17 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
     finalBlob = content;
   } else if (typeof content === 'string') {
     if (content.startsWith('data:')) {
-      finalBlob = dataUriToBlob(content, mime);
+      finalBlob = dataUriToBlob(content, cleanMime);
       finalDataUrl = content;
     } else {
-      finalBlob = new Blob([content], { type: mime });
+      finalBlob = new Blob([content], { type: cleanMime });
     }
   } else if (finalDataUrl) {
-    finalBlob = dataUriToBlob(finalDataUrl, mime);
+    finalBlob = dataUriToBlob(finalDataUrl, cleanMime);
   } else if (rawContent) {
-    finalBlob = new Blob([rawContent], { type: mime });
+    finalBlob = new Blob([rawContent], { type: cleanMime });
   } else {
-    finalBlob = new Blob([''], { type: mime });
+    finalBlob = new Blob([''], { type: cleanMime });
   }
 
   // Create persistent blob URL (keep alive for 5 minutes)
@@ -136,6 +142,15 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
     }
   }
 
+  // Synchronously populate global in-memory caches for zero-latency gesture sharing
+  exportBlobCache.set(fileName, finalBlob);
+  exportDataUrlCache.set(fileName, finalDataUrl);
+  let fileObj: File | null = null;
+  try {
+    fileObj = new File([finalBlob], fileName, { type: cleanMime, lastModified: Date.now() });
+    exportFileCache.set(fileName, fileObj);
+  } catch (_) {}
+
   // 1. Mobile Native Strategy: Save directly to Android Downloads folder
   let savedNatively = false;
   if (Capacitor.isNativePlatform() && finalDataUrl) {
@@ -143,7 +158,7 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
       savedNatively = await saveFileNatively({
         fileName,
         base64Data: finalDataUrl,
-        mimeType: mime
+        mimeType: cleanMime
       });
       if (savedNatively) {
         triggerHaptic('success');
@@ -195,10 +210,12 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
       format,
       blobUrl,
       dataUrl: finalDataUrl,
-      mimeType: mime,
+      mimeType: cleanMime,
       savedLocally: savedNatively,
       rawContent: rawContent || (typeof content === 'string' && !content.startsWith('data:') ? content : undefined),
       tableData: payload.tableData,
+      blob: finalBlob,
+      file: fileObj,
       timestamp: Date.now()
     };
 
@@ -218,14 +235,13 @@ export async function triggerUniversalDownload(payload: UniversalDownloadPayload
 
 /**
  * Universal Share Engine for Invoices, Blueprints, Reports & Ledgers
- * Automatically delegates to Capacitor native share intent (WhatsApp, Drive, Gmail)
- * or browser Web Share API with files support, falling back to direct WhatsApp link.
+ * Directly launches native WhatsApp or Android system share drawer with real file attached.
  */
 export async function shareExportFile(payload: UniversalDownloadPayload): Promise<{
   success: boolean;
   method: string;
 }> {
-  const { fileName, content, dataUrl: explicitDataUrl, title = 'Falcon Rod Maker Export' } = payload;
+  const { fileName, content, dataUrl: explicitDataUrl, targetApp = 'auto' } = payload;
 
   let mime = payload.mimeType;
   if (!mime) {
@@ -238,88 +254,61 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
     else mime = 'application/octet-stream';
   }
 
-  // 1. Clean MIME type (remove parameters like charset) and ensure correct file extension
-  let cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
-  const lowerName = fileName.toLowerCase();
-  if (lowerName.endsWith('.pdf')) cleanMime = 'application/pdf';
-  else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) cleanMime = 'image/jpeg';
-  else if (lowerName.endsWith('.png')) cleanMime = 'image/png';
-  else if (lowerName.endsWith('.csv')) cleanMime = 'text/csv';
-  else if (lowerName.endsWith('.json')) cleanMime = 'application/json';
-  else if (!cleanMime) cleanMime = 'application/octet-stream';
+  const cleanMime = (mime || '').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
 
-  let dataUrl = explicitDataUrl;
+  // Synchronous resolution of File, Blob, and DataUrl from in-memory cache to preserve mobile user gesture
+  let file: File | null = exportFileCache.get(fileName) || null;
+  let blob: Blob | null = exportBlobCache.get(fileName) || (content instanceof Blob ? content : null);
+  let dataUrl = explicitDataUrl || exportDataUrlCache.get(fileName) || (typeof content === 'string' && content.startsWith('data:') ? content : '');
 
-  // 2. Resolve Binary Blob from content, dataUrl, blobUrl, or rawContent
-  let blob: Blob;
-  if (content instanceof Blob) {
-    blob = content;
-  } else if (dataUrl) {
+  if (!blob && dataUrl) {
     blob = dataUriToBlob(dataUrl, cleanMime);
-  } else if (payload.blobUrl) {
-    try {
-      const resp = await fetch(payload.blobUrl);
-      blob = await resp.blob();
-    } catch (_) {
-      blob = new Blob([payload.rawContent || ''], { type: cleanMime });
-    }
-  } else if (payload.rawContent) {
-    blob = new Blob([payload.rawContent], { type: cleanMime });
-  } else if (typeof content === 'string') {
-    if (content.startsWith('data:')) {
-      blob = dataUriToBlob(content, cleanMime);
-      if (!dataUrl) dataUrl = content;
-    } else {
-      blob = new Blob([content], { type: cleanMime });
-    }
-  } else {
-    blob = new Blob([''], { type: cleanMime });
   }
 
-  // Ensure dataUrl is converted to valid base64 data URI (required for Capacitor Android native intent)
-  if (!dataUrl || !dataUrl.includes(';base64,')) {
+  if (!file && blob) {
     try {
-      dataUrl = await blobToDataUri(blob);
+      file = new File([blob], fileName, { type: cleanMime, lastModified: Date.now() });
+      exportFileCache.set(fileName, file);
     } catch (_) {}
   }
 
-  // 3. Construct standard HTML5 File object for real attachment sharing
-  let file: File | null = null;
-  try {
-    file = new File([blob], fileName, {
-      type: cleanMime,
-      lastModified: Date.now()
-    });
-  } catch (fileErr) {
-    console.warn('Could not construct File object for native sharing:', fileErr);
-  }
-
-  // -----------------------------------------------------------------------------------------
-  // Strategy 1: Capacitor Native Sharing (Android / iOS app wrapper)
-  // Sends the real file bytes directly into Android ACTION_SEND intent with EXTRA_STREAM
-  // -----------------------------------------------------------------------------------------
+  // Strategy 1: Capacitor Native Sharing (@capacitor/share & NativeFileSaver)
+  // Triggers native Android ACTION_SEND intent with real file bytes (PDF, JPG, CSV)
   if (Capacitor.isNativePlatform() && dataUrl) {
     try {
+      // 1. Direct targeted native file share via Android ACTION_SEND intent
       const ok = await shareFileNatively({
         fileName,
         base64Data: dataUrl,
-        mimeType: cleanMime
+        mimeType: cleanMime,
+        targetApp
       });
       if (ok) {
         triggerHaptic('success');
         return { success: true, method: 'capacitor-native-file' };
       }
     } catch (err) {
-      console.warn('Native Capacitor file share error, proceeding to Web Share:', err);
+      console.warn('Native Capacitor file share error, trying @capacitor/share:', err);
+    }
+
+    try {
+      const canShareRes = await Share.canShare();
+      if (canShareRes.value) {
+        await Share.share({
+          title: fileName,
+          dialogTitle: `Share ${fileName}`
+        });
+        triggerHaptic('success');
+        return { success: true, method: 'capacitor-share-plugin' };
+      }
+    } catch (sharePluginErr) {
+      console.warn('@capacitor/share plugin error:', sharePluginErr);
     }
   }
 
-  // -----------------------------------------------------------------------------------------
   // Strategy 2: Web Share API Level 2 (files support)
-  // Supported in Chrome on Android, Safari on iOS/macOS, Samsung Internet, Edge
-  // This opens the OS native share dialog (WhatsApp, Gmail, Telegram, Drive, Bluetooth, etc.)
-  // and hands over the ACTUAL ATTACHED FILE (not plain text)!
-  // -----------------------------------------------------------------------------------------
+  // MUST execute immediately without awaiting microtasks to satisfy Android Chrome gesture requirements
+  // Opens Android system share sheet with ALL installed apps (WhatsApp, Gmail, Drive, Quick Share, etc.)
   if (file && typeof navigator !== 'undefined' && navigator.share) {
     let canShareFiles = false;
     try {
@@ -332,10 +321,6 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
 
     if (canShareFiles) {
       try {
-        // CRITICAL FIX: Share ONLY { files: [file] } without 'title' or 'text'.
-        // When 'title' or 'text' is included alongside 'files', native Android apps (especially WhatsApp)
-        // prioritize the text string and DROP the file attachment, sending only text words!
-        // Sending ONLY 'files: [file]' guarantees that WhatsApp, Gmail, and native apps attach the ACTUAL file!
         await navigator.share({
           files: [file]
         });
@@ -346,44 +331,68 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
           // User intentionally closed or cancelled the share chooser
           return { success: false, method: 'cancelled' };
         }
-        console.warn('Web Share file failed, falling back to guaranteed download:', shareErr);
+        console.warn('Web Share file failed, falling back to direct delivery:', shareErr);
       }
     }
   }
 
-  // -----------------------------------------------------------------------------------------
-  // Strategy 3: Guaranteed Real File Delivery Fallback
-  // If the browser/environment does not support sharing files via Web Share:
-  // NEVER send text words or details! Instead:
-  // 1. Download the ACTUAL file to device storage so the user has the PDF/JPEG/CSV.
-  // 2. Dispatch a notification that the real file is ready and saved.
-  // -----------------------------------------------------------------------------------------
+  // Strategy 3: Guaranteed Direct Delivery Fallback
+  // If Web Share is blocked (e.g. inside an iframe or browser without Level 2 files),
+  // directly trigger file download and open WhatsApp (if requested) or inform user for any app.
   try {
-    // 1. Deliver the file to user's device
-    await triggerUniversalDownload({
-      fileName,
-      content: blob,
-      dataUrl,
-      mimeType: cleanMime,
-      format: payload.format,
-      title
-    });
+    // 1. Download file so it exists in user's Downloads
+    const downloadBlob = blob || (dataUrl ? dataUriToBlob(dataUrl, cleanMime) : null);
+    if (downloadBlob || dataUrl) {
+      const link = document.createElement('a');
+      link.href = downloadBlob ? URL.createObjectURL(downloadBlob) : dataUrl;
+      link.download = fileName;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => link.remove(), 1000);
+    }
 
-    // 2. Inform user clearly that the real file is downloaded
+    if (targetApp === 'whatsapp') {
+      const waText = encodeURIComponent(`Falcon Rod Maker: ${fileName}`);
+      const isAndroid = typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
+
+      if (isAndroid) {
+        window.location.href = `whatsapp://send?text=${waText}`;
+      } else {
+        window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('falcon:toast', {
+            detail: {
+              type: 'info',
+              title: 'Opening WhatsApp...',
+              message: `"${fileName}" saved to Downloads. In WhatsApp, tap 📎 to attach your downloaded file.`
+            }
+          })
+        );
+      }
+
+      triggerHaptic('success');
+      return { success: true, method: 'whatsapp-opened' };
+    }
+
+    // Default 'auto' fallback: File is saved to Downloads, ready to be used in any app
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('falcon:toast', {
           detail: {
             type: 'success',
             title: 'File Downloaded to Device',
-            message: `"${fileName}" has been saved. You can now attach this file directly in WhatsApp, Gmail, or your apps.`
+            message: `"${fileName}" is saved to your Downloads folder. You can attach it in any app (Gmail, WhatsApp, Drive, Bluetooth).`
           }
         })
       );
     }
 
     triggerHaptic('success');
-    return { success: true, method: 'download-and-attach-guidance' };
+    return { success: true, method: 'saved-for-all-apps' };
   } catch (fallbackErr) {
     console.error('Fallback export delivery failed:', fallbackErr);
     return { success: false, method: 'failed' };
@@ -392,9 +401,7 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
 
 /**
  * Universal Native File Opener
- * Opens exported PDF, CSV, JPG, or JSON directly into the device's default native viewer application
- * (e.g. Adobe Acrobat / Drive PDF Viewer for PDF, Google Sheets / Excel for CSV, Gallery for JPG)
- * via Android Intent.ACTION_VIEW or browser window without glitches.
+ * Opens exported PDF, CSV, JPG directly into the device's native app or high-resolution preview.
  */
 export async function openExportFile(payload: UniversalDownloadPayload): Promise<{
   success: boolean;
@@ -413,47 +420,21 @@ export async function openExportFile(payload: UniversalDownloadPayload): Promise
     else mime = 'application/octet-stream';
   }
 
-  let cleanMime = (mime || '').split(';')[0].trim().toLowerCase();
-  const lowerName = fileName.toLowerCase();
-  if (lowerName.endsWith('.pdf')) cleanMime = 'application/pdf';
-  else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) cleanMime = 'image/jpeg';
-  else if (lowerName.endsWith('.png')) cleanMime = 'image/png';
-  else if (lowerName.endsWith('.csv')) cleanMime = 'text/csv';
-  else if (lowerName.endsWith('.json')) cleanMime = 'application/json';
-  else if (!cleanMime) cleanMime = 'application/octet-stream';
+  const cleanMime = (mime || '').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
 
-  let dataUrl = explicitDataUrl;
+  // Synchronous resolution of File, Blob, and DataUrl from in-memory cache
+  let file: File | null = exportFileCache.get(fileName) || null;
+  let blob: Blob | null = exportBlobCache.get(fileName) || (content instanceof Blob ? content : null);
+  let dataUrl = explicitDataUrl || exportDataUrlCache.get(fileName) || (typeof content === 'string' && content.startsWith('data:') ? content : '');
 
-  // Resolve Binary Blob from content, dataUrl, blobUrl, or rawContent
-  let blob: Blob;
-  if (content instanceof Blob) {
-    blob = content;
-  } else if (dataUrl) {
+  if (!blob && dataUrl) {
     blob = dataUriToBlob(dataUrl, cleanMime);
-  } else if (payload.blobUrl) {
-    try {
-      const resp = await fetch(payload.blobUrl);
-      blob = await resp.blob();
-    } catch (_) {
-      blob = new Blob([payload.rawContent || ''], { type: cleanMime });
-    }
-  } else if (payload.rawContent) {
-    blob = new Blob([payload.rawContent], { type: cleanMime });
-  } else if (typeof content === 'string') {
-    if (content.startsWith('data:')) {
-      blob = dataUriToBlob(content, cleanMime);
-      if (!dataUrl) dataUrl = content;
-    } else {
-      blob = new Blob([content], { type: cleanMime });
-    }
-  } else {
-    blob = new Blob([''], { type: cleanMime });
   }
 
-  // Ensure valid base64 data URI for Capacitor native intent
-  if (!dataUrl || !dataUrl.includes(';base64,')) {
+  if (!file && blob) {
     try {
-      dataUrl = await blobToDataUri(blob);
+      file = new File([blob], fileName, { type: cleanMime, lastModified: Date.now() });
+      exportFileCache.set(fileName, file);
     } catch (_) {}
   }
 
@@ -474,29 +455,71 @@ export async function openExportFile(payload: UniversalDownloadPayload): Promise
     }
   }
 
-  // Strategy 2: Web Browser opening
-  try {
-    const objectUrl = URL.createObjectURL(blob);
-    activeBlobUrls.add(objectUrl);
-    setTimeout(() => {
-      URL.revokeObjectURL(objectUrl);
-      activeBlobUrls.delete(objectUrl);
-    }, 180000);
+  // Strategy 2: Web Share API to open with external app (Photos, Adobe Acrobat, Sheets, Drive)
+  // On mobile Android, navigator.share with files allows user to choose ANY viewer app on their phone
+  if (file && typeof navigator !== 'undefined' && navigator.share) {
+    let canShare = false;
+    try {
+      canShare = Boolean(navigator.canShare && navigator.canShare({ files: [file] }));
+    } catch (_) {}
 
-    const newWin = window.open(objectUrl, '_blank', 'noopener,noreferrer');
-    if (!newWin) {
-      // Popup blocked or mobile browser: trigger direct download fallback
-      const link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      setTimeout(() => {
-        if (link.parentNode) link.parentNode.removeChild(link);
-      }, 1500);
+    if (canShare) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: fileName
+        });
+        triggerHaptic('success');
+        return { success: true, method: 'system-app-picker' };
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') {
+          return { success: false, method: 'cancelled' };
+        }
+      }
     }
-    triggerHaptic('click');
-    return { success: true, method: 'browser-tab' };
+  }
+
+  // Strategy 3: Direct browser preview / window opening
+  try {
+    const objectUrl = blob ? URL.createObjectURL(blob) : payload.blobUrl || dataUrl;
+
+    if (cleanMime.startsWith('image/')) {
+      const newWin = window.open('', '_blank');
+      if (newWin) {
+        newWin.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>${fileName}</title>
+              <style>body{margin:0;background:#060a12;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px;box-sizing:border-box;}img{max-width:100%;height:auto;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.8);}</style>
+            </head>
+            <body>
+              <img src="${dataUrl || objectUrl}" alt="${fileName}">
+            </body>
+          </html>
+        `);
+        newWin.document.close();
+        triggerHaptic('click');
+        return { success: true, method: 'new-tab-image' };
+      }
+    } else if (cleanMime === 'application/pdf') {
+      const newWin = window.open(objectUrl, '_blank');
+      if (newWin) {
+        triggerHaptic('click');
+        return { success: true, method: 'new-tab-pdf' };
+      }
+    }
+
+    // If popup is blocked by browser, trigger in-app preview modal
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('falcon:open-in-app-preview', {
+          detail: { fileName }
+        })
+      );
+    }
+    return { success: true, method: 'in-app-preview' };
   } catch (err) {
     console.warn('Browser open failed:', err);
     return { success: false, method: 'failed' };

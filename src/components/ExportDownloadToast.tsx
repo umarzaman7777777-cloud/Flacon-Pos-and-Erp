@@ -45,8 +45,8 @@ export interface ExportReadyEventDetail {
 export const ExportDownloadToast: React.FC = () => {
   const [activeExport, setActiveExport] = useState<ExportReadyEventDetail | null>(null);
   const [copied, setCopied] = useState(false);
-  const [shared, setShared] = useState(false);
-  const [openedNatively, setOpenedNatively] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [openFeedback, setOpenFeedback] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isInAppPreviewOpen, setIsInAppPreviewOpen] = useState(false);
   const [csvFilter, setCsvFilter] = useState('');
@@ -58,17 +58,23 @@ export const ExportDownloadToast: React.FC = () => {
       if (customEvt.detail && customEvt.detail.fileName) {
         setActiveExport(customEvt.detail);
         setCopied(false);
-        setShared(false);
-        setOpenedNatively(false);
+        setShareFeedback(null);
+        setOpenFeedback(null);
         setSavedSuccess(Boolean(customEvt.detail.savedLocally));
         setCsvFilter('');
         setPdfEmbedMode('sheet');
       }
     };
 
+    const handleOpenPreview = () => {
+      setIsInAppPreviewOpen(true);
+    };
+
     window.addEventListener('falcon:export-ready', handleExportReady);
+    window.addEventListener('falcon:open-in-app-preview', handleOpenPreview);
     return () => {
       window.removeEventListener('falcon:export-ready', handleExportReady);
+      window.removeEventListener('falcon:open-in-app-preview', handleOpenPreview);
     };
   }, []);
 
@@ -159,7 +165,7 @@ export const ExportDownloadToast: React.FC = () => {
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = async (targetApp: 'auto' | 'whatsapp' = 'auto') => {
     if (!activeExport) return;
     try {
       const res = await shareExportFile({
@@ -168,11 +174,20 @@ export const ExportDownloadToast: React.FC = () => {
         blobUrl: activeExport.blobUrl,
         mimeType: activeExport.mimeType,
         format: activeExport.format,
-        title: activeExport.fileName
+        title: activeExport.fileName,
+        targetApp
       });
       if (res.success) {
-        setShared(true);
-        setTimeout(() => setShared(false), 2500);
+        if (res.method === 'web-share-file' || res.method === 'capacitor-native-file' || res.method === 'capacitor-share-plugin') {
+          setShareFeedback(targetApp === 'whatsapp' ? 'WhatsApp Opened' : 'Share Sheet Opened');
+        } else if (res.method === 'whatsapp-opened') {
+          setShareFeedback('WhatsApp Opened');
+        } else if (res.method === 'saved-for-all-apps') {
+          setShareFeedback('Saved to Device');
+        } else {
+          setShareFeedback('Shared!');
+        }
+        setTimeout(() => setShareFeedback(null), 3000);
       }
     } catch (err) {
       console.warn('Share error:', err);
@@ -192,8 +207,15 @@ export const ExportDownloadToast: React.FC = () => {
         rawContent: activeExport.rawContent
       });
       if (res.success) {
-        setOpenedNatively(true);
-        setTimeout(() => setOpenedNatively(false), 2500);
+        if (res.method === 'system-app-picker' || res.method === 'capacitor-native-view') {
+          setOpenFeedback('App Opened');
+        } else if (res.method === 'new-tab-image' || res.method === 'new-tab-pdf') {
+          setOpenFeedback('Opened in Tab');
+        } else if (res.method === 'in-app-preview') {
+          setIsInAppPreviewOpen(true);
+          setOpenFeedback('Preview');
+        }
+        setTimeout(() => setOpenFeedback(null), 3000);
       }
     } catch (err) {
       console.warn('Open natively error:', err);
@@ -338,16 +360,39 @@ export const ExportDownloadToast: React.FC = () => {
         </div>
 
         {/* Action Buttons Row */}
-        <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          {/* Primary Share Button (WhatsApp / System Intent) */}
+        <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2 flex-wrap">
+          {/* Primary Share All Apps (Native Intent / Web Share) */}
           <button
             type="button"
-            onClick={handleShare}
-            className="flex-1 min-w-[150px] whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
-            title="Share real file to WhatsApp, Gmail, Drive, Bluetooth or device apps"
+            onClick={() => handleShare('auto')}
+            className="flex-1 min-w-[130px] whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+            title="Share file to ANY app on your device (Gmail, Drive, Quick Share, Telegram, Bluetooth, etc.)"
           >
-            {shared ? <Check size={14} className="text-black" /> : <Share2 size={14} />}
-            <span>{shared ? 'Shared!' : 'Share (WhatsApp / Apps)'}</span>
+            {shareFeedback && !shareFeedback.includes('WhatsApp') ? (
+              <Check size={14} className="text-white" />
+            ) : (
+              <Share2 size={14} />
+            )}
+            <span>
+              {shareFeedback && !shareFeedback.includes('WhatsApp') ? shareFeedback : 'Share (All Apps)'}
+            </span>
+          </button>
+
+          {/* Quick WhatsApp Shortcut */}
+          <button
+            type="button"
+            onClick={() => handleShare('whatsapp')}
+            className="whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+            title="Share directly to WhatsApp"
+          >
+            {shareFeedback && shareFeedback.includes('WhatsApp') ? (
+              <Check size={14} className="text-black" />
+            ) : (
+              <Share2 size={14} />
+            )}
+            <span>
+              {shareFeedback && shareFeedback.includes('WhatsApp') ? shareFeedback : 'WhatsApp'}
+            </span>
           </button>
 
           {/* In-App Preview / Inspect Modal Trigger */}
@@ -355,7 +400,7 @@ export const ExportDownloadToast: React.FC = () => {
             type="button"
             onClick={() => setIsInAppPreviewOpen(true)}
             className="whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
-            title="Inspect full file details in modal"
+            title="Inspect full file details and table preview in modal"
           >
             <Eye size={13} />
             <span>Inspect</span>
@@ -447,22 +492,11 @@ export const ExportDownloadToast: React.FC = () => {
               {/* PDF VIEWER */}
               {isPdf && (
                 <div className="w-full flex flex-col items-center gap-3">
-                  {/* Status & Action Bar */}
-                  <div className="w-full flex items-center justify-between gap-2 p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex-wrap">
+                  {/* Status Bar */}
+                  <div className="w-full flex items-center justify-between gap-2 p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
                     <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
                       <FileText size={16} className="text-rose-400" />
                       <span>Falcon Vector PDF Document • Ready for Print & Native View</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOpenNatively}
-                        className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition active:scale-95 cursor-pointer shadow"
-                        title="Launch device's native PDF Viewer app (Adobe Acrobat, Google PDF Viewer, Drive)"
-                      >
-                        <ExternalLink size={13} />
-                        <span>{openedNatively ? 'Opening...' : 'Open with PDF App'}</span>
-                      </button>
                     </div>
                   </div>
 
@@ -599,15 +633,6 @@ export const ExportDownloadToast: React.FC = () => {
                       </span>
                       <button
                         type="button"
-                        onClick={handleOpenNatively}
-                        className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow transition active:scale-95 cursor-pointer"
-                        title="Open spreadsheet in Google Sheets or Microsoft Excel app"
-                      >
-                        <ExternalLink size={13} />
-                        <span>Open in Sheets / Excel</span>
-                      </button>
-                      <button
-                        type="button"
                         onClick={handleCopyContent}
                         className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition active:scale-95 cursor-pointer"
                       >
@@ -674,14 +699,6 @@ export const ExportDownloadToast: React.FC = () => {
                 <div className="flex flex-col items-center justify-center w-full gap-3">
                   <div className="w-full flex items-center justify-between gap-2 p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex-wrap">
                     <span className="text-xs font-mono text-slate-300">High-Resolution Document Image Graphic Archive</span>
-                    <button
-                      type="button"
-                      onClick={handleOpenNatively}
-                      className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow transition active:scale-95 cursor-pointer"
-                    >
-                      <ExternalLink size={13} />
-                      <span>Open in Gallery / Photos</span>
-                    </button>
                   </div>
                   <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 max-h-[66vh] overflow-auto flex items-center justify-center">
                     <img
@@ -720,25 +737,30 @@ export const ExportDownloadToast: React.FC = () => {
                 >
                   <ExternalLink size={13} />
                   <span>
-                    {openedNatively
-                      ? 'Opened!'
-                      : isPdf
-                      ? 'Open PDF App'
-                      : isCsv
-                      ? 'Open Sheets/Excel'
-                      : 'Open Image App'}
+                    {openFeedback || (isPdf ? 'Open in PDF App' : isCsv ? 'Open in Sheets/Excel' : 'Open in Gallery')}
                   </span>
                 </button>
 
-                {/* Share Button (WhatsApp / Apps) */}
+                {/* Share All Apps Button */}
                 <button
                   type="button"
-                  onClick={handleShare}
-                  className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
-                  title="Share actual file to WhatsApp or native apps"
+                  onClick={() => handleShare('auto')}
+                  className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+                  title="Share file to all native apps (Gmail, Drive, Quick Share, Telegram, Bluetooth, etc.)"
                 >
-                  {shared ? <Check size={13} className="text-black" /> : <Share2 size={13} />}
-                  <span>{shared ? 'Shared!' : 'Share (WhatsApp)'}</span>
+                  {shareFeedback && !shareFeedback.includes('WhatsApp') ? <Check size={13} /> : <Share2 size={13} />}
+                  <span>{shareFeedback && !shareFeedback.includes('WhatsApp') ? shareFeedback : 'Share (All Apps)'}</span>
+                </button>
+
+                {/* Direct WhatsApp Button */}
+                <button
+                  type="button"
+                  onClick={() => handleShare('whatsapp')}
+                  className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+                  title="Share directly to WhatsApp"
+                >
+                  {shareFeedback && shareFeedback.includes('WhatsApp') ? <Check size={13} className="text-black" /> : <Share2 size={13} />}
+                  <span>{shareFeedback && shareFeedback.includes('WhatsApp') ? shareFeedback : 'WhatsApp'}</span>
                 </button>
 
                 {/* Download Button */}
@@ -749,7 +771,7 @@ export const ExportDownloadToast: React.FC = () => {
                   title="Download file to device"
                 >
                   <Download size={13} />
-                  <span>Download</span>
+                  <span>{savedSuccess ? 'Saved' : 'Download'}</span>
                 </button>
               </div>
             </div>

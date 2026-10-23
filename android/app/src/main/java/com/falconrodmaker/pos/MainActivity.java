@@ -859,44 +859,68 @@ public class MainActivity extends BridgeActivity {
                     resolvedMime = mimeType.split(";")[0].trim().toLowerCase();
                 }
 
-                Intent shareIntent = new Intent(Intent.ACTION_SEND);
-                shareIntent.setType(resolvedMime);
-                shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
-                shareIntent.setClipData(android.content.ClipData.newRawUri(fileName, contentUri));
-                shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                shareIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                String targetApp = call.getString("targetApp");
+                boolean shareHandled = false;
 
-                Intent chooser = Intent.createChooser(shareIntent, "Share " + fileName);
-                chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-                // Grant explicit read URI permissions to WhatsApp and WhatsApp Business
-                try {
-                    getContext().grantUriPermission("com.whatsapp", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    getContext().grantUriPermission("com.whatsapp.w4b", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                } catch (Exception ignored) {}
-
-                try {
-                    java.util.List<android.content.pm.ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(shareIntent, 0);
-                    for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
-                        if (resolveInfo.activityInfo != null && resolveInfo.activityInfo.packageName != null) {
-                            getContext().grantUriPermission(resolveInfo.activityInfo.packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        }
-                    }
-                } catch (Exception ignored) {}
-
-                getActivity().runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
+                if ("whatsapp".equalsIgnoreCase(targetApp)) {
+                    String[] waPkgs = new String[]{"com.whatsapp", "com.whatsapp.w4b"};
+                    for (String pkg : waPkgs) {
                         try {
-                            getActivity().startActivity(chooser);
-                        } catch (Exception actErr) {
-                            try {
-                                getContext().startActivity(chooser);
-                            } catch (Exception ignored) {}
-                        }
+                            getContext().grantUriPermission(pkg, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            Intent waIntent = new Intent(Intent.ACTION_SEND);
+                            waIntent.setType(resolvedMime);
+                            waIntent.setPackage(pkg);
+                            waIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                            waIntent.setClipData(android.content.ClipData.newRawUri(fileName, contentUri));
+                            waIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            getActivity().startActivity(waIntent);
+                            shareHandled = true;
+                            break;
+                        } catch (Exception ignored) {}
                     }
-                });
+                }
+
+                if (!shareHandled) {
+                    Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                    shareIntent.setType(resolvedMime);
+                    shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                    shareIntent.setClipData(android.content.ClipData.newRawUri(fileName, contentUri));
+                    shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    shareIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+                    Intent chooser = Intent.createChooser(shareIntent, "Share " + fileName);
+                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                    // Grant explicit read URI permissions to WhatsApp and WhatsApp Business
+                    try {
+                        getContext().grantUriPermission("com.whatsapp", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        getContext().grantUriPermission("com.whatsapp.w4b", contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    } catch (Exception ignored) {}
+
+                    try {
+                        java.util.List<android.content.pm.ResolveInfo> resInfoList = getContext().getPackageManager().queryIntentActivities(shareIntent, 0);
+                        for (android.content.pm.ResolveInfo resolveInfo : resInfoList) {
+                            if (resolveInfo.activityInfo != null && resolveInfo.activityInfo.packageName != null) {
+                                getContext().grantUriPermission(resolveInfo.activityInfo.packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                            }
+                        }
+                    } catch (Exception ignored) {}
+
+                    getActivity().runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                getActivity().startActivity(chooser);
+                            } catch (Exception actErr) {
+                                try {
+                                    getContext().startActivity(chooser);
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    });
+                }
 
                 JSObject ret = new JSObject();
                 ret.put("success", true);
@@ -990,11 +1014,15 @@ public class MainActivity extends BridgeActivity {
                     @Override
                     public void run() {
                         try {
-                            getActivity().startActivity(chooser);
-                        } catch (Exception actErr) {
+                            getActivity().startActivity(viewIntent);
+                        } catch (Exception directErr) {
                             try {
-                                getContext().startActivity(chooser);
-                            } catch (Exception ignored) {}
+                                getActivity().startActivity(chooser);
+                            } catch (Exception actErr) {
+                                try {
+                                    getContext().startActivity(chooser);
+                                } catch (Exception ignored) {}
+                            }
                         }
                     }
                 });

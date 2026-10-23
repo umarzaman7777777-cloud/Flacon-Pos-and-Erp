@@ -10,7 +10,8 @@ export interface NativeFileSaverPlugin {
     fileName: string;
     base64Data: string;
     mimeType: string;
-  }): Promise<{ success: boolean }>;
+    targetApp?: string;
+  }): Promise<{ success: boolean; app?: string }>;
   openFile(options: {
     fileName: string;
     base64Data: string;
@@ -39,6 +40,7 @@ export async function shareFileNatively(options: {
   fileName: string;
   base64Data: string;
   mimeType: string;
+  targetApp?: string;
 }): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) return false;
   try {
