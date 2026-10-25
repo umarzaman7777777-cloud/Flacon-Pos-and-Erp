@@ -814,16 +814,16 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
 
             {/* Entries List */}
             <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
-              <table className="w-full text-left text-xs border-collapse min-w-[660px]">
-                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
+              <table className="w-full text-left text-xs border-collapse min-w-[960px]">
+                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
                   <tr>
-                    <th className="p-2.5">Date</th>
-                    <th className="p-2.5">Kind</th>
-                    <th className="p-2.5">Status/Note</th>
-                    <th className="p-2.5 text-right">Payment (Debit)</th>
-                    <th className="p-2.5 text-right">Wages (Credit)</th>
-                    <th className="p-2.5 text-right">Running Balance</th>
-                    <th className="p-2.5 text-center">Action</th>
+                    <th className="p-2.5 whitespace-nowrap min-w-[90px]">Date</th>
+                    <th className="p-2.5 whitespace-nowrap min-w-[70px]">Kind</th>
+                    <th className="p-2.5 min-w-[220px]">Status / Work Breakdown</th>
+                    <th className="p-2.5 text-right whitespace-nowrap min-w-[125px]">Payment (Debit)</th>
+                    <th className="p-2.5 text-right whitespace-nowrap min-w-[115px]">Wages (Credit)</th>
+                    <th className="p-2.5 text-right whitespace-nowrap min-w-[130px]">Running Balance</th>
+                    <th className="p-2.5 text-center whitespace-nowrap min-w-[75px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--steel-line)]">
@@ -928,7 +928,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                             )}
                           </div>
                         </td>
-                        <td className="p-2.5 text-right font-semibold text-[var(--green)]">
+                        <td className="p-2.5 text-right font-semibold text-[var(--green)] whitespace-nowrap font-mono min-w-[125px]">
                           {e.debit ? (
                             <div>
                               <div>{fmt(e.debit)}</div>
@@ -954,11 +954,11 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                             </div>
                           ) : '—'}
                         </td>
-                        <td className="p-2.5 text-right font-semibold text-[var(--red)]">
+                        <td className="p-2.5 text-right font-semibold text-[var(--red)] whitespace-nowrap font-mono min-w-[115px]">
                           {e.credit ? fmt(e.credit) : '—'}
                         </td>
                         <td
-                          className={`p-2.5 text-right font-bold ${
+                          className={`p-2.5 text-right font-bold whitespace-nowrap font-mono min-w-[130px] ${
                             e.runningBalance > 0
                               ? 'text-[var(--red)]'
                               : e.runningBalance < 0
@@ -966,8 +966,8 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                               : 'text-gray-400'
                           }`}
                         >
-                          {fmt(Math.abs(e.runningBalance))}
-                          <span className="text-[9px] font-normal ml-0.5">
+                          <span className="tabular-nums">{fmt(Math.abs(e.runningBalance))}</span>
+                          <span className="text-[9px] font-normal ml-1 px-1 py-0.2 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] inline-block">
                             {e.runningBalance > 0 ? 'Due' : e.runningBalance < 0 ? 'Adv' : ''}
                           </span>
                         </td>

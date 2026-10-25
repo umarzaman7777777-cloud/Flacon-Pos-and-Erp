@@ -284,15 +284,15 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
 
         {/* Entries Table */}
         <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
-          <table className="w-full text-left text-xs border-collapse min-w-[580px]">
-            <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0">
+          <table className="w-full text-left text-xs border-collapse min-w-[850px]">
+            <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
               <tr>
-                <th className="p-2.5">Date</th>
-                <th className="p-2.5">Description</th>
-                <th className="p-2.5">Size/Qty</th>
-                <th className="p-2.5 text-right">Debit (Billed)</th>
-                <th className="p-2.5 text-right">Credit (Received)</th>
-                <th className="p-2.5 text-center">Action</th>
+                <th className="p-2.5 whitespace-nowrap min-w-[90px]">Date</th>
+                <th className="p-2.5 min-w-[200px]">Description</th>
+                <th className="p-2.5 whitespace-nowrap min-w-[120px]">Size / Qty</th>
+                <th className="p-2.5 text-right whitespace-nowrap min-w-[110px]">Debit (Billed)</th>
+                <th className="p-2.5 text-right whitespace-nowrap min-w-[115px]">Credit (Received)</th>
+                <th className="p-2.5 text-center whitespace-nowrap min-w-[75px]">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--steel-line)]">
@@ -310,13 +310,13 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
                       <div className="font-semibold text-[var(--text)]">{e.desc}</div>
                       {e.detail && <div className="text-[10px] text-[var(--text-dim)]">{e.detail}</div>}
                     </td>
-                    <td className="p-2.5 text-[var(--text-dim)]">
+                    <td className="p-2.5 text-[var(--text-dim)] whitespace-nowrap">
                       {[e.size, e.qty && `${e.qty} pcs`, e.rate && `@ ${fmt(e.rate)}`].filter(Boolean).join(' · ')}
                     </td>
-                    <td className="p-2.5 text-right font-semibold text-[var(--red)]">
+                    <td className="p-2.5 text-right font-semibold text-[var(--red)] whitespace-nowrap font-mono min-w-[110px]">
                       {e.debit ? fmt(e.debit) : '—'}
                     </td>
-                    <td className="p-2.5 text-right font-semibold text-[var(--green)]">
+                    <td className="p-2.5 text-right font-semibold text-[var(--green)] whitespace-nowrap font-mono min-w-[115px]">
                       {e.credit ? (
                         <div>
                           <div>{fmt(e.credit)}</div>

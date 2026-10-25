@@ -26,6 +26,8 @@ export interface StandardLedgerRowItem {
   weight?: number | string;
   weightIn?: number | string;
   itemsIn?: number;
+  itemUnit?: string;
+  unitType?: string;
   workType?: string;
   category?: string;
   withdrawnBy?: string;
@@ -45,15 +47,15 @@ export function buildLedgerExportTableData(
   if (config.showDate) headers.push('Date');
   if (config.showTime) headers.push('Time');
   if (config.showDesc) headers.push('Description');
-  if (config.showDebit) headers.push('Debit (Due / Billed)');
-  if (config.showCredit) headers.push('Credit (Paid / Wages)');
-  if (config.showBalance) headers.push('Running Balance');
-  if (config.showMethod) headers.push('Payment Method');
-  if (config.showPaidBy) headers.push('Paid By (Sender)');
-  if (config.showPaidTo) headers.push('Paid To (Receiver)');
-  if (config.showAccount) headers.push('Bank & Account #');
-  if (config.showRef) headers.push('Cheque # / Ref');
-  if (config.showTax) headers.push('Tax / Deductions');
+  if (config.showDebit) headers.push('Debit (Due)');
+  if (config.showCredit) headers.push('Credit (Paid)');
+  if (config.showBalance) headers.push('Balance');
+  if (config.showMethod) headers.push('Method');
+  if (config.showPaidBy) headers.push('Paid By');
+  if (config.showPaidTo) headers.push('Paid To');
+  if (config.showAccount) headers.push('Bank & A/C #');
+  if (config.showRef) headers.push('Cheque / Ref');
+  if (config.showTax) headers.push('Tax');
 
   // Ensure at least core columns if all unchecked
   if (headers.length === 0) {
@@ -76,6 +78,7 @@ export function buildLedgerExportTableData(
       if (e.status) metaParts.push(e.status);
       if (e.size) metaParts.push(e.size);
       if (e.qty) metaParts.push(`${e.qty} pcs`);
+      if (e.itemsIn) metaParts.push(`${e.itemsIn} ${e.itemUnit || 'Pcs'}`);
       if (e.weight || e.weightIn) metaParts.push(`${e.weight || e.weightIn} kg`);
       if (e.rate) metaParts.push(`@ Rs ${fmt(e.rate)}`);
       if (e.color) metaParts.push(e.color);

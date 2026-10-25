@@ -306,39 +306,81 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
     }
   }
 
-  // Strategy 2: Web Share API Level 2 (files support)
-  // MUST execute immediately without awaiting microtasks to satisfy Android Chrome gesture requirements
-  // Opens Android system share sheet with ALL installed apps (WhatsApp, Gmail, Drive, Quick Share, etc.)
-  if (file && typeof navigator !== 'undefined' && navigator.share) {
-    let canShareFiles = false;
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        canShareFiles = true;
-      }
-    } catch (canErr) {
-      console.warn('navigator.canShare check failed:', canErr);
+  // Strategy 2: Web Share API (Primary for Mobile Android Browsers & PWA)
+  // MUST execute within the synchronous user gesture context.
+  // Attempts file attachment first, then immediately falls back to URL/text share to GUARANTEE
+  // that the native Android system share sheet (drawer with Gmail, Drive, WhatsApp, Telegram, Quick Share, etc.) OPENS!
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    // 1. Prepare shareable File
+    let shareableFile = file;
+    if (!shareableFile && blob) {
+      try {
+        shareableFile = new File([blob], fileName, { type: cleanMime, lastModified: Date.now() });
+      } catch (_) {}
     }
 
-    if (canShareFiles) {
+    // 2. Test file share capability
+    let canShareWithFiles = false;
+    if (shareableFile && typeof navigator.canShare === 'function') {
+      try {
+        canShareWithFiles = navigator.canShare({ files: [shareableFile] });
+      } catch (_) {
+        canShareWithFiles = false;
+      }
+
+      // Android Chrome whitelist adaptation:
+      // Chrome Android can reject text/csv for navigator.canShare({ files }), but accepts text/plain!
+      if (!canShareWithFiles && blob && (cleanMime === 'text/csv' || fileName.toLowerCase().endsWith('.csv'))) {
+        try {
+          const plainFile = new File([blob], fileName, { type: 'text/plain', lastModified: Date.now() });
+          if (navigator.canShare({ files: [plainFile] })) {
+            shareableFile = plainFile;
+            canShareWithFiles = true;
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 3. Attempt file attachment share
+    if (shareableFile && canShareWithFiles) {
       try {
         await navigator.share({
-          files: [file]
+          files: [shareableFile],
+          title: fileName,
+          text: `Falcon Rod Maker: ${fileName}`
         });
         triggerHaptic('success');
         return { success: true, method: 'web-share-file' };
       } catch (shareErr: any) {
         if (shareErr?.name === 'AbortError') {
-          // User intentionally closed or cancelled the share chooser
+          // User intentionally dismissed or cancelled the share chooser
           return { success: false, method: 'cancelled' };
         }
-        console.warn('Web Share file failed, falling back to direct delivery:', shareErr);
+        console.warn('Web Share file failed, will attempt Web Share text/url:', shareErr);
       }
+    }
+
+    // 4. Guaranteed Native Android Share Sheet Fallback:
+    // When file sharing is not accepted by the browser engine, navigator.share with title/url ALWAYS
+    // triggers the Android system share drawer, letting the user choose Gmail, Drive, Telegram, Bluetooth, etc.
+    try {
+      const shareUrl = payload.blobUrl || window.location.href;
+      await navigator.share({
+        title: fileName,
+        text: `Falcon Rod Maker: ${fileName}`,
+        url: shareUrl
+      });
+      triggerHaptic('success');
+      return { success: true, method: 'web-share-drawer' };
+    } catch (shareUrlErr: any) {
+      if (shareUrlErr?.name === 'AbortError') {
+        return { success: false, method: 'cancelled' };
+      }
+      console.warn('Web Share drawer failed:', shareUrlErr);
     }
   }
 
-  // Strategy 3: Guaranteed Direct Delivery Fallback
-  // If Web Share is blocked (e.g. inside an iframe or browser without Level 2 files),
-  // directly trigger file download and open WhatsApp (if requested) or inform user for any app.
+  // Strategy 3: Direct App Fallback (WhatsApp or In-App Share Sheet)
   try {
     // 1. Download file so it exists in user's Downloads
     const downloadBlob = blob || (dataUrl ? dataUriToBlob(dataUrl, cleanMime) : null);
@@ -378,21 +420,17 @@ export async function shareExportFile(payload: UniversalDownloadPayload): Promis
       return { success: true, method: 'whatsapp-opened' };
     }
 
-    // Default 'auto' fallback: File is saved to Downloads, ready to be used in any app
+    // Default 'auto' fallback: File is saved to Downloads, and trigger the in-app Share Apps modal
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
-        new CustomEvent('falcon:toast', {
-          detail: {
-            type: 'success',
-            title: 'File Downloaded to Device',
-            message: `"${fileName}" is saved to your Downloads folder. You can attach it in any app (Gmail, WhatsApp, Drive, Bluetooth).`
-          }
+        new CustomEvent('falcon:open-share-apps-modal', {
+          detail: { fileName, dataUrl, mimeType: cleanMime }
         })
       );
     }
 
     triggerHaptic('success');
-    return { success: true, method: 'saved-for-all-apps' };
+    return { success: true, method: 'show-apps-modal' };
   } catch (fallbackErr) {
     console.error('Fallback export delivery failed:', fallbackErr);
     return { success: false, method: 'failed' };
@@ -457,16 +495,29 @@ export async function openExportFile(payload: UniversalDownloadPayload): Promise
 
   // Strategy 2: Web Share API to open with external app (Photos, Adobe Acrobat, Sheets, Drive)
   // On mobile Android, navigator.share with files allows user to choose ANY viewer app on their phone
-  if (file && typeof navigator !== 'undefined' && navigator.share) {
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    let shareableFile = file;
     let canShare = false;
     try {
-      canShare = Boolean(navigator.canShare && navigator.canShare({ files: [file] }));
+      if (shareableFile && typeof navigator.canShare === 'function') {
+        canShare = navigator.canShare({ files: [shareableFile] });
+      }
     } catch (_) {}
 
-    if (canShare) {
+    if (!canShare && blob && (cleanMime === 'text/csv' || fileName.toLowerCase().endsWith('.csv'))) {
+      try {
+        const plainFile = new File([blob], fileName, { type: 'text/plain', lastModified: Date.now() });
+        if (navigator.canShare && navigator.canShare({ files: [plainFile] })) {
+          shareableFile = plainFile;
+          canShare = true;
+        }
+      } catch (_) {}
+    }
+
+    if (shareableFile && canShare) {
       try {
         await navigator.share({
-          files: [file],
+          files: [shareableFile],
           title: fileName
         });
         triggerHaptic('success');
@@ -479,50 +530,15 @@ export async function openExportFile(payload: UniversalDownloadPayload): Promise
     }
   }
 
-  // Strategy 3: Direct browser preview / window opening
-  try {
-    const objectUrl = blob ? URL.createObjectURL(blob) : payload.blobUrl || dataUrl;
-
-    if (cleanMime.startsWith('image/')) {
-      const newWin = window.open('', '_blank');
-      if (newWin) {
-        newWin.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>${fileName}</title>
-              <style>body{margin:0;background:#060a12;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:16px;box-sizing:border-box;}img{max-width:100%;height:auto;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,0.8);}</style>
-            </head>
-            <body>
-              <img src="${dataUrl || objectUrl}" alt="${fileName}">
-            </body>
-          </html>
-        `);
-        newWin.document.close();
-        triggerHaptic('click');
-        return { success: true, method: 'new-tab-image' };
-      }
-    } else if (cleanMime === 'application/pdf') {
-      const newWin = window.open(objectUrl, '_blank');
-      if (newWin) {
-        triggerHaptic('click');
-        return { success: true, method: 'new-tab-pdf' };
-      }
-    }
-
-    // If popup is blocked by browser, trigger in-app preview modal
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('falcon:open-in-app-preview', {
-          detail: { fileName }
-        })
-      );
-    }
-    return { success: true, method: 'in-app-preview' };
-  } catch (err) {
-    console.warn('Browser open failed:', err);
-    return { success: false, method: 'failed' };
+  // Strategy 3: Direct in-app preview modal & browser preview
+  // Triggers the high-fidelity built-in viewer modal (Vector PDF sheet, CSV spreadsheet, or JPG image)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('falcon:open-in-app-preview', {
+        detail: { fileName }
+      })
+    );
   }
+  return { success: true, method: 'in-app-preview' };
 }
 

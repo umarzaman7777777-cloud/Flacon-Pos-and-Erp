@@ -398,6 +398,9 @@ export interface RawEntry {
   isReturn?: boolean;
   weightIn?: number;
   itemsIn?: number;
+  unitType?: 'weight' | 'quantity' | 'both';
+  itemUnit?: string;
+  weightUnit?: 'kg' | 'grams';
   rateType?: string;
   rate?: number;
   weight?: string;

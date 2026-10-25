@@ -325,8 +325,73 @@ export function exportTablePDF(
     return currentY + headerHeight + (isThermal ? 4 : 8);
   };
 
+  // Helper for column weight & min width in mm
+  const getColSpecs = (h: string) => {
+    const s = String(h).toLowerCase();
+    if (s.includes('desc') || s.includes('item') || s.includes('material') || s.includes('note') || s.includes('product')) {
+      return { weight: isThermal ? 2.0 : 2.8, min: isThermal ? 16 : 38 };
+    }
+    if (s.includes('balance') || s.includes('due') || s.includes('paid') || s.includes('debit') || s.includes('credit') || s.includes('amount') || s.includes('wages') || s.includes('total')) {
+      return { weight: isThermal ? 1.1 : 1.35, min: isThermal ? 11 : 22 };
+    }
+    if (s.includes('bank') || s.includes('account') || s.includes('a/c')) {
+      return { weight: 1.25, min: isThermal ? 12 : 23 };
+    }
+    if (s.includes('date')) {
+      return { weight: 0.9, min: isThermal ? 9 : 17 };
+    }
+    if (s.includes('time')) {
+      return { weight: 0.7, min: isThermal ? 8 : 13 };
+    }
+    if (s.includes('method') || s.includes('status') || s.includes('gate') || s.includes('ref') || s.includes('cheque') || s.includes('tax')) {
+      return { weight: 0.95, min: isThermal ? 9 : 18 };
+    }
+    return { weight: 1.1, min: isThermal ? 10 : 20 };
+  };
+
+  const colSpecs = headers.map(h => getColSpecs(h));
+  const totalWeight = colSpecs.reduce((sum, c) => sum + c.weight, 0);
+  const rawWidths = colSpecs.map(c => (c.weight / Math.max(0.1, totalWeight)) * contentWidth);
+  const clampedWidths = rawWidths.map((w, i) => Math.max(w, colSpecs[i].min));
+  const sumClamped = clampedWidths.reduce((a, b) => a + b, 0);
+  const colScale = contentWidth / Math.max(1, sumClamped);
+  const colWidths = clampedWidths.map(w => w * colScale);
+
+  const colX: number[] = [];
+  let curColX = margin;
+  for (let i = 0; i < colWidths.length; i++) {
+    colX.push(curColX);
+    curColX += colWidths[i];
+  }
+
+  const isColRightAligned = (headerStr: string) => {
+    const s = String(headerStr).toLowerCase();
+    return s.includes('debit') || s.includes('credit') || s.includes('balance') || s.includes('amount') || s.includes('wages') || s.includes('total') || s.includes('rate') || s.includes('tax');
+  };
+
+  const drawPdfCell = (text: string, colIdx: number, yPos: number) => {
+    const w = colWidths[colIdx];
+    const x = colX[colIdx];
+    const pad = isThermal ? 1 : 2;
+    const maxW = Math.max(4, w - pad * 2);
+    let str = String(text ?? '').replace(/\n/g, ' ').trim();
+    while (str.length > 1 && doc.getTextWidth(str) > maxW) {
+      str = str.slice(0, -1);
+    }
+    if (str.length < String(text ?? '').trim().length && str.length > 2) {
+      str = str.slice(0, -1) + '…';
+    }
+
+    const isRight = isColRightAligned(headers[colIdx] || '');
+    if (isRight) {
+      const textW = doc.getTextWidth(str);
+      doc.text(str, x + w - pad - textW, yPos);
+    } else {
+      doc.text(str, x + pad, yPos);
+    }
+  };
+
   let y = renderHeader(true);
-  const colWidth = contentWidth / Math.max(1, headers.length);
   const rowHeight = isThermal ? 5.5 : 6.8;
 
   // Table header renderer
@@ -338,9 +403,7 @@ export function exportTablePDF(
     doc.setFontSize(isThermal ? 6.5 : 8);
 
     headers.forEach((h, i) => {
-      const maxChar = Math.max(8, Math.floor(colWidth / 2.2));
-      const txt = String(h).slice(0, maxChar);
-      doc.text(txt, margin + 2 + i * colWidth, y);
+      drawPdfCell(String(h).toUpperCase(), i, y);
     });
     y += isThermal ? 5 : 6;
   };
@@ -373,9 +436,7 @@ export function exportTablePDF(
 
     doc.setTextColor(30, 41, 59);
     row.forEach((cell, i) => {
-      const maxChar = Math.max(10, Math.floor(colWidth / 1.9));
-      const txt = String(cell ?? '').replace(/\n/g, ' ').slice(0, maxChar);
-      doc.text(txt, margin + 2 + i * colWidth, y);
+      drawPdfCell(String(cell ?? ''), i, y);
     });
     y += rowHeight;
   });

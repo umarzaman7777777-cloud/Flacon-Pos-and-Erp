@@ -38,7 +38,8 @@ import {
   clearDriveToken,
   requestGoogleDriveToken,
   uploadBackupToGoogleDrive,
-  listGoogleDriveBackups
+  listGoogleDriveBackups,
+  pruneGoogleDriveBackups
 } from '../utils/googleDriveBackup';
 import { getDatabaseJSONString } from '../utils/syncReport';
 import { generateFullDatabaseSQL } from '../utils/sqlExporter';
@@ -191,7 +192,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
     return () => clearInterval(interval);
   }, [driveAutoBackup, driveTokenInfo?.token, lastDriveBackup, driveAutoBackupInterval]);
 
-  // Recurring Auto-Backup Engine for All Files
+  // Recurring Auto-Backup Engine (Single Clean Snapshot at Chosen Time Interval)
   useEffect(() => {
     if (!driveAutoBackup || !driveTokenInfo?.token || !isRealGoogleOAuthToken(driveTokenInfo.token)) return;
 
@@ -199,10 +200,26 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
       if (isBackingUpRef.current) return;
       const nextDate = getNextDriveBackupDate(lastDriveBackup, driveAutoBackupInterval);
       if (Date.now() >= nextDate.getTime()) {
-        console.info('[Workspace Sync] Scheduled Auto-Backup Due: Backing up all files to Google Drive...');
+        console.info('[Workspace Sync] Scheduled Auto-Backup Due: Backing up database to Google Drive...');
         isBackingUpRef.current = true;
         try {
-          await backupAllFilesToDrive();
+          const { jsonString, filename } = getDatabaseJSONString(appState, currentUserEmail, terminalId, true);
+          const uploaded = await uploadBackupToGoogleDrive(driveTokenInfo.token, {
+            fileName: filename,
+            fileContent: jsonString,
+            mimeType: 'application/json',
+            description: `Falcon Rod Maker POS - Scheduled Auto-Backup (${appState.transactions?.length || 0} txns, ${appState.products?.length || 0} products)`
+          });
+          const nowIso = new Date().toISOString();
+          setLastDriveBackup(nowIso);
+          setLastDriveBackupTime(nowIso);
+          setDriveBackupsCount(prev => prev + 1);
+          setDriveSuccessMsg(`✓ Automated scheduled backup saved to Google Drive: ${uploaded.name}`);
+          setTimeout(() => setDriveSuccessMsg(null), 5000);
+          notifyWorkspaceSyncUpdated();
+
+          // Auto-prune older backups to retain latest 6 snapshots
+          pruneGoogleDriveBackups(driveTokenInfo.token, 6).catch(() => {});
         } catch (e) {
           console.warn('[Workspace Sync] Scheduled auto-backup failed:', e);
         } finally {
@@ -213,7 +230,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
 
     const checker = setInterval(checkAndTriggerBackup, 30000); // Check every 30s
     return () => clearInterval(checker);
-  }, [driveAutoBackup, driveTokenInfo?.token, lastDriveBackup, driveAutoBackupInterval]);
+  }, [driveAutoBackup, driveTokenInfo?.token, lastDriveBackup, driveAutoBackupInterval, appState, currentUserEmail, terminalId]);
 
   // Check Drive backups count if token exists and is valid
   useEffect(() => {
@@ -319,6 +336,24 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
       })();
 
       const driveTask = (async () => {
+        // Only run drive auto-backup if auto-backup is enabled
+        const autoBackupEnabled = getDriveAutoBackupEnabled();
+        if (!autoBackupEnabled) {
+          return;
+        }
+
+        // Strictly check if scheduled time has actually arrived!
+        // DO NOT upload on routine startup/focus/resume unless elapsed time >= user-selected interval
+        const lastBackup = getLastDriveBackupTime();
+        const intervalHours = getDriveAutoBackupIntervalHours();
+        const nextDate = getNextDriveBackupDate(lastBackup, intervalHours);
+        const now = Date.now();
+
+        if (lastBackup && now < nextDate.getTime()) {
+          console.debug('[Workspace Sync] Scheduled Drive backup not due yet. Next backup:', nextDate.toISOString());
+          return;
+        }
+
         setIsUploadingDrive(true);
         try {
           const { jsonString, filename } = getDatabaseJSONString(stateToSync, currentUserEmail, terminalId, true);
@@ -326,14 +361,17 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
             fileName: filename,
             fileContent: jsonString,
             mimeType: 'application/json',
-            description: `Falcon Rod Maker POS - Automated App Launch Backup (${stateToSync.transactions?.length || 0} txns, ${stateToSync.products?.length || 0} products)`
+            description: `Falcon Rod Maker POS - Automated Scheduled Backup (${stateToSync.transactions?.length || 0} txns, ${stateToSync.products?.length || 0} products)`
           });
           const nowIso = new Date().toISOString();
           setLastDriveBackup(nowIso);
           setLastDriveBackupTime(nowIso);
           setDriveBackupsCount(prev => prev + 1);
           driveSuccess = true;
-          console.info('[Workspace Sync] ✓ Google Drive backup uploaded on app launch:', uploaded.name);
+          console.info('[Workspace Sync] ✓ Google Drive scheduled backup uploaded:', uploaded.name);
+
+          // Auto-prune older backups to keep Google Drive clean and respect retention limit
+          pruneGoogleDriveBackups(activeToken, 6).catch(() => {});
         } catch (dErr: any) {
           console.warn('[Workspace Sync] Startup Drive backup notice:', dErr);
           const msg = String(dErr?.message || dErr || '');
@@ -678,6 +716,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         setDriveBackupsCount(prev => prev + 1);
         setTimeout(() => setDriveSuccessMsg(null), 5000);
         notifyWorkspaceSyncUpdated();
+        pruneGoogleDriveBackups(token, 6).catch(() => {});
         return true;
       } catch (err: any) {
         if (err?.message?.includes('401') || err?.message?.includes('Invalid Credentials')) {
@@ -739,6 +778,7 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         setDriveSuccessMsg(`✓ Successfully backed up all files (JSON & SQL) to Google Drive!`);
         setTimeout(() => setDriveSuccessMsg(null), 5000);
         notifyWorkspaceSyncUpdated();
+        pruneGoogleDriveBackups(token, 6).catch(() => {});
         return true;
       } catch (err: any) {
         if (err?.message?.includes('401') || err?.message?.includes('Invalid Credentials')) {

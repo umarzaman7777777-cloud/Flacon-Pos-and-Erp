@@ -12,11 +12,14 @@ import {
   Eye,
   Search,
   Layers,
-  Printer
+  Printer,
+  Mail,
+  Smartphone,
+  RefreshCw
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { saveFileNatively } from '../utils/nativeFileSaver';
-import { shareExportFile, openExportFile } from '../utils/universalDownloader';
+import { shareExportFile, openExportFile, dataUriToBlob } from '../utils/universalDownloader';
 import { triggerHaptic } from '../utils/haptics';
 import { triggerDirectPrint } from '../utils/printPortal';
 
@@ -48,7 +51,9 @@ export const ExportDownloadToast: React.FC = () => {
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
   const [openFeedback, setOpenFeedback] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'saved'>('idle');
   const [isInAppPreviewOpen, setIsInAppPreviewOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [csvFilter, setCsvFilter] = useState('');
   const [pdfEmbedMode, setPdfEmbedMode] = useState<'sheet' | 'embed'>('sheet');
 
@@ -61,6 +66,7 @@ export const ExportDownloadToast: React.FC = () => {
         setShareFeedback(null);
         setOpenFeedback(null);
         setSavedSuccess(Boolean(customEvt.detail.savedLocally));
+        setDownloadState('idle');
         setCsvFilter('');
         setPdfEmbedMode('sheet');
       }
@@ -70,11 +76,17 @@ export const ExportDownloadToast: React.FC = () => {
       setIsInAppPreviewOpen(true);
     };
 
+    const handleOpenShareModal = () => {
+      setIsShareModalOpen(true);
+    };
+
     window.addEventListener('falcon:export-ready', handleExportReady);
     window.addEventListener('falcon:open-in-app-preview', handleOpenPreview);
+    window.addEventListener('falcon:open-share-apps-modal', handleOpenShareModal);
     return () => {
       window.removeEventListener('falcon:export-ready', handleExportReady);
       window.removeEventListener('falcon:open-in-app-preview', handleOpenPreview);
+      window.removeEventListener('falcon:open-share-apps-modal', handleOpenShareModal);
     };
   }, []);
 
@@ -92,8 +104,17 @@ export const ExportDownloadToast: React.FC = () => {
 
   const downloadUrl = activeExport?.dataUrl || activeExport?.blobUrl || '#';
 
-  const handleSaveFile = async () => {
+  const handleSaveFile = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!activeExport) return;
+
+    triggerHaptic('click');
+    setDownloadState('downloading');
+
+    // 1. Capacitor native save if available (Android Native MediaStore)
     if (Capacitor.isNativePlatform() && activeExport.dataUrl) {
       try {
         const ok = await saveFileNatively({
@@ -104,7 +125,19 @@ export const ExportDownloadToast: React.FC = () => {
         if (ok) {
           triggerHaptic('success');
           setSavedSuccess(true);
-          setTimeout(() => setActiveExport(null), 3500);
+          setDownloadState('saved');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('falcon:toast', {
+                detail: {
+                  type: 'success',
+                  title: 'Saved to Device',
+                  message: `"${activeExport.fileName}" saved to your Downloads folder.`
+                }
+              })
+            );
+          }
+          setTimeout(() => setDownloadState('idle'), 2500);
           return;
         }
       } catch (err) {
@@ -112,20 +145,53 @@ export const ExportDownloadToast: React.FC = () => {
       }
     }
 
-    // Browser direct download fallback
+    // 2. Direct browser download with fresh blob and anchor
     try {
+      let downloadBlob: Blob | null = null;
+      if (activeExport.dataUrl && activeExport.dataUrl.startsWith('data:')) {
+        downloadBlob = dataUriToBlob(activeExport.dataUrl, activeExport.mimeType || 'application/octet-stream');
+      } else if (activeExport.rawContent) {
+        downloadBlob = new Blob([activeExport.rawContent], { type: activeExport.mimeType || 'text/plain' });
+      }
+
+      const freshUrl = downloadBlob ? URL.createObjectURL(downloadBlob) : (activeExport.dataUrl || activeExport.blobUrl);
       const link = document.createElement('a');
-      link.href = downloadUrl;
+      link.href = freshUrl;
       link.download = activeExport.fileName;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
+
       setTimeout(() => {
         if (link.parentNode) link.parentNode.removeChild(link);
-      }, 1500);
+        if (downloadBlob && freshUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(freshUrl);
+        }
+      }, 2000);
+
+      triggerHaptic('success');
       setSavedSuccess(true);
-      setTimeout(() => setActiveExport(null), 3500);
-    } catch (_) {}
+      setDownloadState('saved');
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('falcon:toast', {
+            detail: {
+              type: 'success',
+              title: 'File Downloaded',
+              message: `"${activeExport.fileName}" saved to your Downloads folder.`
+            }
+          })
+        );
+      }
+
+      setTimeout(() => {
+        setDownloadState('idle');
+      }, 2500);
+    } catch (err) {
+      console.warn('Browser direct download failed:', err);
+      setDownloadState('idle');
+    }
   };
 
   const getDecodedCsvText = (): string => {
@@ -178,16 +244,25 @@ export const ExportDownloadToast: React.FC = () => {
         targetApp
       });
       if (res.success) {
-        if (res.method === 'web-share-file' || res.method === 'capacitor-native-file' || res.method === 'capacitor-share-plugin') {
+        if (
+          res.method === 'web-share-file' ||
+          res.method === 'web-share-drawer' ||
+          res.method === 'capacitor-native-file' ||
+          res.method === 'capacitor-share-plugin'
+        ) {
           setShareFeedback(targetApp === 'whatsapp' ? 'WhatsApp Opened' : 'Share Sheet Opened');
         } else if (res.method === 'whatsapp-opened') {
           setShareFeedback('WhatsApp Opened');
-        } else if (res.method === 'saved-for-all-apps') {
-          setShareFeedback('Saved to Device');
+        } else if (res.method === 'show-apps-modal') {
+          setIsShareModalOpen(true);
+          setShareFeedback('Choose App');
         } else {
           setShareFeedback('Shared!');
         }
         setTimeout(() => setShareFeedback(null), 3000);
+      } else if (res.method === 'cancelled') {
+        // User dismissed the native share sheet
+        setShareFeedback(null);
       }
     } catch (err) {
       console.warn('Share error:', err);
@@ -426,20 +501,36 @@ export const ExportDownloadToast: React.FC = () => {
             </button>
           )}
 
-          {/* Direct Download Anchor to guarantee download in all browsers and iframes */}
-          <a
-            href={downloadUrl}
-            download={activeExport.fileName}
-            onClick={() => {
-              triggerHaptic('success');
-              setSavedSuccess(true);
-            }}
-            className="whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer no-underline"
+          {/* Interactive Guaranteed Download Button */}
+          <button
+            type="button"
+            onClick={handleSaveFile}
+            className={`whitespace-nowrap shrink-0 px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition active:scale-90 cursor-pointer shadow ${
+              downloadState === 'downloading'
+                ? 'bg-amber-500 text-black animate-pulse'
+                : downloadState === 'saved'
+                ? 'bg-emerald-400 text-black ring-2 ring-emerald-300'
+                : 'bg-amber-400 hover:bg-amber-300 text-black'
+            }`}
             title="Download file directly to device"
           >
-            {savedSuccess ? <Check size={13} className="text-black" /> : <Download size={13} />}
-            <span>{savedSuccess ? 'Saved' : 'Download'}</span>
-          </a>
+            {downloadState === 'downloading' ? (
+              <>
+                <RefreshCw size={13} className="animate-spin text-black" />
+                <span>Saving...</span>
+              </>
+            ) : downloadState === 'saved' ? (
+              <>
+                <Check size={14} className="text-black" />
+                <span>✓ Saved!</span>
+              </>
+            ) : (
+              <>
+                <Download size={13} />
+                <span>Download</span>
+              </>
+            )}
+          </button>
         </div>
       </aside>
 
@@ -767,14 +858,142 @@ export const ExportDownloadToast: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleSaveFile}
-                  className="whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+                  className={`whitespace-nowrap shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer ${
+                    downloadState === 'downloading'
+                      ? 'bg-amber-500 text-black animate-pulse'
+                      : downloadState === 'saved'
+                      ? 'bg-emerald-400 text-black ring-2 ring-emerald-300'
+                      : 'bg-amber-400 hover:bg-amber-300 text-black'
+                  }`}
                   title="Download file to device"
                 >
-                  <Download size={13} />
-                  <span>{savedSuccess ? 'Saved' : 'Download'}</span>
+                  {downloadState === 'downloading' ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin text-black" />
+                      <span>Saving...</span>
+                    </>
+                  ) : downloadState === 'saved' ? (
+                    <>
+                      <Check size={14} className="text-black" />
+                      <span>✓ Saved!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={13} />
+                      <span>Download</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fallback Native Apps Share Modal (WhatsApp, Gmail, Drive, Downloads, Print) */}
+      {isShareModalOpen && activeExport && (
+        <div className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-3 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-5 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-bottom-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Smartphone size={18} className="text-blue-400" />
+                  <span>Share with Native Apps</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 truncate max-w-[280px]">
+                  {activeExport.fileName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 my-1">
+              {/* WhatsApp direct */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleShare('whatsapp');
+                  setIsShareModalOpen(false);
+                }}
+                className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/40 text-emerald-300 transition active:scale-95 cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-full bg-emerald-500 text-black flex items-center justify-center font-bold shadow">
+                  <Share2 size={20} />
+                </div>
+                <span className="text-xs font-bold">WhatsApp</span>
+                <span className="text-[10px] text-emerald-400/80">Direct Launch</span>
+              </button>
+
+              {/* Gmail / Mail */}
+              <a
+                href={`mailto:?subject=${encodeURIComponent('Export: ' + activeExport.fileName)}&body=${encodeURIComponent(
+                  `Falcon Rod Maker Export:\nFile: ${activeExport.fileName}\n(Saved to device Downloads)`
+                )}`}
+                onClick={() => {
+                  handleSaveFile();
+                  setIsShareModalOpen(false);
+                }}
+                className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-rose-950/60 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 transition active:scale-95 cursor-pointer no-underline"
+              >
+                <div className="w-10 h-10 rounded-full bg-rose-500 text-white flex items-center justify-center font-bold shadow">
+                  <Mail size={20} />
+                </div>
+                <span className="text-xs font-bold">Gmail / Email</span>
+                <span className="text-[10px] text-rose-400/80">Compose Email</span>
+              </a>
+
+              {/* Google Drive */}
+              <a
+                href="https://drive.google.com"
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => {
+                  handleSaveFile();
+                  setIsShareModalOpen(false);
+                }}
+                className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-blue-950/60 hover:bg-blue-900/60 border border-blue-500/40 text-blue-300 transition active:scale-95 cursor-pointer no-underline"
+              >
+                <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold shadow">
+                  <ExternalLink size={20} />
+                </div>
+                <span className="text-xs font-bold">Google Drive</span>
+                <span className="text-[10px] text-blue-400/80">Upload to Cloud</span>
+              </a>
+
+              {/* Device Downloads Folder */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleSaveFile();
+                  setIsShareModalOpen(false);
+                }}
+                className="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-amber-950/60 hover:bg-amber-900/60 border border-amber-500/40 text-amber-300 transition active:scale-95 cursor-pointer"
+              >
+                <div className="w-10 h-10 rounded-full bg-amber-400 text-black flex items-center justify-center font-bold shadow">
+                  <Download size={20} />
+                </div>
+                <span className="text-xs font-bold">Save to Device</span>
+                <span className="text-[10px] text-amber-400/80">Downloads Folder</span>
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center text-xs text-slate-300">
+              💡 File is saved in your device <strong className="text-white">Downloads</strong> folder. In any native app, tap 📎 to attach it.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsShareModalOpen(false)}
+              className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition cursor-pointer"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

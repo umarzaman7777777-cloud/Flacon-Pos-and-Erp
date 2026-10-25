@@ -375,16 +375,16 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
 
             {/* Entries Table */}
             <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
-              <table className="w-full text-left text-xs border-collapse min-w-[620px]">
-                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
+              <table className="w-full text-left text-xs border-collapse min-w-[920px]">
+                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
                   <tr>
-                    <th className="p-2.5">Date</th>
-                    <th className="p-2.5">Description / Item</th>
-                    <th className="p-2.5">Weight (kg)</th>
-                    <th className="p-2.5 text-right">Debit (Owed)</th>
-                    <th className="p-2.5 text-right">Credit (Paid)</th>
-                    <th className="p-2.5 text-right">Running Balance</th>
-                    <th className="p-2.5 text-center">Action</th>
+                    <th className="p-2.5 whitespace-nowrap min-w-[90px]">Date</th>
+                    <th className="p-2.5 min-w-[200px]">Description / Item</th>
+                    <th className="p-2.5 whitespace-nowrap min-w-[90px]">Weight (kg)</th>
+                    <th className="p-2.5 text-right whitespace-nowrap min-w-[110px]">Debit (Owed)</th>
+                    <th className="p-2.5 text-right whitespace-nowrap min-w-[115px]">Credit (Paid)</th>
+                    <th className="p-2.5 text-right whitespace-nowrap min-w-[130px]">Running Balance</th>
+                    <th className="p-2.5 text-center whitespace-nowrap min-w-[75px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--steel-line)]">
@@ -399,18 +399,18 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
                       <tr key={e.id} className="hover:bg-[var(--panel-raised)]/50">
                         <td className="p-2.5 whitespace-nowrap">{e.date}</td>
                         <td className="p-2.5">
-                          <div>{e.desc}</div>
+                          <div className="font-semibold text-[var(--text)]">{e.desc}</div>
                           {e.itemName && (
                             <div className="text-[10px] text-[var(--yellow)]">
                               {e.itemName} {e.rate ? `@ ${fmt(e.rate)}/kg` : ''}
                             </div>
                           )}
                         </td>
-                        <td className="p-2.5 text-[var(--text-dim)]">{e.weight ? `${e.weight} kg` : '—'}</td>
-                        <td className="p-2.5 text-right font-semibold text-[var(--red)]">
+                        <td className="p-2.5 text-[var(--text-dim)] whitespace-nowrap">{e.weight ? `${e.weight} kg` : '—'}</td>
+                        <td className="p-2.5 text-right font-semibold text-[var(--red)] whitespace-nowrap font-mono min-w-[110px]">
                           {e.debit ? fmt(e.debit) : '—'}
                         </td>
-                        <td className="p-2.5 text-right font-semibold text-[var(--green)]">
+                        <td className="p-2.5 text-right font-semibold text-[var(--green)] whitespace-nowrap font-mono min-w-[115px]">
                           {e.credit ? (
                             <div>
                               <div>{fmt(e.credit)}</div>
@@ -437,7 +437,7 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
                           ) : '—'}
                         </td>
                         <td
-                          className={`p-2.5 text-right font-bold ${
+                          className={`p-2.5 text-right font-bold whitespace-nowrap font-mono min-w-[130px] ${
                             e.runningBalance > 0
                               ? 'text-[var(--red)]'
                               : e.runningBalance < 0
@@ -445,8 +445,8 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
                               : 'text-gray-400'
                           }`}
                         >
-                          {fmt(Math.abs(e.runningBalance))}
-                          <span className="text-[9px] font-normal ml-0.5">
+                          <span className="tabular-nums">{fmt(Math.abs(e.runningBalance))}</span>
+                          <span className="text-[9px] font-normal ml-1 px-1 py-0.2 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] inline-block">
                             {e.runningBalance > 0 ? 'Dr' : e.runningBalance < 0 ? 'Cr' : ''}
                           </span>
                         </td>

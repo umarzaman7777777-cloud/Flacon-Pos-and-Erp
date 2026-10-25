@@ -484,6 +484,12 @@ export async function uploadBackupToGoogleDrive(
 
   const uploadedFile: GoogleDriveFile = await uploadRes.json();
   setLastDriveBackupTime(new Date().toISOString());
+
+  // Auto-prune older backups asynchronously to prevent Google Drive storage clutter (retains latest 6)
+  pruneGoogleDriveBackups(currentUploadToken, 6).catch(pErr => {
+    console.debug('[DriveBackup] Background pruning notice:', pErr);
+  });
+
   return uploadedFile;
 }
 
@@ -546,6 +552,41 @@ export async function deleteGoogleDriveBackup(accessToken: string, fileId: strin
   if (!res.ok && res.status !== 204) {
     const errText = await res.text();
     throw new Error(`Failed to delete backup from Google Drive: ${res.status} ${errText}`);
+  }
+}
+
+/**
+ * Prunes older backups in the user's Falcon Rod Maker POS Drive backup folder,
+ * keeping only the most recent `maxToKeep` backups (default: 6) to keep Google Drive clean
+ * and prevent hundreds of accumulated files.
+ */
+export async function pruneGoogleDriveBackups(accessToken: string, maxToKeep: number = 6): Promise<number> {
+  if (!isRealGoogleOAuthToken(accessToken) || maxToKeep <= 0) return 0;
+  try {
+    const { files } = await listGoogleDriveBackups(accessToken);
+    if (!files || files.length <= maxToKeep) return 0;
+
+    // Files are sorted descending by createdTime
+    const filesToDelete = files.slice(maxToKeep);
+    let deletedCount = 0;
+
+    for (const file of filesToDelete) {
+      try {
+        await deleteGoogleDriveBackup(accessToken, file.id);
+        deletedCount++;
+        console.debug(`[DriveBackup] Pruned obsolete backup: ${file.name}`);
+      } catch (err) {
+        console.warn(`[DriveBackup] Could not prune file ${file.id}:`, err);
+      }
+    }
+
+    if (deletedCount > 0) {
+      notifyWorkspaceSyncUpdated();
+    }
+    return deletedCount;
+  } catch (err) {
+    console.warn('[DriveBackup] Error during auto-pruning:', err);
+    return 0;
   }
 }
 

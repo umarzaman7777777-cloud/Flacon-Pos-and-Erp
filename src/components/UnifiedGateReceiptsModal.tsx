@@ -257,17 +257,17 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
                 <span>← Swipe sideways to view all gate receipts columns →</span>
               </div>
               <div className="overflow-x-auto max-w-full ledger-scroll-container">
-                <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+                <table className="w-full text-left text-xs border-collapse min-w-[950px]">
                 <thead>
-                  <tr className="border-b border-[var(--steel-line)] text-[10px] uppercase text-[var(--text-dim)] font-bold">
-                    <th className="py-2.5 px-3">Gate Sequence #</th>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Order / Reference</th>
-                    <th className="py-2.5 px-3">Customer / Supplier</th>
-                    <th className="py-2.5 px-3">Received By (Gate Staff)</th>
-                    <th className="py-2.5 px-3">Date & Time</th>
-                    <th className="py-2.5 px-3">Gate Pass File</th>
-                    <th className="py-2.5 px-3 text-right">Action</th>
+                  <tr className="border-b border-[var(--steel-line)] text-[10px] uppercase text-[var(--text-dim)] font-bold sticky top-0 bg-[var(--panel-raised)] z-10">
+                    <th className="py-2.5 px-3 whitespace-nowrap min-w-[120px]">Gate Sequence #</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap min-w-[100px]">Type</th>
+                    <th className="py-2.5 px-3 min-w-[180px]">Order / Reference</th>
+                    <th className="py-2.5 px-3 min-w-[180px]">Customer / Supplier</th>
+                    <th className="py-2.5 px-3 min-w-[160px]">Received By (Gate Staff)</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap min-w-[120px]">Date & Time</th>
+                    <th className="py-2.5 px-3 whitespace-nowrap min-w-[110px]">Gate Pass File</th>
+                    <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[80px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--steel-line)]/50">

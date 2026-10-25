@@ -833,6 +833,33 @@ export async function exportTableJPG(
   const isThermal80 = cfg.paperSize === '80mm';
   const isThermal58 = cfg.paperSize === '58mm';
 
+  // Dynamic Column Weighting & Min Width Calculation
+  const getColSpecs = (h: string) => {
+    const s = String(h).toLowerCase();
+    if (s.includes('desc') || s.includes('item') || s.includes('material') || s.includes('note') || s.includes('product')) {
+      return { weight: isThermal58 ? 2.0 : 2.8, min: isThermal58 ? 120 : 220 };
+    }
+    if (s.includes('balance') || s.includes('due') || s.includes('paid') || s.includes('debit') || s.includes('credit') || s.includes('amount') || s.includes('wages') || s.includes('total')) {
+      return { weight: isThermal58 ? 1.1 : 1.35, min: isThermal58 ? 65 : 120 };
+    }
+    if (s.includes('bank') || s.includes('account') || s.includes('a/c')) {
+      return { weight: 1.25, min: isThermal58 ? 70 : 125 };
+    }
+    if (s.includes('date')) {
+      return { weight: 0.9, min: isThermal58 ? 55 : 95 };
+    }
+    if (s.includes('time')) {
+      return { weight: 0.7, min: isThermal58 ? 45 : 70 };
+    }
+    if (s.includes('method') || s.includes('status') || s.includes('gate') || s.includes('ref') || s.includes('cheque') || s.includes('tax')) {
+      return { weight: 0.95, min: isThermal58 ? 55 : 95 };
+    }
+    return { weight: 1.1, min: isThermal58 ? 60 : 105 };
+  };
+
+  const colSpecs = headers.map(h => getColSpecs(h));
+  const minRequiredContentWidth = colSpecs.reduce((sum, c) => sum + c.min, 0);
+
   let width = 1450;
   let margin = 40;
   let rowHeight = 38;
@@ -848,9 +875,31 @@ export async function exportTableJPG(
     width = 1100;
     margin = 36;
     rowHeight = 36;
+  } else {
+    // Landscape report: expand canvas if many columns exist so columns have ample breathing room
+    if (minRequiredContentWidth + margin * 2 > width) {
+      width = minRequiredContentWidth + margin * 2;
+    }
   }
 
   const contentWidth = width - margin * 2;
+
+  // Proportional weighted column widths
+  const totalWeight = colSpecs.reduce((sum, c) => sum + c.weight, 0);
+  const rawWidths = colSpecs.map(c => (c.weight / Math.max(0.1, totalWeight)) * contentWidth);
+  const clampedWidths = rawWidths.map((w, i) => Math.max(w, colSpecs[i].min));
+  const sumClamped = clampedWidths.reduce((a, b) => a + b, 0);
+  const colScale = contentWidth / Math.max(1, sumClamped);
+  const finalColWidths = clampedWidths.map(w => w * colScale);
+
+  // Cumulative positions
+  const colX: number[] = [];
+  let curColX = margin;
+  for (let i = 0; i < finalColWidths.length; i++) {
+    colX.push(curColX);
+    curColX += finalColWidths[i];
+  }
+
   const tableRows = rows.slice(0, 200); // support up to 200 rows in single high-res image
   const extraFooterHeight = (cfg.customNote || balanceFooterText ? 90 : 50) + (cfg.showSignatureLine ? 90 : 0);
   const height = Math.max(780, 260 + tableRows.length * rowHeight + extraFooterHeight);
@@ -871,6 +920,42 @@ export async function exportTableJPG(
   // Background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
+
+  // Safe Text Drawing Helper with clipping & graceful truncation
+  const isColRightAligned = (headerStr: string) => {
+    const s = String(headerStr).toLowerCase();
+    return s.includes('debit') || s.includes('credit') || s.includes('balance') || s.includes('amount') || s.includes('wages') || s.includes('total') || s.includes('rate') || s.includes('tax');
+  };
+
+  const drawSafeText = (
+    text: string,
+    x: number,
+    w: number,
+    yPos: number,
+    align: 'left' | 'right' | 'center' = 'left',
+    padding: number = 8
+  ) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, yPos - 22, w, rowHeight + 4);
+    ctx.clip();
+
+    const maxW = Math.max(10, w - padding * 2);
+    let str = String(text ?? '').replace(/\n/g, ' ').trim();
+    if (ctx.measureText(str).width > maxW) {
+      while (str.length > 1 && ctx.measureText(str + '…').width > maxW) {
+        str = str.slice(0, -1);
+      }
+      str = str + '…';
+    }
+
+    const prevAlign = ctx.textAlign;
+    ctx.textAlign = align;
+    const targetX = align === 'right' ? x + w - padding : align === 'center' ? x + w / 2 : x + padding;
+    ctx.fillText(str, targetX, yPos);
+    ctx.textAlign = prevAlign;
+    ctx.restore();
+  };
 
   // Optional Accent / Hazard Top Stripe
   let headerY = 16;
@@ -935,7 +1020,6 @@ export async function exportTableJPG(
 
   // Table Columns Setup
   let y = headerY + headerHeight + (isThermal58 ? 14 : 20);
-  const colWidth = contentWidth / Math.max(1, headers.length);
 
   // Column Header Row
   ctx.fillStyle = cfg.tableHeaderBgColor || '#2d3748';
@@ -946,7 +1030,15 @@ export async function exportTableJPG(
   ctx.fillStyle = cfg.tableHeaderTextColor || '#f8fafc';
   ctx.font = `bold ${isThermal58 ? '10px' : '12px'} ${chosenFont}`;
   headers.forEach((h, i) => {
-    ctx.fillText(String(h).toUpperCase().slice(0, 22), margin + 12 + i * colWidth, y + (isThermal58 ? 20 : 24));
+    const isRight = isColRightAligned(h);
+    drawSafeText(
+      String(h).toUpperCase(),
+      colX[i],
+      finalColWidths[i],
+      y + (isThermal58 ? 20 : 24),
+      isRight ? 'right' : 'left',
+      isThermal58 ? 4 : 8
+    );
   });
 
   y += isThermal58 ? 36 : 42;
@@ -966,8 +1058,16 @@ export async function exportTableJPG(
     ctx.fillStyle = '#1e293b';
     ctx.font = `${isThermal58 ? '10px' : '12px'} ${chosenFont}`;
     row.forEach((cell, i) => {
-      const txt = String(cell ?? '').replace(/\n/g, ' ').slice(0, 30);
-      ctx.fillText(txt, margin + 12 + i * colWidth, y + (isThermal58 ? 19 : 24));
+      const headerName = headers[i] || '';
+      const isRight = isColRightAligned(headerName);
+      drawSafeText(
+        String(cell ?? ''),
+        colX[i],
+        finalColWidths[i],
+        y + (isThermal58 ? 19 : 24),
+        isRight ? 'right' : 'left',
+        isThermal58 ? 4 : 8
+      );
     });
 
     y += rowHeight;

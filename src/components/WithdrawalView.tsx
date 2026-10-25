@@ -367,15 +367,15 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
 
       {/* Withdrawals Log Table */}
       <div className="border border-[var(--steel-line)] rounded-xl overflow-x-auto max-w-full bg-[var(--panel)] ledger-scroll-container">
-        <table className="w-full text-left text-xs border-collapse min-w-[620px]">
-          <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
+        <table className="w-full text-left text-xs border-collapse min-w-[850px]">
+          <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
             <tr>
-              <th className="p-3">Date</th>
-              <th className="p-3">Partner / Receiver</th>
-              <th className="p-3">Source & Channel</th>
-              <th className="p-3 text-right">Amount</th>
-              <th className="p-3">Note</th>
-              <th className="p-3 text-center">Action / Status</th>
+              <th className="p-3 whitespace-nowrap min-w-[90px]">Date</th>
+              <th className="p-3 min-w-[180px]">Partner / Receiver</th>
+              <th className="p-3 min-w-[180px]">Source & Channel</th>
+              <th className="p-3 text-right whitespace-nowrap min-w-[120px]">Amount</th>
+              <th className="p-3 min-w-[180px]">Note</th>
+              <th className="p-3 text-center whitespace-nowrap min-w-[80px]">Action / Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--steel-line)]">
@@ -411,7 +411,7 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
                       </div>
                     )}
                   </td>
-                  <td className="p-3 text-right font-bold text-sm text-[var(--text)]">{fmt(w.amount)}</td>
+                  <td className="p-3 text-right font-bold text-sm text-[var(--text)] whitespace-nowrap font-mono min-w-[120px]">{fmt(w.amount)}</td>
                   <td className="p-3 text-[var(--text-dim)]">{w.note || w.desc || '—'}</td>
                   <td className="p-3 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-1">

@@ -69,7 +69,8 @@ import {
   setDriveAutoBackupIntervalHours,
   getNextDriveBackupDate,
   formatBackupCountdown,
-  getLastDriveBackupTime
+  getLastDriveBackupTime,
+  pruneGoogleDriveBackups
 } from '../utils/googleDriveBackup';
 import { GoogleSheetsTab } from './GoogleSheetsTab';
 import { AuthStatus } from './AuthStatus';
@@ -166,6 +167,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
   const [nextScheduledDriveBackup, setNextScheduledDriveBackup] = useState<string | null>(null);
   const [driveBackupCountdown, setDriveBackupCountdown] = useState<string | null>(null);
   const [isUploadingAllFiles, setIsUploadingAllFiles] = useState(false);
+  const [isPruningDrive, setIsPruningDrive] = useState(false);
 
   useEffect(() => {
     if (!autoDriveBackup || !driveTokenInfo?.token) {
@@ -419,6 +421,27 @@ export const BackupView: React.FC<BackupViewProps> = ({
       setDriveError(err?.message || 'Failed to backup all files to Google Drive.');
     } finally {
       setIsUploadingAllFiles(false);
+    }
+  };
+
+  const handlePruneDriveBackups = async () => {
+    const token = driveTokenInfo?.token;
+    if (!token) return;
+    setIsPruningDrive(true);
+    setDriveError(null);
+    try {
+      const pruned = await pruneGoogleDriveBackups(token, 6);
+      if (pruned > 0) {
+        setDriveSuccessMsg(`✓ Cleaned up ${pruned} older backup files. Retaining latest 6 snapshots.`);
+      } else {
+        setDriveSuccessMsg('✓ Backup folder already optimized! Retaining latest 6 snapshots.');
+      }
+      setTimeout(() => setDriveSuccessMsg(null), 5000);
+      await handleRefreshDriveFiles(token);
+    } catch (err: any) {
+      setDriveError('Failed to prune backups: ' + (err?.message || err));
+    } finally {
+      setIsPruningDrive(false);
     }
   };
 
@@ -1754,6 +1777,19 @@ export const BackupView: React.FC<BackupViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Smart Retention & Single Backup Policy Badge */}
+              <div className="p-3 rounded-lg bg-sky-950/40 border border-sky-500/30 flex items-start gap-2.5 text-xs">
+                <ShieldCheck size={16} className="text-sky-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="text-sky-300 font-bold font-sans">
+                    Single Backup Schedule & Smart Retention Active
+                  </div>
+                  <p className="text-[11px] text-sky-200/80 font-sans leading-relaxed">
+                    Automated backup generates exactly 1 clean database snapshot only when your selected interval arrives ({autoDriveBackupInterval === 24 ? 'Daily 24h' : `Every ${autoDriveBackupInterval}h`}). The system automatically preserves the latest 6 snapshots and prunes older files to prevent Google Drive storage clutter.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1767,7 +1803,22 @@ export const BackupView: React.FC<BackupViewProps> = ({
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handlePruneDriveBackups}
+                  disabled={isPruningDrive || !driveTokenInfo || driveFiles.length === 0}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    driveFiles.length > 6
+                      ? 'bg-amber-500/20 border border-amber-500/50 hover:bg-amber-500/30 text-amber-300 shadow-xs'
+                      : 'bg-white/5 border border-white/10 text-[var(--text-dim)] hover:text-[var(--text)]'
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  title={driveFiles.length > 6 ? `Prune ${driveFiles.length - 6} older obsolete backups` : 'Clean folder & retain latest 6 snapshots'}
+                >
+                  <Trash2 size={12} className={isPruningDrive ? 'animate-spin text-amber-400' : 'text-amber-400'} />
+                  <span>{isPruningDrive ? 'Pruning...' : driveFiles.length > 6 ? `Clean Excess (${driveFiles.length - 6})` : 'Prune (Keep 6)'}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleRefreshDriveFiles()}

@@ -396,15 +396,15 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
 
       {/* Expenses Table */}
       <div className="border border-[var(--steel-line)] rounded-xl overflow-x-auto max-w-full bg-[var(--panel)] ledger-scroll-container">
-        <table className="w-full text-left text-xs border-collapse min-w-[640px]">
-          <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)]">
+        <table className="w-full text-left text-xs border-collapse min-w-[850px]">
+          <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
             <tr>
-              <th className="p-3">Date</th>
-              <th className="p-3">Description</th>
-              <th className="p-3">Category</th>
-              <th className="p-3 text-right">Amount</th>
-              <th className="p-3">Payment Method & Channels</th>
-              <th className="p-3 text-center">Action</th>
+              <th className="p-3 whitespace-nowrap min-w-[90px]">Date</th>
+              <th className="p-3 min-w-[200px]">Description</th>
+              <th className="p-3 whitespace-nowrap min-w-[120px]">Category</th>
+              <th className="p-3 text-right whitespace-nowrap min-w-[120px]">Amount</th>
+              <th className="p-3 min-w-[180px]">Payment Method & Channels</th>
+              <th className="p-3 text-center whitespace-nowrap min-w-[75px]">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--steel-line)]">
@@ -424,7 +424,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({
                       {e.category}
                     </span>
                   </td>
-                  <td className="p-3 text-right font-bold text-sm text-[var(--red)]">{fmt(e.amount)}</td>
+                  <td className="p-3 text-right font-bold text-sm text-[var(--red)] whitespace-nowrap font-mono min-w-[120px]">{fmt(e.amount)}</td>
                   <td className="p-3 text-[var(--text-dim)]">
                     <div className="font-semibold text-[var(--text)]">{e.method || 'Cash'}</div>
                     {(e.paidBy || e.paidTo) && (

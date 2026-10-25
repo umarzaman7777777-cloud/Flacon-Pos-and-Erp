@@ -552,18 +552,18 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
 
             {/* Entries Table */}
             <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[45vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
-              <table className="w-full text-left text-xs border-collapse min-w-[720px]">
+              <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
                 <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
                   <tr>
-                    {colConfig.showDate && <th className="p-2.5">Date</th>}
-                    {colConfig.showTime && <th className="p-2.5">Time</th>}
-                    {colConfig.showDesc && <th className="p-2.5">Description</th>}
-                    {colConfig.showDebit && <th className="p-2.5 text-right">Debit (Due)</th>}
-                    {colConfig.showCredit && <th className="p-2.5 text-right">Credit (Paid)</th>}
-                    {colConfig.showBalance && <th className="p-2.5 text-right">Running Balance</th>}
-                    {colConfig.showMethod && <th className="p-2.5">Method & Payment Details</th>}
-                    {colConfig.showTax && <th className="p-2.5 text-right">Tax</th>}
-                    <th className="p-2.5 text-center">Action</th>
+                    {colConfig.showDate && <th className="p-2.5 whitespace-nowrap min-w-[90px]">Date</th>}
+                    {colConfig.showTime && <th className="p-2.5 whitespace-nowrap min-w-[65px]">Time</th>}
+                    {colConfig.showDesc && <th className="p-2.5 min-w-[200px]">Description</th>}
+                    {colConfig.showDebit && <th className="p-2.5 text-right whitespace-nowrap min-w-[110px]">Debit (Due)</th>}
+                    {colConfig.showCredit && <th className="p-2.5 text-right whitespace-nowrap min-w-[115px]">Credit (Paid)</th>}
+                    {colConfig.showBalance && <th className="p-2.5 text-right whitespace-nowrap min-w-[130px]">Running Balance</th>}
+                    {colConfig.showMethod && <th className="p-2.5 whitespace-nowrap min-w-[140px]">Method & Payment Details</th>}
+                    {colConfig.showTax && <th className="p-2.5 text-right whitespace-nowrap min-w-[90px]">Tax</th>}
+                    <th className="p-2.5 text-center whitespace-nowrap min-w-[75px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--steel-line)]">
@@ -589,18 +589,18 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                           </td>
                         )}
                         {colConfig.showDebit && (
-                          <td className="p-2.5 text-right font-semibold text-[var(--red)]">
+                          <td className="p-2.5 text-right font-semibold text-[var(--red)] whitespace-nowrap font-mono min-w-[110px]">
                             {e.debit ? fmt(e.debit) : '—'}
                           </td>
                         )}
                         {colConfig.showCredit && (
-                          <td className="p-2.5 text-right font-semibold text-[var(--green)]">
+                          <td className="p-2.5 text-right font-semibold text-[var(--green)] whitespace-nowrap font-mono min-w-[115px]">
                             {e.credit ? fmt(e.credit) : '—'}
                           </td>
                         )}
                         {colConfig.showBalance && (
                           <td
-                            className={`p-2.5 text-right font-bold ${
+                            className={`p-2.5 text-right font-bold whitespace-nowrap font-mono min-w-[130px] ${
                               e.runningBalance > 0
                                 ? 'text-[var(--red)]'
                                 : e.runningBalance < 0
@@ -608,8 +608,8 @@ export const FactoriesView: React.FC<FactoriesViewProps> = ({
                                 : 'text-gray-400'
                             }`}
                           >
-                            {fmt(Math.abs(e.runningBalance))}
-                            <span className="text-[9px] font-normal ml-0.5">
+                            <span className="tabular-nums">{fmt(Math.abs(e.runningBalance))}</span>
+                            <span className="text-[9px] font-normal ml-1 px-1 py-0.2 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text-dim)] inline-block">
                               {e.runningBalance > 0 ? 'Dr' : e.runningBalance < 0 ? 'Cr' : ''}
                             </span>
                           </td>

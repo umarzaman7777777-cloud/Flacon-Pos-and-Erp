@@ -43,6 +43,9 @@ export interface EditableLedgerEntryData {
   itemName?: string;
   weightIn?: number;
   itemsIn?: number;
+  itemUnit?: string;
+  unitType?: string;
+  weightUnit?: 'kg' | 'grams';
   weight?: string | number;
   category?: string;
   workType?: string;
@@ -120,7 +123,10 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
   const [rate, setRate] = useState('');
   const [color, setColor] = useState('');
   const [weight, setWeight] = useState('');
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'grams'>('kg');
   const [itemsIn, setItemsIn] = useState('');
+  const [itemUnit, setItemUnit] = useState('Pcs');
+  const [unitType, setUnitType] = useState<'weight' | 'quantity' | 'both'>('weight');
   const [stockName, setStockName] = useState('');
   const [workType, setWorkType] = useState('');
   const [category, setCategory] = useState('');
@@ -151,7 +157,10 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
       setRate(entry.rate !== undefined ? String(entry.rate) : '');
       setColor(entry.color || '');
       setWeight(entry.weightIn !== undefined ? String(entry.weightIn) : (entry.weight !== undefined ? String(entry.weight) : ''));
+      setWeightUnit(entry.weightUnit || 'kg');
       setItemsIn(entry.itemsIn !== undefined ? String(entry.itemsIn) : '');
+      setItemUnit(entry.itemUnit || 'Pcs');
+      setUnitType((entry.unitType as any) || (entry.weightIn && entry.itemsIn ? 'both' : entry.itemsIn ? 'quantity' : 'weight'));
       setStockName(entry.stockName || entry.itemName || '');
       setWorkType(entry.workType || '');
       setCategory(entry.category || '');
@@ -198,7 +207,10 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
       color: color.trim() || undefined,
       weightIn: numericWeight,
       weight: numericWeight,
+      weightUnit: weightUnit,
       itemsIn: numericItems,
+      itemUnit: itemUnit.trim() || undefined,
+      unitType: unitType,
       stockName: stockName.trim() || undefined,
       itemName: stockName.trim() || undefined,
       workType: workType.trim() || undefined,
@@ -535,30 +547,67 @@ export const EditLedgerEntryModal: React.FC<EditLedgerEntryModalProps> = ({
                     />
                   </div>
                 )}
-                {(entry.weightIn !== undefined || entry.weight !== undefined) && (
-                  <div>
-                    <label className="block text-[10px] text-[var(--text-dim)] mb-1">Weight (kg)</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={weight}
-                      onChange={e => setWeight(e.target.value)}
-                      placeholder="e.g. 500"
-                      className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-mono"
-                    />
-                  </div>
-                )}
-                {entry.itemsIn !== undefined && (
-                  <div>
-                    <label className="block text-[10px] text-[var(--text-dim)] mb-1">Items / Bundles</label>
-                    <input
-                      type="number"
-                      value={itemsIn}
-                      onChange={e => setItemsIn(e.target.value)}
-                      placeholder="e.g. 100"
-                      className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-mono"
-                    />
-                  </div>
+                {(entry.weightIn !== undefined || entry.itemsIn !== undefined || entry.stockName !== undefined || entry.weight !== undefined) && (
+                  <>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] text-[var(--text-dim)]">Weight ({weightUnit})</label>
+                        <div className="inline-flex rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setWeightUnit('kg')}
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold font-mono transition cursor-pointer ${
+                              weightUnit === 'kg' ? 'bg-amber-500 text-black' : 'text-[var(--text-dim)] hover:text-[var(--text)]'
+                            }`}
+                          >
+                            kg
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWeightUnit('grams')}
+                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold font-mono transition cursor-pointer ${
+                              weightUnit === 'grams' ? 'bg-amber-500 text-black' : 'text-[var(--text-dim)] hover:text-[var(--text)]'
+                            }`}
+                          >
+                            grams
+                          </button>
+                        </div>
+                      </div>
+                      <input
+                        type="number"
+                        step="any"
+                        value={weight}
+                        onChange={e => setWeight(e.target.value)}
+                        placeholder={`Weight in ${weightUnit} (e.g. ${weightUnit === 'grams' ? '500' : '0.5'})`}
+                        className="w-full px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-[var(--text-dim)] mb-1">Items / Quantity</label>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="number"
+                          value={itemsIn}
+                          onChange={e => setItemsIn(e.target.value)}
+                          placeholder="e.g. 500"
+                          className="flex-1 px-2.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] font-mono"
+                        />
+                        <select
+                          value={itemUnit}
+                          onChange={e => setItemUnit(e.target.value)}
+                          className="w-20 px-1.5 py-1.5 rounded bg-[var(--panel)] border border-[var(--steel-line)] text-[var(--text)] text-xs font-mono"
+                        >
+                          <option value="Pcs">Pcs</option>
+                          <option value="Bundles">Bundles</option>
+                          <option value="Boxes">Boxes</option>
+                          <option value="Cartons">Cartons</option>
+                          <option value="Units">Units</option>
+                          <option value="Sets">Sets</option>
+                          <option value="Nos">Nos</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
                 )}
                 {(entry.stockName !== undefined || entry.itemName !== undefined) && (
                   <div>
