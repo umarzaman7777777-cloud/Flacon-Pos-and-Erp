@@ -8,31 +8,26 @@ export function registerPwaServiceWorker() {
     return;
   }
 
-  // Register on window load to not block initial page render
+  // In development and AI Studio preview environment, unregister any active service worker
+  // to prevent it from intercepting Vite dev-server modules or causing preview load stalls.
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister().catch(() => {});
+      }
+    }).catch(() => {});
+    return;
+  }
+
+  // In production builds (or standalone installed PWA), register service worker for offline support
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then((registration) => {
-        console.log('[PWA] Service Worker registered successfully with scope:', registration.scope);
-
-        // Check for updates periodically
-        registration.addEventListener('updatefound', () => {
-          const installingWorker = registration.installing;
-          if (installingWorker) {
-            installingWorker.addEventListener('statechange', () => {
-              if (installingWorker.state === 'installed') {
-                if (navigator.serviceWorker.controller) {
-                  console.log('[PWA] New version available! Content will update on next launch.');
-                } else {
-                  console.log('[PWA] Content is precached for offline use.');
-                }
-              }
-            });
-          }
-        });
+        console.debug('[PWA] Service Worker registered with scope:', registration.scope);
       })
       .catch((error) => {
-        console.warn('[PWA] Service Worker registration failed:', error);
+        console.debug('[PWA] Service Worker registration notice:', error);
       });
   });
 }

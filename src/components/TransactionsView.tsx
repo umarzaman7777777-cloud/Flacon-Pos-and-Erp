@@ -547,7 +547,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 font-mono max-w-full overflow-x-hidden break-words">
+    <div className="space-y-4 font-mono max-w-full overflow-x-hidden">
       {/* Top Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>
@@ -825,18 +825,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </div>
           <div className="rounded-xl border border-[var(--steel-line)] overflow-hidden bg-[var(--panel)] shadow-sm">
             <div className="overflow-x-auto max-w-full ledger-scroll-container">
-              <table className="w-full text-left text-xs divide-y divide-[var(--steel-line)] font-mono min-w-[780px]">
+              <table className="w-full text-left text-xs divide-y divide-[var(--steel-line)] font-mono min-w-[1100px]">
               <thead className="bg-[var(--panel-raised)] text-[10px] uppercase font-bold text-[var(--text-dim)] tracking-wider">
                 <tr>
-                  <th className="px-3 py-3 w-8 text-center"></th>
-                  <th className="px-3 py-3">Order ID</th>
-                  <th className="px-3 py-3">Date & Time</th>
-                  <th className="px-3 py-3">Customer / Workshop</th>
-                  <th className="px-3 py-3">Items Booked</th>
-                  <th className="px-3 py-3 text-right">Total Amount</th>
-                  <th className="px-3 py-3 text-center">Payment</th>
-                  <th className="px-3 py-3 text-center">Gate Pass</th>
-                  <th className="px-3 py-3 text-right">Actions & Dossier</th>
+                  <th className="px-3 py-3 w-8 text-center shrink-0"></th>
+                  <th className="px-3 py-3 whitespace-nowrap w-24">Order ID</th>
+                  <th className="px-3 py-3 whitespace-nowrap w-28">Date & Time</th>
+                  <th className="px-3 py-3 min-w-[190px]">Customer / Workshop</th>
+                  <th className="px-3 py-3 min-w-[280px]">Items Booked</th>
+                  <th className="px-3 py-3 text-right whitespace-nowrap w-28">Total Amount</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap w-24">Payment</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap w-32">Gate Pass</th>
+                  <th className="px-3 py-3 text-right whitespace-nowrap min-w-[220px]">Actions & Dossier</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--steel-line)]/60">
@@ -890,8 +890,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         </td>
 
                         {/* Customer / Workshop */}
-                        <td className="px-3 py-3">
-                          <div className="font-bold text-[var(--text)] font-sans flex items-center gap-1.5">
+                        <td className="px-3 py-3 min-w-[190px]">
+                          <div className="font-bold text-[var(--text)] font-sans flex items-center gap-1.5 whitespace-nowrap">
                             <span className="truncate max-w-[180px]">{txn.factory || 'Walk-in Customer'}</span>
                           </div>
                           {(() => {
@@ -908,12 +908,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         </td>
 
                         {/* Items Booked */}
-                        <td className="px-3 py-3">
-                          <div className="font-semibold text-[var(--text)] font-sans line-clamp-1 max-w-[220px]">
+                        <td className="px-3 py-3 min-w-[280px]">
+                          <div className="font-semibold text-[var(--text)] font-sans truncate max-w-[260px]" title={txn.itemsSummary}>
                             {txn.itemsSummary}
                           </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-[var(--text-dim)]">
+                          <div className="flex items-center gap-2 mt-1 whitespace-nowrap">
+                            <span className="text-[10px] text-[var(--text-dim)] whitespace-nowrap shrink-0">
                               {parsedItems.length} {parsedItems.length === 1 ? 'item' : 'items'} ({txn.itemCount || 1} pcs)
                             </span>
                             <button
@@ -922,7 +922,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                                 e.stopPropagation();
                                 toggleBatchDetails(txn.id);
                               }}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition cursor-pointer border ${
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition cursor-pointer border whitespace-nowrap shrink-0 ${
                                 isBatchExpanded
                                   ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-xs'
                                   : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-amber-300 hover:border-amber-500/40 border-[var(--steel-line)]'
@@ -930,7 +930,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                               title="Expand Batch Details & Logistics Tracking"
                             >
                               <Barcode size={11} className={isBatchExpanded ? 'text-amber-400' : 'text-[var(--text-dim)]'} />
-                              <span>{isBatchExpanded ? 'Hide Batch' : 'Expand Batch Details'}</span>
+                              <span className="whitespace-nowrap">{isBatchExpanded ? 'Hide Batch' : 'Batch Details'}</span>
                               {isBatchExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
                             </button>
                           </div>
