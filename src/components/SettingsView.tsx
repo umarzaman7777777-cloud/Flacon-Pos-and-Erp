@@ -19,7 +19,6 @@ import {
   Bell,
   Grid,
   Ruler,
-  Image as 
   Smartphone,
   Fingerprint,
   Mail,
@@ -40,7 +39,10 @@ import {
   ArrowRight,
   FileDown,
   Bug,
-  Save
+  Save,
+  ChevronDown,
+  ChevronUp,
+  Search
 } from 'lucide-react';
 import { OAuthDebugLogsSection } from './OAuthDebugLogsSection';
 import { getOAuthDebugLogs, OAUTH_LOG_EVENT } from '../utils/oauthDebugLogger';
@@ -196,6 +198,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [brandingSavedMsg, setBrandingSavedMsg] = useState(false);
   const [visualSavedMsg, setVisualSavedMsg] = useState(false);
   const [allSettingsSavedMsg, setAllSettingsSavedMsg] = useState(false);
+
+  // Open / Closed subdivision sections state (Clicking a line toggles its subdivision details)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
+    if (initialTab && initialTab !== 'all') {
+      return new Set([initialTab]);
+    }
+    // Clean default: starts with branding open so user sees one clear section, not a messy wall!
+    return new Set(['branding']);
+  });
+
+  const [settingsSearch, setSettingsSearch] = useState('');
+  const [recentlySavedSection, setRecentlySavedSection] = useState<string | null>(null);
+
+  const toggleSection = (sectionId: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  };
+
+  const matchesSearch = (sectionId: string) => {
+    if (!settingsSearch.trim()) return true;
+    const q = settingsSearch.toLowerCase();
+    const map: Record<string, string> = {
+      branding: 'branding business company name tagline address invoice header workshop',
+      security: 'security pin lock password autolock biometric fingerprint timeout screen minimize',
+      printer: 'printer hardware bluetooth thermal esc pos wifi usb direct paper 58mm 80mm test print',
+      visual_studio: 'theme visual studio palette dark light blueprint foundry amber grid density font size appearance',
+      logo: 'logo lock screen move resize height inline stacked frame alignment',
+      export_studio: 'export pdf jpg studio invoice paper a4 a5 orientation margins watermark signature',
+      sync: 'sync backup cloud database sql json export latency offline online diagnostic restore',
+      permissions: 'permissions mobile push notification camera microphone storage sensor hardware',
+      debug_logs: 'debug logs oauth error trace google gmail'
+    };
+    return (map[sectionId] || '').includes(q);
+  };
+
+  const isSectionOpen = (sectionId: string) => {
+    if (settingsSearch.trim()) {
+      return matchesSearch(sectionId);
+    }
+    return expandedSections.has(sectionId);
+  };
+
+  const handleExpandAll = () => {
+    setExpandedSections(new Set([
+      'branding', 'security', 'printer', 'visual_studio', 'logo', 'export_studio', 'sync', 'permissions', 'debug_logs'
+    ]));
+  };
+
+  const handleCollapseAll = () => {
+    setExpandedSections(new Set());
+  };
 
   // Document Export Studio Configuration State
   const [exportConf, setExportConf] = useState<ExportDocumentConfig>(() => getSavedExportConfig());
@@ -457,8 +517,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [showSettingsRawReport, setShowSettingsRawReport] = useState(false);
 
   useEffect(() => {
-    if (initialTab) {
+    if (initialTab && initialTab !== 'all') {
       setActiveSection(initialTab);
+      setExpandedSections(new Set([initialTab]));
     }
   }, [initialTab, printerTabTrigger]);
 
@@ -752,6 +813,196 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const currentColor = LOGO_THEME_OPTIONS.find(o => o.id === activeLogoTheme)?.color || '#f59e0b';
 
+  const handleSaveSpecificSection = (sectionId: string) => {
+    if (sectionId === 'branding') {
+      handleSaveBranding();
+    } else if (sectionId === 'security') {
+      if (/^\d{3,8}$/.test(cleanPin)) {
+        onUpdatePin(cleanPin);
+        if (onUpdateRecoveryAnswer && cleanRecovery) {
+          onUpdateRecoveryAnswer(cleanRecovery);
+        }
+        if (onUpdateAutolock) {
+          onUpdateAutolock(selectedAutolockSec, lockOnMinimizeVal);
+        }
+        const updated = persistStateDirectly({
+          pin: cleanPin,
+          recoveryAnswer: cleanRecovery || undefined,
+          autolockSeconds: selectedAutolockSec,
+          autolockMinutes: Math.round(selectedAutolockSec / 60),
+          lockOnMinimize: lockOnMinimizeVal
+        });
+        setCommittedSnapshot(prev => ({
+          ...prev,
+          pin: cleanPin,
+          recoveryAnswer: cleanRecovery,
+          autolockSeconds: selectedAutolockSec,
+          lockOnMinimize: lockOnMinimizeVal
+        }));
+        setLastCommittedAt(Date.now());
+        onForceSyncNow?.(updated || undefined);
+        triggerHaptic('success');
+        setPinSavedMsg(true);
+        setTimeout(() => setPinSavedMsg(false), 3000);
+      }
+    } else if (sectionId === 'printer') {
+      handleSavePrinterSettings();
+    } else if (sectionId === 'visual_studio' || sectionId === 'logo') {
+      handleSaveVisualSettings();
+    } else if (sectionId === 'export_studio') {
+      handleUpdateExportConfig({});
+    } else {
+      handleSaveAllSettings();
+    }
+
+    setRecentlySavedSection(sectionId);
+    setTimeout(() => {
+      setRecentlySavedSection(prev => (prev === sectionId ? null : prev));
+    }, 3000);
+  };
+
+  const renderLineHeader = (
+    sectionId: string,
+    title: string,
+    subtitle: string,
+    liveSummary: string,
+    icon: React.ElementType,
+    iconColor: string,
+    iconBg: string,
+    isSectionDirty: boolean,
+    badge?: string
+  ) => {
+    const isOpen = isSectionOpen(sectionId);
+    const wasJustSaved = recentlySavedSection === sectionId;
+    const IconComp = icon;
+
+    return (
+      <button
+        type="button"
+        id={`setting-line-${sectionId}`}
+        onClick={() => toggleSection(sectionId)}
+        className={`w-full p-4 sm:p-4.5 flex items-center justify-between gap-3 text-left transition-all duration-200 cursor-pointer select-none ${
+          isOpen
+            ? 'bg-[var(--panel-raised)]/70 border-b border-[var(--steel-line)]'
+            : 'hover:bg-[var(--panel-raised)]/40'
+        }`}
+      >
+        <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+          <div className={`p-2.5 rounded-xl border shrink-0 transition-all ${
+            isOpen
+              ? 'bg-[var(--yellow)] text-black border-[var(--yellow)] shadow-xs scale-105'
+              : `${iconBg} ${iconColor}`
+          }`}>
+            <IconComp size={19} strokeWidth={2.2} />
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`font-bold text-sm sm:text-base font-sans transition-colors ${
+                isOpen ? 'text-[var(--yellow)]' : 'text-[var(--text)]'
+              }`}>
+                {title}
+              </span>
+
+              {isSectionDirty && (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-500 text-black animate-pulse">
+                  Unsaved Changes
+                </span>
+              )}
+
+              {wasJustSaved && (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 animate-bounce">
+                  ✓ Saved
+                </span>
+              )}
+
+              {badge && !isSectionDirty && !wasJustSaved && (
+                <span className="hidden sm:inline-block px-2 py-0.2 rounded-full text-[10px] font-bold uppercase bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text-dim)]">
+                  {badge}
+                </span>
+              )}
+            </div>
+
+            <p className="text-[11px] text-[var(--text-dim)] truncate mt-0.5 max-w-sm sm:max-w-xl">
+              {subtitle}
+            </p>
+
+            <div className="text-[11px] font-mono font-medium text-amber-400/90 truncate mt-1 flex items-center gap-1.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+              <span>{liveSummary}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span className={`text-[11px] font-bold hidden sm:inline-block transition-colors ${
+            isOpen ? 'text-[var(--yellow)]' : 'text-[var(--text-dim)]'
+          }`}>
+            {isOpen ? 'Collapse' : 'Configure'}
+          </span>
+          <div className={`p-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] text-[var(--text-dim)] transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-[var(--yellow)] border-[var(--yellow)]/40 bg-[var(--yellow)]/10' : ''
+          }`}>
+            <ChevronDown size={15} />
+          </div>
+        </div>
+      </button>
+    );
+  };
+
+  const renderSectionSaveBar = (sectionId: string, shortName: string, isSectionDirty: boolean) => {
+    const wasJustSaved = recentlySavedSection === sectionId;
+    return (
+      <div className="flex items-center justify-between gap-2 p-2.5 sm:p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] flex-wrap mb-4">
+        <div className="flex items-center gap-2">
+          {wasJustSaved ? (
+            <span className="text-emerald-400 font-bold text-xs flex items-center gap-1.5">
+              <CheckCircle2 size={15} />
+              <span>✓ {shortName} settings saved to device successfully!</span>
+            </span>
+          ) : isSectionDirty ? (
+            <span className="text-amber-400 font-bold text-xs flex items-center gap-1.5">
+              <AlertCircle size={15} />
+              <span>Pending changes in {shortName}</span>
+            </span>
+          ) : (
+            <span className="text-emerald-400/80 font-medium text-xs flex items-center gap-1.5">
+              <CheckCircle2 size={15} />
+              <span>{shortName} configuration is synchronized</span>
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleSaveSpecificSection(sectionId)}
+          className="px-3.5 py-1.5 rounded-lg bg-[var(--yellow)] hover:bg-[var(--yellow)]/90 text-black font-bold text-xs uppercase tracking-wider transition active:scale-95 shadow cursor-pointer flex items-center gap-1.5"
+        >
+          <Save size={13} />
+          <span>Save {shortName}</span>
+        </button>
+      </div>
+    );
+  };
+
+  const renderSectionBottomSaveBar = (sectionId: string, shortName: string) => {
+    return (
+      <div className="pt-4 mt-4 border-t border-[var(--steel-line)]/50 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+        <span className="text-[11px] text-[var(--text-dim)] text-center sm:text-left">
+          Settings persist in device storage and synchronize with your cloud database.
+        </span>
+        <button
+          type="button"
+          onClick={() => handleSaveSpecificSection(sectionId)}
+          className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[var(--yellow)] hover:bg-[var(--yellow)]/90 text-black font-black text-xs uppercase tracking-wider transition active:scale-95 shadow-md cursor-pointer flex items-center justify-center gap-2"
+        >
+          <Save size={14} />
+          <span>Save & Apply {shortName}</span>
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-5xl max-w-full overflow-x-hidden break-words mx-auto font-mono pb-12">
       {/* Header Banner */}
@@ -859,216 +1110,120 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Dirty State Checker & Local Storage Persistence Visualizer */}
-      <div className={`p-3.5 sm:p-4 rounded-2xl border transition-all shadow-md ${
-        isDirty
-          ? 'bg-amber-500/10 border-amber-500/40 text-amber-100 shadow-amber-500/5 ring-1 ring-amber-500/20'
-          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100 shadow-emerald-500/5'
-      }`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className={`p-2 rounded-xl shrink-0 border mt-0.5 ${
-              isDirty
-                ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
-                : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-            }`}>
-              {isDirty ? (
-                <AlertCircle size={20} className="animate-pulse" />
-              ) : (
-                <CheckCircle2 size={20} />
-              )}
-            </div>
+      {/* Search & Quick Expand/Collapse Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 sm:p-3.5 rounded-2xl bg-[var(--panel)] border border-[var(--steel-line)]">
+        {/* Search input */}
+        <div className="relative flex-1 min-w-0">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-dim)]" />
+          <input
+            type="text"
+            value={settingsSearch}
+            onChange={e => setSettingsSearch(e.target.value)}
+            placeholder="Search settings (e.g. PIN, bluetooth, logo, theme, invoice, paper size)..."
+            className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl pl-9 pr-8 py-2 text-xs text-[var(--text)] placeholder-[var(--text-dim)] focus:outline-none focus:border-amber-400 transition"
+          />
+          {settingsSearch && (
+            <button
+              type="button"
+              onClick={() => setSettingsSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--text-dim)] hover:text-[var(--text)] text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-xs font-black uppercase tracking-wider ${
-                  isDirty ? 'text-amber-300' : 'text-emerald-300'
-                }`}>
-                  {isDirty
-                    ? `Uncommitted Changes Detected (${dirtySections.length} section${dirtySections.length > 1 ? 's' : ''})`
-                    : 'All Settings Committed to Local Storage'}
-                </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${
-                  isDirty
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                }`}>
-                  {isDirty ? 'Dirty · Unsaved to disk' : 'Clean · Synchronized'}
-                </span>
-              </div>
+        {/* Quick controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleExpandAll}
+            className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-amber-400 text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition cursor-pointer text-center"
+            title="Expand all setting subdivisions"
+          >
+            Expand All
+          </button>
+          <button
+            type="button"
+            onClick={handleCollapseAll}
+            className="flex-1 sm:flex-initial px-3 py-1.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-amber-400 text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition cursor-pointer text-center"
+            title="Collapse all setting subdivisions"
+          >
+            Collapse All
+          </button>
 
-              <div className="text-[11px] mt-1 text-[var(--text-dim)] leading-relaxed">
-                {isDirty ? (
-                  <span>
-                    The following sections have changes not yet committed to device storage:{' '}
-                    <span className="text-[var(--text)] font-semibold">
-                      {dirtySections.map(s => s.name).join(', ')}
-                    </span>
-                    . Click <strong className="text-amber-300">Save All</strong> below to guarantee changes survive app closure or reopening.
-                  </span>
-                ) : (
-                  <span>
-                    Device local storage and current configuration are fully synchronized. Verified saved at{' '}
-                    <span className="text-[var(--text)] font-semibold font-mono">
-                      {new Date(lastCommittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                    </span>
-                    .
-                  </span>
-                )}
-              </div>
-
-              {/* Dirty category jump chips */}
-              {isDirty && (
-                <div className="flex items-center gap-1.5 flex-wrap mt-2 pt-1 border-t border-amber-500/20">
-                  <span className="text-[10px] uppercase font-bold text-amber-400/80">Pending Sections:</span>
-                  {dirtySections.map(s => (
-                    <button
-                      key={s.sectionId}
-                      type="button"
-                      onClick={() => setActiveSection(s.sectionId as any)}
-                      className="px-2 py-0.5 rounded-md text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 transition cursor-pointer flex items-center gap-1"
-                    >
-                      <span>{s.name}</span>
-                      <span>→</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+          {isDirty ? (
             <button
               type="button"
               onClick={handleSaveAllSettings}
-              className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition active:scale-95 flex items-center gap-1.5 shadow-md cursor-pointer ${
-                isDirty
-                  ? 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-amber-500/20 ring-2 ring-amber-400/40'
-                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
-              }`}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs uppercase tracking-wider transition active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Save all uncommitted settings"
             >
-              {allSettingsSavedMsg ? (
-                <>
-                  <Check size={14} className="text-black" />
-                  <span>✓ Saved to Storage!</span>
-                </>
-              ) : isDirty ? (
-                <>
-                  <Save size={14} />
-                  <span>Save All Changes Now</span>
-                </>
-              ) : (
-                <>
-                  <HardDrive size={14} />
-                  <span>Force Re-save All</span>
-                </>
-              )}
+              <Save size={13} />
+              <span>Save ({dirtySections.length})</span>
             </button>
-          </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+              <CheckCircle2 size={12} />
+              <span>Synchronized</span>
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* Sub-navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none scroll-smooth">
-        {[
-          { id: 'all', label: 'All Settings', icon: Sliders },
-          { id: 'export_studio', label: 'PDF & JPG Export Studio', icon: FileDown, badge: 'Styles & Sizes' },
-          { id: 'permissions', label: 'Mobile Device Permissions & Push', icon: Bell, badge: 'Push/Mic/Storage' },
-          { id: 'sync', label: 'Backup & Cloud Sync', icon: Database, badge: 'Backup Tab' },
-          { id: 'printer', label: 'Printer (Wi-Fi/Bluetooth/Wired)', icon: Printer, badge: 'Hardware' },
-          { id: 'logo', label: 'Lock Screen Logo', icon: MoveHorizontal, badge: 'Move & Resize' },
-          { id: 'visual_studio', label: 'Visual Studio & Themes', icon: Palette },
-          { id: 'branding', label: 'Business Branding', icon: Building },
-          { id: 'security', label: 'Security & PIN', icon: ShieldCheck },
-          ...((showHiddenDebugTab || oauthDebugLogsCount > 0 || activeSection === 'debug_logs') ? [{
-            id: 'debug_logs',
-            label: 'Debug Logs (Google OAuth)',
-            icon: Bug,
-            badge: oauthDebugLogsCount > 0 ? `${oauthDebugLogsCount} Errors` : 'Hidden Log'
-          }] : [])
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isSelected = activeSection === tab.id;
-          const isTabUnsaved = (
-            (tab.id === 'branding' && isBrandingDirty) ||
-            ((tab.id === 'visual_studio' || tab.id === 'logo') && isVisualDirty) ||
-            (tab.id === 'security' && isSecurityDirty) ||
-            (tab.id === 'printer' && isPrinterDirty) ||
-            (tab.id === 'export_studio' && isExportDirty) ||
-            (tab.id === 'all' && isDirty)
-          );
-
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                if (tab.id === 'sync' && onNavigateToBackup) {
-                  onNavigateToBackup('cloud_status');
-                } else {
-                  setActiveSection(tab.id as any);
-                }
-              }}
-              className={`shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition border cursor-pointer ${
-                isSelected
-                  ? 'bg-amber-400 text-black border-amber-400 font-bold shadow-md'
-                  : isTabUnsaved
-                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 hover:border-amber-400'
-                  : 'bg-[var(--panel)] border-[var(--steel-line)] text-[var(--text-dim)] hover:text-[var(--text)] hover:border-[var(--steel-line)]/80'
-              }`}
-            >
-              <Icon size={14} className={isSelected ? 'text-black' : isTabUnsaved ? 'text-amber-400' : 'text-amber-400'} />
-              <span>{tab.label}</span>
-              {isTabUnsaved && (
-                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider ${
-                  isSelected ? 'bg-black text-amber-300' : 'bg-amber-500 text-black animate-pulse'
-                }`}>
-                  Unsaved
-                </span>
-              )}
-              {tab.badge && !isTabUnsaved && (
-                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase ${
-                  isSelected ? 'bg-black/20 text-black' : 'bg-amber-400/20 text-amber-300'
-                }`}>
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
       </div>
 
       {/* ========================================================================= */}
       {/* SECTION 0: MOBILE PERMISSIONS & PUSH NOTIFICATIONS ACCESS HUB */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'permissions') && (
-        <MobilePermissionsCard language={language} />
+      {(!settingsSearch.trim() || matchesSearch('permissions')) && (
+        <div id="section-permissions" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('permissions')
+            ? 'border-amber-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'permissions',
+            'Mobile Device Permissions & Hardware Hub',
+            'Native push notifications, camera barcode scanner, offline storage & microphone speech-to-text',
+            'Push alerts & mobile hardware integration hub',
+            Smartphone,
+            'text-blue-400',
+            'bg-blue-400/10 border-blue-400/30',
+            false,
+            'Mobile Hub'
+          )}
+
+          {isSectionOpen('permissions') && (
+            <div className="p-4 sm:p-6 border-t border-[var(--steel-line)] space-y-4 bg-[var(--panel-raised)]/10">
+              <MobilePermissionsCard language={language} />
+            </div>
+          )}
+        </div>
       )}
 
       {/* ========================================================================= */}
       {/* SECTION 1: LOCK SCREEN LOGO CONTROLS (Move, Resize to Small, Frame & Style) */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'logo') && (
-        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-6 shadow-md">
-          <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-3 flex-wrap gap-2">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400">
-                <MoveHorizontal size={18} />
-              </div>
-              <div>
-                <h2 className="font-serif font-bold text-base sm:text-lg text-[var(--text)]">
-                  Lock Screen Logo Positioning & Micro-Resizing
-                </h2>
-                <p className="text-[11px] text-[var(--text-dim)]">
-                  Move logo placement and scale it down to small dimensions so it fits directly before the app name
-                </p>
-              </div>
-            </div>
+      {(!settingsSearch.trim() || matchesSearch('logo')) && (
+        <div id="section-logo" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('logo')
+            ? 'border-amber-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'logo',
+            'Lock Screen Logo Positioning & Micro-Resizing',
+            'Move logo placement and scale it down to small dimensions so it fits directly before the app name',
+            `${logoPosition === 'inline' ? 'Inline Before Name' : 'Stacked Above Name'} · ${customHeight}px · ${logoFrame} frame`,
+            MoveHorizontal,
+            'text-amber-400',
+            'bg-amber-400/10 border-amber-400/30',
+            isVisualDirty,
+            `${customHeight}px`
+          )}
 
-            <span className="px-2.5 py-1 rounded-full bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[11px] font-bold">
-              Current: {logoPosition === 'inline' ? 'Inline Before Name' : 'Stacked Above Name'} • {customHeight}px
-            </span>
-          </div>
+          {isSectionOpen('logo') && (
+            <div className="p-5 sm:p-6 space-y-6 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              {renderSectionSaveBar('logo', 'Logo', isVisualDirty)}
 
           {/* Interactive Live Preview Box of the Lock Screen Header */}
           <div className="p-4 sm:p-6 bg-slate-950/80 rounded-xl border border-[var(--steel-line)] flex flex-col items-center justify-center text-center">
@@ -1416,27 +1571,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
           </div>
+
+          {renderSectionBottomSaveBar('logo', 'Logo')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 2: VISUAL STUDIO & ENVIRONMENT THEMES */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'visual_studio') && (
-        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-6 shadow-md">
-          <div className="flex items-center gap-2.5 border-b border-[var(--steel-line)] pb-3">
-            <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400">
-              <Palette size={18} />
-            </div>
-            <div>
-              <h2 className="font-serif font-bold text-base sm:text-lg text-[var(--text)]">
-                Visual Studio: Themes & Workspace Environment
-              </h2>
-              <p className="text-[11px] text-[var(--text-dim)]">
-                Customize workspace color archetypes, CAD blueprint grid, font scales, and accent glow
-              </p>
-            </div>
-          </div>
+      {(!settingsSearch.trim() || matchesSearch('visual_studio')) && (
+        <div id="section-visual_studio" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('visual_studio')
+            ? 'border-cyan-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'visual_studio',
+            'Visual Themes & Environment Studio',
+            'Customize workspace color archetypes, CAD blueprint grid, font scales, and accent glow',
+            `Theme: ${visualSettings.theme || 'dark'} · Accent: ${visualSettings.logoTheme || 'amber'} · Grid: ${visualSettings.showBlueprintGrid ? 'On' : 'Off'}`,
+            Palette,
+            'text-cyan-400',
+            'bg-cyan-400/10 border-cyan-400/30',
+            isVisualDirty,
+            visualSettings.theme || 'dark'
+          )}
+
+          {isSectionOpen('visual_studio') && (
+            <div className="p-5 sm:p-6 space-y-6 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              {renderSectionSaveBar('visual_studio', 'Theme', isVisualDirty)}
 
           {/* Theme Archetypes */}
           <div className="space-y-3">
@@ -1783,27 +1948,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>{visualSavedMsg ? '✓ Visual Settings Saved!' : 'Save Visual Settings'}</span>
             </button>
           </div>
+
+          {renderSectionBottomSaveBar('visual_studio', 'Theme')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 3: BUSINESS BRANDING & INVOICE HEADER */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'branding') && (
-        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-4 shadow-md">
-          <div className="flex items-center gap-2.5 border-b border-[var(--steel-line)] pb-3">
-            <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400">
-              <Building size={18} />
-            </div>
-            <div>
-              <h2 className="font-serif font-bold text-base sm:text-lg text-[var(--text)]">
-                Business Identity & Invoice Headers
-              </h2>
-              <p className="text-[11px] text-[var(--text-dim)]">
-                Official workshop credentials, headers, lock screen titles and printed receipts
-              </p>
-            </div>
-          </div>
+      {(!settingsSearch.trim() || matchesSearch('branding')) && (
+        <div id="section-branding" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('branding')
+            ? 'border-amber-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'branding',
+            'Business Identity & Invoice Headers',
+            'Official workshop credentials, headers, lock screen titles and printed receipts',
+            `${draftCompanyName} · ${draftCompanyTagline}`,
+            Building,
+            'text-amber-400',
+            'bg-amber-400/10 border-amber-400/30',
+            isBrandingDirty,
+            'Invoices'
+          )}
+
+          {isSectionOpen('branding') && (
+            <div className="p-5 sm:p-6 space-y-4 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              {renderSectionSaveBar('branding', 'Branding', isBrandingDirty)}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
@@ -1855,27 +2030,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>{brandingSavedMsg ? '✓ Workshop Details Saved!' : 'Save Workshop Branding'}</span>
             </button>
           </div>
+
+          {renderSectionBottomSaveBar('branding', 'Branding')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 4: SECURITY & LOCK SCREEN PIN */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'security') && (
-        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-4 shadow-md">
-          <div className="flex items-center gap-2.5 border-b border-[var(--steel-line)] pb-3">
-            <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400">
-              <ShieldCheck size={18} />
-            </div>
-            <div>
-              <h2 className="font-serif font-bold text-base sm:text-lg text-[var(--text)]">
-                Terminal Security & Lock Screen Credentials
-              </h2>
-              <p className="text-[11px] text-[var(--text-dim)]">
-                Manage 4-digit terminal access PIN and owner security recovery question
-              </p>
-            </div>
-          </div>
+      {(!settingsSearch.trim() || matchesSearch('security')) && (
+        <div id="section-security" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('security')
+            ? 'border-emerald-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'security',
+            'Terminal Security, Master PIN & Biometrics',
+            'Master security passcode, biometric fingerprint sensor, autolock timer and recovery question',
+            `PIN: ${cleanPin ? '••••' : 'Not Set'} · Autolock: ${Math.round(selectedAutolockSec / 60)}m · Minimize: ${lockOnMinimizeVal ? 'Lock' : 'Keep Open'}`,
+            ShieldCheck,
+            'text-emerald-400',
+            'bg-emerald-400/10 border-emerald-400/30',
+            isSecurityDirty,
+            'Protected'
+          )}
+
+          {isSectionOpen('security') && (
+            <div className="p-5 sm:p-6 space-y-4 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              {renderSectionSaveBar('security', 'Security', isSecurityDirty)}
 
           <form onSubmit={handleSaveSecurity} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2104,14 +2289,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               )}
             </div>
           </div>
+
+          {renderSectionBottomSaveBar('security', 'Security')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 4.5: CLOUD SYNC & DATABASE TELEMETRY (HOSTED IN BACKUP TAB)       */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'sync') && (
-        <div id="settings-sync-section" className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-5 shadow-md font-mono">
+      {(!settingsSearch.trim() || matchesSearch('sync')) && (
+        <div id="section-sync" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('sync')
+            ? 'border-sky-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'sync',
+            'Cloud Sync, Diagnostics & Local Backup',
+            'Real-time Firestore sync diagnostics, ping latency test, ANSI SQL dump and full JSON backup',
+            `${syncState === 'synced' ? 'Cloud Synced' : syncState === 'syncing' ? 'Syncing...' : 'Offline'} · ${isOnline ? 'Online' : 'Offline'} · ${metrics?.totalRecords || 0} Records`,
+            Database,
+            'text-sky-400',
+            'bg-sky-400/10 border-sky-400/30',
+            false,
+            'Cloud Telemetry'
+          )}
+
+          {isSectionOpen('sync') && (
+            <div className="p-5 sm:p-6 space-y-5 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10 font-mono">
           {/* Section Header */}
           <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-4 flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -2237,14 +2444,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
           </div>
+
+          {renderSectionBottomSaveBar('sync', 'Sync')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 5: HARDWARE PRINTER CONFIGURATION (Wi-Fi, Bluetooth, Wired)       */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'printer') && (
-        <div id="settings-printer-section" className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-6 shadow-md">
+      {(!settingsSearch.trim() || matchesSearch('printer')) && (
+        <div id="section-printer" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('printer')
+            ? 'border-blue-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'printer',
+            'Hardware Printer Configuration (Wi-Fi, Bluetooth, Wired)',
+            'Thermal ESC/POS printer setup, Bluetooth discovery, network IP connection and test printing',
+            `${printerConf.connectionType === 'bluetooth' ? 'Bluetooth ESC/POS' : printerConf.connectionType === 'wifi' ? 'Wi-Fi Network' : 'USB Direct'} · ${printerConf.paperSize}`,
+            Printer,
+            'text-blue-400',
+            'bg-blue-400/10 border-blue-400/30',
+            isPrinterDirty,
+            'Receipts'
+          )}
+
+          {isSectionOpen('printer') && (
+            <div className="p-5 sm:p-6 space-y-6 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              {renderSectionSaveBar('printer', 'Printer', isPrinterDirty)}
           {/* Header */}
           <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-4 flex-wrap gap-3">
             <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -2841,17 +3071,41 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
           </div>
+
+          {renderSectionBottomSaveBar('printer', 'Printer')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 6: DOCUMENT EXPORT STUDIO (PDF & JPG Styles, Themes & Sizes)      */}
       {/* ========================================================================= */}
-      {(activeSection === 'all' || activeSection === 'export_studio') && (
-        <div id="settings-export-studio-section" className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-5 sm:p-6 space-y-6 shadow-md">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-4 flex-wrap gap-3">
-            <div className="flex items-center gap-3">
+      {(!settingsSearch.trim() || matchesSearch('export_studio')) && (
+        <div id="section-export_studio" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('export_studio')
+            ? 'border-amber-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'export_studio',
+            'Document Export Studio · PDF & JPG Styling',
+            'Default layout, typography, paper sizes, orientations and color themes for generated documents',
+            `${(exportConf.presetId || 'industrial').toUpperCase()} · ${exportConf.paperSize.toUpperCase()} (${exportConf.orientation})`,
+            FileDown,
+            'text-amber-400',
+            'bg-amber-400/10 border-amber-400/30',
+            isExportDirty,
+            'Exports'
+          )}
+
+          {isSectionOpen('export_studio') && (
+            <div className="p-5 sm:p-6 space-y-6 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              {renderSectionSaveBar('export_studio', 'Export Studio', isExportDirty)}
+
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-[var(--steel-line)] pb-4 flex-wrap gap-3">
+                <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-400">
                 <FileDown size={22} />
               </div>
@@ -3125,66 +3379,123 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
           </div>
+
+          {renderSectionBottomSaveBar('export_studio', 'Export Studio')}
         </div>
       )}
+    </div>
+  )}
 
       {/* ========================================================================= */}
       {/* SECTION 7: HIDDEN DEBUG LOGS (GOOGLE WORKSPACE OAUTH & GMAIL TRACES)       */}
       {/* ========================================================================= */}
-      {(activeSection === 'debug_logs' || (activeSection === 'all' && (showHiddenDebugTab || oauthDebugLogsCount > 0))) && (
-        <div id="settings-debug-logs-section">
-          <OAuthDebugLogsSection
-            language={language}
-            onNavigateToBackup={onNavigateToBackup}
-          />
+      {(showHiddenDebugTab || oauthDebugLogsCount > 0) && (!settingsSearch.trim() || matchesSearch('debug_logs')) && (
+        <div id="section-debug_logs" className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+          isSectionOpen('debug_logs')
+            ? 'border-purple-400/60 bg-[var(--panel)] shadow-lg'
+            : 'border-[var(--steel-line)] bg-[var(--panel)] hover:border-[var(--steel-line)]/90 hover:bg-[var(--panel-raised)]/40 shadow-xs'
+        }`}>
+          {renderLineHeader(
+            'debug_logs',
+            'System Diagnostics & OAuth Traces',
+            'Internal Google Workspace, OAuth handshakes, and diagnostic logs',
+            `${oauthDebugLogsCount} logs captured`,
+            Bug,
+            'text-purple-400',
+            'bg-purple-400/10 border-purple-400/30',
+            false,
+            'Diagnostics'
+          )}
+
+          {isSectionOpen('debug_logs') && (
+            <div className="p-5 sm:p-6 space-y-6 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/10">
+              <OAuthDebugLogsSection
+                language={language}
+                onNavigateToBackup={onNavigateToBackup}
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Sticky Floating Bottom Bar: Save & Implement All Settings */}
-      <div className="sticky bottom-4 z-40 bg-slate-950/95 backdrop-blur-xl border border-amber-500/40 rounded-2xl p-3.5 sm:p-4 shadow-2xl shadow-black/80 flex items-center justify-between gap-4 flex-wrap animate-in fade-in slide-in-from-bottom-3 duration-200">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+      {/* Mobile-Optimized Floating Saved Toast Notification */}
+      {(allSettingsSavedMsg || recentlySavedSection) && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-top-3 duration-200 w-11/12 max-w-md">
+          <div className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs sm:text-sm shadow-xl shadow-emerald-500/30 border border-emerald-300">
+            <CheckCircle2 size={16} className="text-slate-950 shrink-0" />
+            <span className="truncate">
+              {allSettingsSavedMsg 
+                ? '✓ All Settings Saved Successfully to Device'
+                : `✓ ${recentlySavedSection ? recentlySavedSection.replace('_', ' ').toUpperCase() : 'Section'} Settings Saved!`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky Floating Bottom Bar: Save & Implement All Settings (Tailored for Mobile & Desktop) */}
+      <div className={`sticky bottom-3 sm:bottom-4 z-40 backdrop-blur-xl rounded-2xl p-3 sm:p-4 shadow-2xl transition-all duration-300 flex items-center justify-between gap-3 sm:gap-4 flex-wrap ${
+        isDirty
+          ? 'bg-amber-950/90 border-2 border-amber-400 shadow-amber-500/20'
+          : 'bg-slate-950/95 border border-amber-500/30 shadow-black/80'
+      }`}>
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+            isDirty
+              ? 'bg-amber-400 text-black border-amber-300 animate-pulse'
+              : 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+          }`}>
             <Settings size={18} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-white tracking-wide">
-                Terminal Settings & Configuration
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">
+                {isDirty ? `${dirtySections.length} Section(s) Unsaved` : 'Terminal Settings'}
               </span>
-              {allSettingsSavedMsg && (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse">
-                  ✓ Saved to Device & Database
+              {allSettingsSavedMsg ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  ✓ Saved to Device
+                </span>
+              ) : isDirty ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">
+                  ● Changes Pending
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-slate-800 text-slate-400 border border-slate-700 hidden sm:inline">
+                  Synced
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-300 font-mono">
-              Permanently save and implement all edits across workshop branding, security, themes & printer
+            <p className="text-[10px] sm:text-[11px] text-slate-300 font-mono truncate">
+              {isDirty ? 'Tap Save to commit changes immediately' : 'Workshop branding, security PIN, thermal printer & visual themes'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
             type="button"
             onClick={handleResetAllDefaults}
-            className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-xs text-slate-300 font-semibold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-500 text-xs text-slate-300 font-semibold transition active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
             title="Reset all settings to default values"
           >
             <RotateCcw size={13} />
-            <span>Reset Defaults</span>
+            <span className="hidden xs:inline">Reset Defaults</span>
+            <span className="xs:hidden">Reset</span>
           </button>
 
           <button
             type="button"
             onClick={handleSaveAllSettings}
-            className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
+            className={`flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
               allSettingsSavedMsg
                 ? 'bg-emerald-500 text-black shadow-emerald-500/30'
+                : isDirty
+                ? 'bg-amber-400 hover:bg-amber-300 text-black shadow-amber-400/40 font-black'
                 : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-amber-500/30'
             }`}
           >
             {allSettingsSavedMsg ? <Check size={16} /> : <Save size={16} />}
-            <span>{allSettingsSavedMsg ? '✓ All Settings Saved!' : 'Save & Implement All'}</span>
+            <span>{allSettingsSavedMsg ? '✓ Settings Saved!' : 'Save All Settings'}</span>
           </button>
         </div>
       </div>

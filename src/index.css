@@ -439,3 +439,57 @@ input[type="number"] {
     padding: 0 !important;
   }
 }
+
+/* ==================== NORMALIZED TRANSACTION LEDGER & ORDER DETAILS ==================== */
+.txn-item-summary-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.txn-item-summary-text {
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.txn-item-summary-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.txn-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 72px;
+  height: 24px;
+  padding: 0 0.5rem;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0.375rem;
+  text-align: center;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border-width: 1px;
+  line-height: 1;
+}
+
+.txn-status-badge-lg {
+  min-width: 96px;
+}

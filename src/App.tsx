@@ -318,6 +318,16 @@ export const App: React.FC = () => {
               return p;
             });
           }
+          if (parsed.productColours && Array.isArray(parsed.productColours)) {
+            if (!parsed.productColours.some((c: string) => c.toLowerCase().includes('without') || c.toLowerCase().includes('none'))) {
+              parsed.productColours = ['None (Without Colour / Raw)', ...parsed.productColours];
+            }
+          } else {
+            parsed.productColours = INITIAL_STATE.productColours;
+          }
+          if (!parsed.rawStock || !Array.isArray(parsed.rawStock) || parsed.rawStock.length === 0) {
+            parsed.rawStock = INITIAL_STATE.rawStock;
+          }
           // Ensure visual settings retain all user-customized preferences (themes, grids, density, etc.)
           parsed.visualSettings = {
             ...INITIAL_STATE.visualSettings,
@@ -933,7 +943,51 @@ export const App: React.FC = () => {
       safeDate
     );
 
-    // 7. Automatically decrement finished goods inventory stock
+    // 7. Deduct true raw materials from raw stock inventory based on product recipe BOM (weight in kg & pieces in pcs)
+    let updatedRawStock = (state.rawStock || []).map(rs => ({ ...rs }));
+    validLines.forEach(c => {
+      const prod = state.products.find(p => p.id === c.id || p.name === c.name);
+      if (prod && prod.recipe && prod.recipe.length > 0) {
+        prod.recipe.forEach(r => {
+          if (!r.material) return;
+          const targetMat = r.material.toLowerCase().trim();
+          updatedRawStock = updatedRawStock.map(rs => {
+            const rsName = rs.name.toLowerCase().trim();
+            const isMatch =
+              rsName === targetMat ||
+              rsName.includes(targetMat) ||
+              targetMat.includes(rsName) ||
+              (targetMat.includes('steel pipe') && rsName.includes('steel pipe')) ||
+              (targetMat.includes('heavy pipe') && rsName.includes('heavy pipe')) ||
+              (targetMat.includes('bolt') && rsName.includes('bolt')) ||
+              (targetMat.includes('bushing') && rsName.includes('bushing')) ||
+              (targetMat.includes('bush') && rsName.includes('bush'));
+
+            if (isMatch) {
+              const deductKg = (r.weightPerUnit || 0) * c.qty;
+              const deductPieces = (r.itemsPerUnit || 0) * c.qty;
+
+              const currentWeight = rs.weight !== undefined ? rs.weight : (rs.initialWeight || 0);
+              const currentQty = rs.quantity !== undefined ? rs.quantity : (rs.items || rs.initialQuantity || 0);
+
+              const newWeight = deductKg > 0 ? Math.max(0, currentWeight - deductKg) : currentWeight;
+              const newQty = deductPieces > 0 ? Math.max(0, currentQty - deductPieces) : currentQty;
+
+              return {
+                ...rs,
+                weight: newWeight,
+                quantity: newQty,
+                items: newQty,
+                lastUpdated: safeDate
+              };
+            }
+            return rs;
+          });
+        });
+      }
+    });
+
+    // Automatically decrement finished goods inventory stock if tracked
     const cartProductQty: Record<string, number> = {};
     validLines.forEach(c => {
       cartProductQty[c.name] = (cartProductQty[c.name] || 0) + c.qty;
@@ -956,11 +1010,13 @@ export const App: React.FC = () => {
       ...state,
       cart: [],
       products: updatedProducts,
+      rawStock: updatedRawStock,
       transactions: [newTxn, ...state.transactions],
       customerLedgers: updatedCustomerLedgers,
       nextTxnId: nextIdStr
     };
 
+    pushStateImmediately(updatedState);
     setState(updatedState);
 
     // 9. Sync newly created transaction to Google Sheets live mirror if connected
@@ -1220,19 +1276,20 @@ export const App: React.FC = () => {
   // ----------------------------------------------------
   // PRODUCT CATALOG ACTIONS
   // ----------------------------------------------------
-  const handleSaveProduct = (productData: Omit<Product, 'id'>, id?: number) => {
+  const handleSaveProduct = (productData: Product | Omit<Product, 'id'>, id?: number) => {
+    const effectiveId = id ?? ('id' in productData ? (productData as Product).id : undefined);
     setState(prev => {
       let newState: AppState;
-      if (id) {
+      if (effectiveId && prev.products.some(p => p.id === effectiveId)) {
         newState = {
           ...prev,
-          products: prev.products.map(p => (p.id === id ? { ...productData, id } : p))
+          products: prev.products.map(p => (p.id === effectiveId ? ({ ...productData, id: effectiveId } as Product) : p))
         };
       } else {
-        const nextId = prev.products.reduce((max, p) => Math.max(max, p.id), 0) + 1;
+        const nextId = effectiveId || (prev.products.reduce((max, p) => Math.max(max, p.id), 0) + 1);
         newState = {
           ...prev,
-          products: [...prev.products, { ...productData, id: nextId }]
+          products: [...prev.products, { ...productData, id: nextId } as Product]
         };
       }
       pushStateImmediately(newState);
@@ -2665,6 +2722,7 @@ export const App: React.FC = () => {
                   activeCat={activeCategory}
                   language={state.language}
                   rawMaterialNames={state.rawItemNames || []}
+                  rawStock={state.rawStock || []}
                   productColors={state.productColours || []}
                   productSizes={state.productSizes || []}
                   productWeights={state.productWeights || []}

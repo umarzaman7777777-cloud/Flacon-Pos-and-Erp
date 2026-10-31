@@ -418,7 +418,7 @@ export const INITIAL_STATE: AppState = {
   guardSizes: ['R/6"', 'R/12"', 'R/18"', 'R/24"', 'R/30"', 'R/36"', 'R/42"', 'R/48"', 'R/54"', 'R/60"'],
   guardWeights: ['0.45 kg', '0.65 kg', '0.85 kg', '1.15 kg', '1.5 kg', '1.85 kg', '2.45 kg'],
   stickCounts: ['1', '2', '3', '4'],
-  productColours: ['Matt Black', 'Shine Black', 'Pure White', 'Off-White', 'Smoke Grey', 'Silver', 'Golden', 'Antique Brass'],
+  productColours: ['None (Without Colour / Raw)', 'Matt Black', 'Shine Black', 'Pure White', 'Off-White', 'Smoke Grey', 'Silver', 'Golden', 'Antique Brass'],
   productNames: [
     'Ceiling-Fan-Rod-12-Heavy',
     'Ceiling-Fan-Rod-18-Deluxe',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   CreditCard,
   Check,
@@ -27,7 +27,8 @@ import {
   CheckCheck,
   Truck,
   Tag,
-  Hash
+  Hash,
+  Calculator
 } from 'lucide-react';
 import { Transaction, AppLanguage, CustomerPayment, GatePassData, RawSupplier } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
@@ -137,7 +138,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return true;
   });
 
-  // Summary Metrics
+  // Summary Metrics (All transactions)
   const totalBookedCount = transactions.length;
   const totalBookedValue = transactions.reduce((sum, t) => sum + t.total, 0);
   const awaitingCount = transactions.filter(t => !t.receiptUrl).length;
@@ -145,6 +146,41 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const verifiedCount = transactions.filter(t => !!t.receiptUrl).length;
   const totalDueValue = transactions.reduce((sum, t) => sum + getPaidInfo(t).due, 0);
   const unpaidCount = transactions.filter(t => getPaidInfo(t).due > 0).length;
+
+  // Dynamic metrics for the summary row (dynamically calculated from currently filtered transactions)
+  const dynamicSummary = useMemo(() => {
+    let totalQty = 0;
+    let aggregateValue = 0;
+    let totalPaid = 0;
+    let totalDue = 0;
+    let deliveredCount = 0;
+    let pendingPassCount = 0;
+
+    for (const txn of filteredTxns) {
+      aggregateValue += (txn.total || 0);
+      totalQty += (txn.itemCount || 1);
+      const paidInfo = getPaidInfo(txn);
+      totalPaid += paidInfo.amountPaid;
+      totalDue += paidInfo.due;
+      if (txn.receiptUrl) {
+        deliveredCount++;
+      } else {
+        pendingPassCount++;
+      }
+    }
+
+    return {
+      totalOrders: filteredTxns.length,
+      isFiltered: filteredTxns.length !== transactions.length,
+      allOrdersCount: transactions.length,
+      totalQty,
+      aggregateValue,
+      totalPaid,
+      totalDue,
+      deliveredCount,
+      pendingPassCount
+    };
+  }, [filteredTxns, transactions.length, customerPayments]);
 
   const handleOpenPayModal = (txn: Transaction) => {
     const info = getPaidInfo(txn);
@@ -547,7 +583,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   };
 
   return (
-    <div className="space-y-4 font-mono max-w-full overflow-x-hidden">
+    <div className="space-y-4 font-mono max-w-full overflow-x-clip">
       {/* Top Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3 font-sans">
         <div>
@@ -891,48 +927,52 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
                         {/* Customer / Workshop */}
                         <td className="px-3 py-3 min-w-[190px]">
-                          <div className="font-bold text-[var(--text)] font-sans flex items-center gap-1.5 whitespace-nowrap">
-                            <span className="truncate max-w-[180px]">{txn.factory || 'Walk-in Customer'}</span>
+                          <div className="flex flex-col justify-center gap-0.5 min-w-0">
+                            <div className="font-bold text-xs text-[var(--text)] font-sans truncate max-w-[190px]" title={txn.factory || 'Walk-in Customer'}>
+                              {txn.factory || 'Walk-in Customer'}
+                            </div>
+                            {(() => {
+                              const specChips = [
+                                txn.sizes?.split(/[,;]/).map(s => s.trim()).filter(s => s && s !== '-' && s !== '—').join(', '),
+                                txn.colors?.split(/[,;]/).map(s => s.trim()).filter(s => s && s !== '-' && s !== '—').join(', ')
+                              ].filter(Boolean);
+                              return specChips.length > 0 ? (
+                                <div className="text-[10px] text-[var(--text-dim)] truncate max-w-[200px]">
+                                  {specChips.join(' · ')}
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
-                          {(() => {
-                            const specChips = [
-                              txn.sizes?.split(/[,;]/).map(s => s.trim()).filter(s => s && s !== '-' && s !== '—').join(', '),
-                              txn.colors?.split(/[,;]/).map(s => s.trim()).filter(s => s && s !== '-' && s !== '—').join(', ')
-                            ].filter(Boolean);
-                            return specChips.length > 0 ? (
-                              <div className="text-[10px] text-[var(--text-dim)] truncate max-w-[200px]">
-                                {specChips.join(' · ')}
-                              </div>
-                            ) : null;
-                          })()}
                         </td>
 
                         {/* Items Booked */}
                         <td className="px-3 py-3 min-w-[280px]">
-                          <div className="font-semibold text-[var(--text)] font-sans truncate max-w-[260px]" title={txn.itemsSummary}>
-                            {txn.itemsSummary}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1 whitespace-nowrap">
-                            <span className="text-[10px] text-[var(--text-dim)] whitespace-nowrap shrink-0">
-                              {parsedItems.length} {parsedItems.length === 1 ? 'item' : 'items'} ({txn.itemCount || 1} pcs)
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleBatchDetails(txn.id);
-                              }}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition cursor-pointer border whitespace-nowrap shrink-0 ${
-                                isBatchExpanded
-                                  ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-xs'
-                                  : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-amber-300 hover:border-amber-500/40 border-[var(--steel-line)]'
-                              }`}
-                              title="Expand Batch Details & Logistics Tracking"
-                            >
-                              <Barcode size={11} className={isBatchExpanded ? 'text-amber-400' : 'text-[var(--text-dim)]'} />
-                              <span className="whitespace-nowrap">{isBatchExpanded ? 'Hide Batch' : 'Batch Details'}</span>
-                              {isBatchExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                            </button>
+                          <div className="txn-item-summary-container max-w-[340px]">
+                            <div className="txn-item-summary-text text-xs" title={txn.itemsSummary}>
+                              {txn.itemsSummary}
+                            </div>
+                            <div className="txn-item-summary-meta">
+                              <span className="shrink-0 font-medium">
+                                {parsedItems.length} {parsedItems.length === 1 ? 'item' : 'items'} ({txn.itemCount || 1} pcs)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleBatchDetails(txn.id);
+                                }}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold transition cursor-pointer border whitespace-nowrap shrink-0 ${
+                                  isBatchExpanded
+                                    ? 'bg-amber-500/25 text-amber-300 border-amber-500/60 shadow-xs'
+                                    : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-amber-300 hover:border-amber-500/40 border-[var(--steel-line)]'
+                                }`}
+                                title="Expand Batch Details & Logistics Tracking"
+                              >
+                                <Barcode size={11} className={isBatchExpanded ? 'text-amber-400' : 'text-[var(--text-dim)]'} />
+                                <span className="whitespace-nowrap">{isBatchExpanded ? 'Hide Batch' : 'Batch Details'}</span>
+                                {isBatchExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                              </button>
+                            </div>
                           </div>
                         </td>
 
@@ -946,30 +986,36 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
                         {/* Payment Status */}
                         <td className="px-3 py-3 text-center whitespace-nowrap">
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                            info.status === 'Paid'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                              : info.status === 'Partial'
-                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                              : 'bg-red-500/15 text-red-400 border border-red-500/30'
-                          }`}>
-                            {info.status}
-                          </span>
+                          <div className="flex items-center justify-center">
+                            <span className={`txn-status-badge ${
+                              info.status === 'Paid'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : info.status === 'Partial'
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                : 'bg-red-500/15 text-red-400 border-red-500/30'
+                            }`}>
+                              {info.status}
+                            </span>
+                          </div>
                         </td>
 
                         {/* Gate Pass Status */}
                         <td className="px-3 py-3 text-center whitespace-nowrap">
-                          {isDelivered ? (
-                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                              <ShieldCheck size={11} strokeWidth={2.5} />
-                              <span>{txn.gateSequenceNo || txn.gatePass?.gateSequenceNo || 'Verified'}</span>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                              <Lock size={10} />
-                              <span>Awaiting Pass</span>
-                            </span>
-                          )}
+                          <div className="flex items-center justify-center">
+                            {isDelivered ? (
+                              <div className="txn-status-badge txn-status-badge-lg bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                                <ShieldCheck size={11} strokeWidth={2.5} className="shrink-0" />
+                                <span className="truncate max-w-[80px]" title={txn.gateSequenceNo || txn.gatePass?.gateSequenceNo || 'Verified'}>
+                                  {txn.gateSequenceNo || txn.gatePass?.gateSequenceNo || 'Verified'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="txn-status-badge txn-status-badge-lg bg-amber-500/15 text-amber-400 border-amber-500/30">
+                                <Lock size={10} className="shrink-0" />
+                                <span>Awaiting Pass</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Actions & Dossier */}
@@ -1192,6 +1238,49 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   );
                 })}
               </tbody>
+              <tfoot className="bg-[var(--panel-raised)] font-bold text-xs divide-y divide-[var(--steel-line)] border-t-2 border-[var(--yellow)]">
+                <tr className="bg-[var(--panel-raised)] text-[var(--text)]">
+                  <td className="px-2 py-3 text-center text-[var(--yellow)] font-bold text-sm">Σ</td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <div className="font-black text-[var(--yellow)] text-xs">
+                      {dynamicSummary.totalOrders} {dynamicSummary.totalOrders === 1 ? 'Order' : 'Orders'}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap text-[10px] text-[var(--text-dim)] font-normal">
+                    {dynamicSummary.isFiltered ? `Filtered (${dynamicSummary.allOrdersCount} total)` : 'All Records'}
+                  </td>
+                  <td className="px-3 py-3 text-[11px] text-[var(--text-dim)] font-semibold truncate max-w-[190px]">
+                    Ledger Aggregate
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    <span className="font-bold text-[var(--text)] text-xs">
+                      {dynamicSummary.totalQty.toLocaleString()} pcs
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap text-sm font-black text-[var(--yellow)]">
+                    {fmt(dynamicSummary.aggregateValue)}
+                  </td>
+                  <td className="px-3 py-3 text-center whitespace-nowrap">
+                    <div className="flex flex-col items-center justify-center text-[10px] leading-tight">
+                      <span className="text-emerald-400 font-bold">Paid: {fmt(dynamicSummary.totalPaid)}</span>
+                      {dynamicSummary.totalDue > 0 ? (
+                        <span className="text-red-400 font-bold">Due: {fmt(dynamicSummary.totalDue)}</span>
+                      ) : (
+                        <span className="text-emerald-400/70 text-[9px]">Fully Settled</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 py-3 text-center whitespace-nowrap text-[10px]">
+                    <span className="text-emerald-400 font-bold">{dynamicSummary.deliveredCount} Cleared</span>
+                    {dynamicSummary.pendingPassCount > 0 && (
+                      <span className="text-amber-400 font-bold block text-[9px]">{dynamicSummary.pendingPassCount} Pass Pending</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap text-[10px] text-[var(--text-dim)]">
+                    Aggregate Ledger
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -1235,11 +1324,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       <span>{txn.date} · {txn.time}</span>
                     </span>
                     {txn.confirmed ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                      <span className="txn-status-badge bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
                         <Check size={10} strokeWidth={2.5} /> In Sales
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                      <span className="txn-status-badge bg-amber-500/15 text-amber-400 border-amber-500/30">
                         Pending
                       </span>
                     )}
@@ -1249,47 +1338,51 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   <div>
                     {isDelivered ? (
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 text-emerald-400 font-bold uppercase text-[10px] tracking-wider bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30">
+                        <span className="txn-status-badge txn-status-badge-lg bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
                           <ShieldCheck size={11} strokeWidth={2.5} />
-                          <span>{txn.gateSequenceNo || txn.gatePass?.gateSequenceNo || 'Gate Pass Verified'}</span>
+                          <span className="truncate max-w-[90px]" title={txn.gateSequenceNo || txn.gatePass?.gateSequenceNo || 'Verified'}>
+                            {txn.gateSequenceNo || txn.gatePass?.gateSequenceNo || 'Verified'}
+                          </span>
                         </span>
                         <button
                           type="button"
                           onClick={() => setViewGatePassTxn(txn)}
-                          className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border bg-[var(--panel-raised)] text-[var(--text)] hover:border-[var(--yellow)] transition cursor-pointer"
+                          className="px-2 h-6 inline-flex items-center justify-center rounded text-[10px] font-bold uppercase border bg-[var(--panel-raised)] text-[var(--text)] hover:border-[var(--yellow)] transition cursor-pointer shrink-0"
                           title="View attached gate pass"
                         >
                           {isPdf ? 'PDF' : 'JPG'}
                         </button>
                       </div>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-amber-400 font-bold uppercase text-[10px] tracking-wider bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30">
+                      <span className="txn-status-badge txn-status-badge-lg bg-amber-500/15 text-amber-400 border-amber-500/30">
                         <Lock size={10} />
-                        <span>Awaiting Gate Pass</span>
+                        <span>Awaiting Pass</span>
                       </span>
                     )}
                   </div>
                 </div>
 
                 {/* Card Middle: Customer, Items Summary, Pricing */}
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] items-start md:items-center gap-3">
                   {/* Left: Customer & Items */}
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-[var(--text)] font-sans">
+                  <div className="txn-item-summary-container">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-[var(--text)] font-sans truncate max-w-[280px]">
                         {txn.factory || 'Walk-in Customer'}
                       </span>
                       {txn.factory && (
-                        <span className="px-2 py-0.2 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--yellow)] text-[10px] font-bold">
+                        <span className="px-1.5 py-0.5 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--yellow)] text-[10px] font-bold shrink-0">
                           Workshop
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-[var(--text)] font-sans">
+                    <div className="txn-item-summary-text text-xs" title={txn.itemsSummary}>
                       {txn.itemsSummary}
                     </div>
-                    <div className="text-[11px] text-[var(--text-dim)] flex items-center gap-2 flex-wrap">
-                      <span>{parsedItems.length} items ({txn.itemCount || 1} pcs)</span>
+                    <div className="txn-item-summary-meta">
+                      <span className="shrink-0 font-medium">
+                        {parsedItems.length} {parsedItems.length === 1 ? 'item' : 'items'} ({txn.itemCount || 1} pcs)
+                      </span>
                       {(() => {
                         const cleanSizes = txn.sizes?.split(/[,;]/).map(s => s.trim()).filter(s => s && s !== '-' && s !== '—').join(', ');
                         const cleanColors = txn.colors?.split(/[,;]/).map(s => s.trim()).filter(s => s && s !== '-' && s !== '—').join(', ');
@@ -1297,7 +1390,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         return specChips.length > 0 ? (
                           <>
                             <span>·</span>
-                            <span>{specChips.join('  |  ')}</span>
+                            <span className="truncate">{specChips.join(' | ')}</span>
                           </>
                         ) : null;
                       })()}
@@ -1305,16 +1398,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   </div>
 
                   {/* Right: Total & Balance Due */}
-                  <div className="text-left md:text-right shrink-0">
-                    <div className="font-black text-lg text-[var(--yellow)]">{fmt(txn.total)}</div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider mt-0.5">
-                      {info.status === 'Paid' ? (
-                        <span className="text-emerald-400">Paid in Full</span>
-                      ) : info.status === 'Partial' ? (
-                        <span className="text-amber-400">Partial · Due: {fmt(info.due)}</span>
-                      ) : (
-                        <span className="text-red-400">Unpaid · Due: {fmt(info.due)}</span>
-                      )}
+                  <div className="flex md:flex-col items-center md:items-end justify-between md:justify-center gap-2 shrink-0 pt-1 md:pt-0 border-t md:border-t-0 border-[var(--steel-line)]/40">
+                    <div className="font-black text-lg text-[var(--yellow)] whitespace-nowrap">{fmt(txn.total)}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`txn-status-badge min-w-[95px] ${
+                        info.status === 'Paid'
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                          : info.status === 'Partial'
+                          ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                          : 'bg-red-500/15 text-red-400 border-red-500/30'
+                      }`}>
+                        {info.status === 'Paid' ? 'Paid in Full' : info.status === 'Partial' ? `Partial (${fmt(info.due)})` : `Due: ${fmt(info.due)}`}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1460,6 +1555,88 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* STICKY BOTTOM SUMMARY ROW — Dynamically calculates Total Orders and Aggregate Value */}
+      {filteredTxns.length > 0 && (
+        <div className="sticky bottom-2 z-20 mt-3 pt-1">
+          <div className="rounded-xl border-2 border-[var(--yellow)]/60 bg-[var(--panel-raised)]/95 backdrop-blur-md shadow-2xl p-3 sm:px-4 sm:py-3 transition-all duration-200">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs">
+              {/* Left: Total Orders & Pieces Breakdown */}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-lg bg-[var(--yellow)] text-black font-black flex items-center justify-center shrink-0 shadow-sm">
+                  <Calculator size={18} strokeWidth={2.5} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-xs uppercase text-[var(--text-dim)] tracking-wider">
+                      Ledger Summary
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-[var(--panel)] border border-[var(--steel-line)] text-xs font-bold text-[var(--text)]">
+                      {dynamicSummary.totalOrders} {dynamicSummary.totalOrders === 1 ? 'Order' : 'Orders'}
+                    </span>
+                    {dynamicSummary.isFiltered && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        Filtered ({dynamicSummary.allOrdersCount} total)
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-dim)] mt-0.5 flex items-center gap-2">
+                    <span>Total Quantity: <strong className="text-[var(--text)]">{dynamicSummary.totalQty.toLocaleString()} pcs</strong></span>
+                    <span>·</span>
+                    <span className="text-emerald-400 font-semibold">{dynamicSummary.deliveredCount} Cleared</span>
+                    {dynamicSummary.pendingPassCount > 0 && (
+                      <>
+                        <span>·</span>
+                        <span className="text-amber-400 font-semibold">{dynamicSummary.pendingPassCount} Pass Pending</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Aggregate Value & Financial Balance Badges */}
+              <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--steel-line)]/50">
+                {/* Collected / Paid */}
+                <div className="text-left sm:text-right">
+                  <div className="text-[10px] uppercase font-bold text-[var(--text-dim)]">Collected</div>
+                  <div className="text-xs sm:text-sm font-bold text-emerald-400">{fmt(dynamicSummary.totalPaid)}</div>
+                </div>
+
+                {/* Balance Due */}
+                <div className="text-left sm:text-right">
+                  <div className="text-[10px] uppercase font-bold text-[var(--text-dim)]">Balance Due</div>
+                  <div className={`text-xs sm:text-sm font-bold ${dynamicSummary.totalDue > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {fmt(dynamicSummary.totalDue)}
+                  </div>
+                </div>
+
+                {/* Aggregate Value (Primary Highlight) */}
+                <div className="pl-3 border-l border-[var(--steel-line)] text-right">
+                  <div className="text-[10px] uppercase font-black tracking-wider text-[var(--yellow)]">Aggregate Value</div>
+                  <div className="text-base sm:text-lg font-black text-[var(--yellow)] tracking-tight">
+                    {fmt(dynamicSummary.aggregateValue)}
+                  </div>
+                </div>
+
+                {/* Reset filter shortcut if filtered */}
+                {dynamicSummary.isFiltered && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchTerm('');
+                      setStatusFilter('all');
+                    }}
+                    className="hidden lg:flex items-center gap-1 px-2 py-1 rounded bg-[var(--panel)] border border-[var(--steel-line)] hover:border-[var(--yellow)] text-[10px] font-bold text-[var(--text-dim)] hover:text-[var(--yellow)] transition cursor-pointer"
+                    title="Reset search and filters to view all orders"
+                  >
+                    <span>Reset</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
