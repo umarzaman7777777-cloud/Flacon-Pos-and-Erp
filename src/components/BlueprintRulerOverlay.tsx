@@ -198,7 +198,7 @@ export const BlueprintRulerOverlay: React.FC<BlueprintRulerOverlayProps> = ({
       {/* 2. FLOATING QUICK GRID ON/OFF SWITCH BUTTON                    */}
       {/* Allows users to view clear app or drafting grid instantly     */}
       {/* ------------------------------------------------------------- */}
-      <div className="fixed bottom-4 right-4 z-40 flex items-center select-none">
+      <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 z-20 flex items-center select-none opacity-60 hover:opacity-100 transition-opacity">
         <button
           type="button"
           onClick={onToggleGrid}
@@ -207,7 +207,7 @@ export const BlueprintRulerOverlay: React.FC<BlueprintRulerOverlayProps> = ({
               ? 'Click to turn OFF Blueprint Grid (View Clear Application Interface)'
               : 'Click to turn ON Blueprint Grid & Numeric Coordinate Rulers'
           }
-          className={`group flex items-center gap-2 px-3 py-2 rounded-full border shadow-xl transition-all duration-200 cursor-pointer active:scale-95 font-mono text-xs font-bold backdrop-blur-md ${
+          className={`group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full border shadow-xl transition-all duration-200 cursor-pointer active:scale-95 font-mono text-[11px] sm:text-xs font-bold backdrop-blur-md ${
             showGrid
               ? 'border-sky-400 bg-sky-950/85 text-sky-200 hover:bg-sky-900 shadow-[0_0_15px_rgba(56,189,248,0.35)] ring-1 ring-sky-400/40'
               : 'border-[var(--steel-line)] bg-zinc-900/85 text-[var(--text-dim)] hover:text-white hover:border-amber-400/60 shadow-lg'

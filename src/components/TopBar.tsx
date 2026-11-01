@@ -16,7 +16,8 @@ import {
   Database,
   Trash2,
   Grid,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from 'lucide-react';
 import { AppLanguage, AppTheme, PrinterSettings } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
@@ -63,12 +64,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   theme,
   language,
   companyName = 'Falcon Rod Maker',
-  companyTagline = 'Fan Accessories • Gujrat',
+  companyTagline = 'Precision Ceiling Fan Down Rod Specialist — Gujrat, Pakistan',
   notificationCount,
   syncState,
   pendingQueueCount = 0,
   workspaceStatus = 'disconnected',
-  workspaceBadgeText = 'G-Sync',
   workspaceTooltip,
   sheetsConnected = false,
   driveConnected = false,
@@ -92,13 +92,9 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
-  // Real-time Google Workspace (Drive & Sheets) Connectivity State
+  // Real-time Google Workspace Connectivity State
   const isTokenLive = (info: any) => {
-    return Boolean(
-      info &&
-      info.token &&
-      isRealGoogleOAuthToken(info.token)
-    );
+    return Boolean(info && info.token && isRealGoogleOAuthToken(info.token));
   };
 
   const [localSheetsConnected, setLocalSheetsConnected] = useState(() => isTokenLive(getStoredSheetsToken()));
@@ -122,11 +118,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const hasDrive = driveConnected || localDriveConnected;
   const hasAnyGoogle = hasSheets || hasDrive;
 
-  // Prominent color-coded status: 'live' (green) | 'syncing' (yellow) | 'warning' (rose/re-auth) | 'offline' (amber)
   const isSyncing = isSyncingWorkspace || workspaceStatus === 'syncing' || isAutoAuthenticating;
   const hasAuthWarning = workspaceStatus === 'warning';
-  
-  // When authorized with token, stay solidly 'live' (green) so reopening the app or doing background sync NEVER bounces away from LIVE
+
   const googleState: 'live' | 'syncing' | 'warning' | 'offline' = hasAuthWarning
     ? 'warning'
     : hasAnyGoogle
@@ -135,7 +129,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     ? 'syncing'
     : 'offline';
 
-  // Real-time hardware printer connectivity status
+  // Printer settings
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() => getPrinterSettings());
 
   useEffect(() => {
@@ -148,7 +142,6 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const isBluetooth = printerSettings.connectionType === 'bluetooth';
   const isWifi = printerSettings.connectionType === 'wifi';
-  const isWired = printerSettings.connectionType === 'wired';
 
   const isPrinterReady = isBluetooth
     ? Boolean(printerSettings.bluetoothPaired)
@@ -156,32 +149,28 @@ export const TopBar: React.FC<TopBarProps> = ({
     ? Boolean(printerSettings.wifiIpAddress)
     : Boolean(printerSettings.wiredPortName);
 
-  // Short badge text for compact mobile and desktop display
   const printerBadgeLabel = isBluetooth
     ? printerSettings.bluetoothDeviceName
-      ? printerSettings.bluetoothDeviceName.replace(/mobile|printer|thermal/gi, '').trim().split(' ')[0] || 'BT'
+      ? printerSettings.bluetoothDeviceName.replace(/mobile|printer|thermal/gi, '').trim().split(' ')[0] || 'PT-210'
       : 'PT-210'
     : isWifi
-    ? printerSettings.wifiIpAddress
-      ? printerSettings.wifiIpAddress.split('.').slice(-2).join('.')
-      : 'Wi-Fi'
+    ? 'Wi-Fi'
     : 'USB';
 
-  // Tooltip with comprehensive hardware state
   const printerTooltip = isBluetooth
-    ? `Thermal POS Printer (Bluetooth): ${printerSettings.bluetoothPaired ? 'Paired & Ready' : 'Standby / Unpaired'} • ${printerSettings.bluetoothDeviceName || 'PT-210'} (${printerSettings.paperSize.toUpperCase()}) • Click to configure printer`
+    ? `Thermal POS Printer (Bluetooth): ${printerSettings.bluetoothPaired ? 'Paired & Ready' : 'Standby / Unpaired'} • ${printerSettings.bluetoothDeviceName || 'PT-210'} (${printerSettings.paperSize.toUpperCase()})`
     : isWifi
-    ? `Thermal POS Printer (Wi-Fi LAN): ${printerSettings.wifiIpAddress ? `Connected (${printerSettings.wifiIpAddress}:${printerSettings.wifiPort || 9100})` : 'IP Not Configured'} • ${printerSettings.paperSize.toUpperCase()} • Click to configure printer`
-    : `Thermal POS Printer (Wired USB): ${printerSettings.wiredPortName || 'USB001'} • ${printerSettings.paperSize.toUpperCase()} • Click to configure printer`;
+    ? `Thermal POS Printer (Wi-Fi LAN): ${printerSettings.wifiIpAddress ? `Connected (${printerSettings.wifiIpAddress})` : 'IP Not Configured'}`
+    : `Thermal POS Printer (USB): Ready`;
 
   return (
-    <header className="bg-[var(--panel)] border-b border-[var(--steel-line)] relative select-none max-w-full overflow-x-hidden break-words">
-      {/* Row 1: Logo, Factory Name, and Company Details (Sole occupants - Never squeezed or overlapped) */}
-      <div className="px-4 sm:px-6 py-2.5 flex items-center border-b border-[var(--steel-line)]/50">
+    <header className="bg-[var(--panel)] border-b border-[var(--steel-line)] relative select-none max-w-full overflow-x-hidden break-words font-mono">
+      {/* Row 1: Brand Identity Header */}
+      <div className="px-3.5 sm:px-6 py-2.5 flex items-center justify-between border-b border-[var(--steel-line)]/50 bg-[var(--panel)]">
         <button
           type="button"
           onClick={onRefreshOverview}
-          className="flex items-center gap-2.5 sm:gap-3 text-left group transition active:scale-[0.98] focus:outline-none w-full"
+          className="flex items-center gap-2.5 sm:gap-3 text-left group transition active:scale-[0.99] focus:outline-none min-w-0"
           title={t('update_overview')}
         >
           <div className="relative flex items-center justify-center shrink-0">
@@ -193,317 +182,222 @@ export const TopBar: React.FC<TopBarProps> = ({
             />
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="font-serif font-bold text-base sm:text-lg tracking-tight text-[var(--text)] group-hover:text-[var(--yellow)] transition-colors truncate">
+            <span className="font-serif font-black text-sm sm:text-lg tracking-tight text-[var(--text)] group-hover:text-[var(--yellow)] transition-colors truncate">
               {companyName || 'Falcon Rod Maker'}
             </span>
-            <span className="text-[10px] sm:text-[11px] font-mono tracking-wider text-[var(--yellow)] uppercase font-semibold leading-none truncate mt-0.5">
-              {companyTagline || 'Fan Accessories • Gujrat'}
+            <span className="text-[9.5px] sm:text-[11px] font-mono tracking-wider text-[var(--yellow)] uppercase font-semibold leading-tight truncate">
+              {companyTagline || 'Precision Ceiling Fan Down Rod Specialist — Gujrat, Pakistan'}
             </span>
           </div>
         </button>
+
+        {/* Quick PWA Install Button on right of Row 1 */}
+        <div className="hidden sm:block shrink-0">
+          <PWAInstallButton variant="header" />
+        </div>
       </div>
 
-      {/* Row 2: Dedicated Action Row with Navigation, Badges, and Quick Tools */}
-      <div className="px-3 sm:px-6 py-1.5 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar bg-[var(--panel-raised)]/35">
-        {/* Left tools in specified sequence: 1. Menu -> 2. Lock -> 3. Language -> 4. Mic -> 5. Others (Search, Theme) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* 1. Menu */}
+      {/* Row 2: Streamlined Quick Action Bar (Designed to never truncate or overflow) */}
+      <div className="px-2.5 sm:px-6 py-1.5 flex items-center justify-between gap-1.5 sm:gap-2 bg-[var(--panel-raised)]/35 overflow-x-auto no-scrollbar">
+        {/* Left Side: Navigation & Core Operations */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Menu button */}
           {onToggleMenu && (
             <button
               type="button"
               id="btn-toggle-main-menu"
               onClick={onToggleMenu}
               title="Toggle Menu"
-              className="flex items-center gap-1.5 h-7 sm:h-8 px-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text)] hover:border-[var(--yellow)] transition active:scale-95 text-xs font-mono font-semibold shrink-0 cursor-pointer"
+              className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text)] hover:border-amber-400 transition active:scale-95 text-xs font-semibold cursor-pointer"
             >
-              <Menu size={15} />
-              <span>Menu</span>
+              <Menu size={14} />
+              <span className="hidden xs:inline">Menu</span>
             </button>
           )}
 
-          {/* 2. Lock */}
+          {/* Lock Screen */}
           <button
             type="button"
             id="btn-header-lock-screen"
             onClick={onLock}
-            title="Lock Screen"
-            className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 font-mono text-xs font-bold transition active:scale-95 shadow-xs shrink-0 cursor-pointer"
+            title="Lock Terminal"
+            className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-400 font-bold text-xs transition active:scale-95 cursor-pointer shadow-xs"
           >
             <Lock size={12} className="text-red-400 shrink-0" />
-            <span className="font-bold text-xs uppercase tracking-wide">Lock</span>
+            <span className="uppercase tracking-wider">Lock</span>
           </button>
 
-          {/* 3. Mic / Voice Assistant */}
+          {/* Voice Assistant Mic */}
           <button
             type="button"
             onClick={onOpenVoice}
-            title={t('voice_modal_title')}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-[var(--yellow)] text-[var(--text)] flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
+            title="Voice Assistant (Urdu & English)"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
           >
-            <Mic size={13} className="text-[var(--yellow)]" />
+            <Mic size={14} className="text-amber-400" />
           </button>
 
-          {/* 5. Others: Search and Theme toggles */}
+          {/* Global Search */}
           <button
             type="button"
             onClick={onOpenSearch}
             title={t('search_everything')}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-[var(--yellow)] text-[var(--text)] flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-amber-400 text-zinc-300 hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
           >
             <Search size={13} />
           </button>
 
+          {/* Theme Switcher */}
           <button
             type="button"
             onClick={onToggleTheme}
             title="Switch theme"
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-[var(--yellow)] text-[var(--text)] flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-amber-400 text-zinc-300 hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
           >
-            {theme === 'dark' ? <Moon size={13} /> : <Sun size={13} className="text-amber-500" />}
+            {theme === 'dark' ? <Moon size={13} /> : <Sun size={13} className="text-amber-400" />}
           </button>
 
-          {/* Quick Blueprint Grid ON / OFF Button */}
+          {/* Blueprint Grid ON / OFF */}
           {onToggleBlueprintGrid && (
             <button
               type="button"
               id="topbar-grid-toggle-btn"
               onClick={onToggleBlueprintGrid}
-              title={
+              title={showBlueprintGrid ? 'Grid: ON' : 'Grid: OFF'}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer ${
                 showBlueprintGrid
-                  ? 'Blueprint Grid: ON (Click to hide grid for clear view)'
-                  : 'Blueprint Grid: OFF (Click to view layout measurement grid)'
-              }
-              className={`flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-2.5 rounded-full border text-[10.5px] font-mono font-bold transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
-                showBlueprintGrid
-                  ? 'border-sky-400 bg-sky-950/70 text-sky-300 hover:bg-sky-900 shadow-[0_0_10px_rgba(56,189,248,0.25)]'
-                  : 'border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-sky-400 text-[var(--text-dim)] hover:text-white'
+                  ? 'border-sky-400 bg-sky-950/70 text-sky-300 shadow-xs'
+                  : 'border-[var(--steel-line)] bg-[var(--panel-raised)] text-zinc-400 hover:text-white'
               }`}
             >
-              <Grid size={12} className={showBlueprintGrid ? 'text-sky-400' : 'text-[var(--text-dim)]'} />
-              <span className="hidden xs:inline">
-                GRID {showBlueprintGrid ? 'ON' : 'OFF'}
-              </span>
+              <Grid size={13} />
             </button>
           )}
-
-          {/* In-App PWA Install Action */}
-          <PWAInstallButton variant="header" />
         </div>
 
-        {/* Right status badges & indicators: Notifications, Cloud Sync, Hardware Printer */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
+        {/* Right Side: Status Badges, Notifications & Hardware Printer */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
           {/* Notifications Button */}
           <button
             type="button"
             onClick={onOpenNotifications}
             title={t('nav_notifications')}
-            className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-[var(--yellow)] text-[var(--text)] flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
+            className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-amber-400 text-zinc-300 hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
           >
             <Bell size={13} />
             {notificationCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-[var(--red)] text-white font-mono text-[9px] font-bold flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white font-mono text-[9px] font-bold flex items-center justify-center animate-pulse">
                 {notificationCount > 99 ? '99+' : notificationCount}
               </span>
             )}
           </button>
 
-          {/* Recycle Bin & Accidental Delete Recovery Button */}
+          {/* Recycle Bin Button */}
           <button
             type="button"
             onClick={onOpenRecycleBin}
-            title={language === 'ur' ? 'بحالی کوڑا دان (حادثاتی ڈیلیٹ ریکوری)' : 'Recycle Bin: Restore accidentally deleted orders, ledgers & expenses'}
-            className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-rose-400 text-[var(--text)] flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
+            title="Recycle Bin (Recovery)"
+            className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-rose-400 text-zinc-300 hover:text-white flex items-center justify-center transition active:scale-95 shrink-0 cursor-pointer"
           >
-            <Trash2 size={13} className={recycleBinCount > 0 ? 'text-rose-400' : 'text-[var(--text-dim)]'} />
+            <Trash2 size={13} className={recycleBinCount > 0 ? 'text-rose-400' : 'text-zinc-400'} />
             {recycleBinCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white font-mono text-[9px] font-bold flex items-center justify-center shadow-xs animate-pulse">
-                {recycleBinCount > 99 ? '99+' : recycleBinCount}
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white font-mono text-[9px] font-bold flex items-center justify-center shadow-xs">
+                {recycleBinCount}
               </span>
             )}
           </button>
 
-          {/* 1. Terminal DB (Firebase Realtime Multi-Device Sync) */}
+          {/* Terminal DB Status Capsule */}
           <button
             type="button"
             id="topbar-cloud-sync-btn"
             onClick={onOpenSyncModal}
-            title="Terminal Sync: Live POS orders, stock & ledger database between Counter, Office & Gate"
-            className={`flex items-center gap-1.5 sm:gap-2 h-7 sm:h-8 px-2 sm:px-2.5 rounded-full border text-[10px] font-mono font-semibold uppercase transition cursor-pointer active:scale-95 shrink-0 ${
+            title="Terminal DB: Multi-device sync"
+            className={`flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border text-[10px] font-bold uppercase transition cursor-pointer active:scale-95 shrink-0 ${
               syncState === 'synced'
-                ? 'border-indigo-500/40 bg-indigo-950/40 text-indigo-200 hover:border-indigo-400 hover:bg-indigo-900/50'
+                ? 'border-indigo-500/40 bg-indigo-950/40 text-indigo-300 hover:border-indigo-400'
                 : syncState === 'syncing'
-                ? 'border-amber-500/40 bg-amber-950/40 text-amber-200 hover:border-amber-400'
-                : 'border-[var(--steel-line)] bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-[var(--text)]'
+                ? 'border-amber-500/40 bg-amber-950/40 text-amber-300'
+                : 'border-[var(--steel-line)] bg-[var(--panel-raised)] text-zinc-400'
             }`}
           >
             <Database size={11} className="text-indigo-400 shrink-0" />
             <span
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                syncState === 'synced'
-                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.7)]'
-                  : syncState === 'syncing'
-                  ? 'bg-amber-400 animate-pulse'
-                  : 'bg-red-400'
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                syncState === 'synced' ? 'bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.7)]' : 'bg-amber-400'
               }`}
             />
-            <span className="inline-flex items-center gap-1">
-              <span className="hidden xs:inline font-bold">
-                {syncState === 'synced' ? 'Terminal DB' : syncState === 'syncing' ? 'DB Syncing' : 'DB Offline'}
-              </span>
-              <span className="xs:hidden font-bold">
-                DB
-              </span>
-              {pendingQueueCount > 0 && (
-                <span className="px-1 py-0.2 rounded bg-amber-500/30 text-amber-300 font-bold text-[9px] border border-amber-500/40">
-                  {pendingQueueCount}
-                </span>
-              )}
-            </span>
+            <span className="font-bold">DB</span>
           </button>
 
-          {/* 2. Google Workspace Cloud (Drive Backups & Sheets Live Export) */}
+          {/* Google Workspace Live Sync Capsule */}
           <button
             type="button"
             id="topbar-workspace-sync-btn"
             onClick={onOpenWorkspaceModal}
-            title={
-              workspaceTooltip ||
-              (googleState === 'warning'
-                ? 'Google Workspace: Authentication required (token expired or rejected). Tap to re-authenticate.'
-                : isAutoAuthenticating
-                ? 'Google Workspace: Auto-authenticating and synchronizing Google Sheets & Drive...'
-                : googleState === 'syncing'
-                ? 'Google Workspace: Synchronization in progress (Uploading to Drive/Sheets)...'
-                : googleState === 'live'
-                ? `Google Workspace: Connected & Live (${hasSheets ? 'Sheets ✓' : ''} ${hasDrive ? 'Drive ✓' : ''}) • Auto-Sync Active`
-                : 'Google Workspace: Click to connect Google Drive & Sheets (Once connected, auto-authenticates & syncs every time you open the app)')
-            }
-            className={`flex items-center gap-1.5 sm:gap-2 h-7 sm:h-8 px-2.5 sm:px-3 rounded-full border text-[10.5px] font-mono font-bold uppercase transition cursor-pointer active:scale-95 shrink-0 shadow-xs ${
+            title={workspaceTooltip || 'Google Workspace Sync (Drive & Sheets)'}
+            className={`flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border text-[10px] font-bold uppercase transition cursor-pointer active:scale-95 shrink-0 ${
               googleState === 'warning'
-                ? 'border-rose-500/80 bg-rose-950/70 text-rose-200 hover:border-rose-400 hover:bg-rose-900/80 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                ? 'border-rose-500/80 bg-rose-950/60 text-rose-300'
                 : googleState === 'live'
-                ? 'border-emerald-500/70 bg-emerald-950/60 text-emerald-300 hover:border-emerald-400 hover:bg-emerald-900/70 shadow-[0_0_12px_rgba(16,185,129,0.18)]'
-                : googleState === 'syncing'
-                ? 'border-amber-500/80 bg-amber-950/60 text-amber-200 hover:border-amber-400 hover:bg-amber-900/70 shadow-[0_0_12px_rgba(245,158,11,0.22)]'
-                : 'border-amber-500/50 bg-amber-950/40 text-amber-300 hover:border-amber-400 hover:bg-amber-900/50'
+                ? 'border-emerald-500/50 bg-emerald-950/50 text-emerald-300 hover:border-emerald-400'
+                : 'border-amber-500/50 bg-amber-950/40 text-amber-300'
             }`}
           >
-            {/* Status Icon */}
             {googleState === 'warning' ? (
-              <AlertTriangle size={13} className="text-rose-400 shrink-0" />
-            ) : googleState === 'syncing' ? (
-              <RefreshCw size={13} className="text-amber-400 animate-spin shrink-0" />
+              <AlertTriangle size={12} className="text-rose-400 shrink-0" />
+            ) : googleState === 'syncing' || isSyncing ? (
+              <RefreshCw size={11} className="text-amber-400 animate-spin shrink-0" />
             ) : googleState === 'live' ? (
-              isSyncing ? (
-                <RefreshCw size={13} className="text-emerald-400 animate-spin shrink-0" />
-              ) : (
-                <Cloud size={13} className="text-emerald-400 shrink-0" />
-              )
+              <Cloud size={11} className="text-emerald-400 shrink-0" />
             ) : (
-              <CloudOff size={13} className="text-amber-400 shrink-0" />
+              <CloudOff size={11} className="text-amber-400 shrink-0" />
             )}
 
-            {/* Glowing Beacon Dot */}
-            <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-              {googleState === 'warning' && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-80" />
-              )}
-              {googleState === 'live' && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              )}
-              {googleState === 'syncing' && (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-80" />
-              )}
-              <span
-                className={`relative inline-flex h-2 w-2 rounded-full ${
-                  googleState === 'warning'
-                    ? 'bg-rose-400 shadow-[0_0_8px_rgba(244,63,94,0.9)]'
-                    : googleState === 'live'
-                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.9)]'
-                    : googleState === 'syncing'
-                    ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.9)]'
-                    : 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.8)]'
-                }`}
-              />
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                googleState === 'live' ? 'bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.8)]' : 'bg-amber-400'
+              }`}
+            />
+
+            <span className="font-black text-[9.5px]">
+              {googleState === 'live' ? 'LIVE' : googleState === 'warning' ? 'RE-AUTH' : 'SYNC'}
             </span>
 
-            {/* Status Label & Scope Badges */}
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold tracking-tight">
-                <span className="hidden xs:inline text-[9px] opacity-75">G-SYNC: </span>
-                {googleState === 'warning' ? (
-                  <span className="text-rose-300 font-black">RE-AUTH</span>
-                ) : googleState === 'live' ? (
-                  <span className="text-emerald-300 font-black inline-flex items-center gap-1">
-                    <span>LIVE</span>
-                    {isSyncing && <RefreshCw size={9} className="animate-spin text-emerald-400 opacity-90 inline" />}
-                  </span>
-                ) : googleState === 'syncing' ? (
-                  <span className="text-amber-300 font-black">SYNCING</span>
-                ) : (
-                  <span className="text-amber-300 font-black">CONNECT</span>
-                )}
+            {googleState === 'live' && (
+              <span className="hidden md:inline-flex items-center gap-1 text-[8.5px] text-emerald-400/80 font-normal">
+                {hasSheets && <span>Sheets</span>}
+                {hasDrive && <span>· Drive</span>}
               </span>
-
-              {googleState === 'live' && (
-                <div className="hidden md:flex items-center gap-1">
-                  {hasSheets && (
-                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[8.5px] font-bold border border-emerald-500/40">
-                      Sheets
-                    </span>
-                  )}
-                  {hasDrive && (
-                    <span className="px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 text-[8.5px] font-bold border border-sky-500/40">
-                      Drive
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
           </button>
 
-          {/* Hardware Thermal & Network Printer Status Indicator */}
+          {/* Hardware Thermal Printer Capsule (Clean & Never Truncated) */}
           <button
             type="button"
             id="topbar-printer-status-btn"
             onClick={onOpenPrinterConfig}
             title={printerTooltip}
-            className={`flex items-center gap-1.5 sm:gap-2 h-7 sm:h-8 px-2 sm:px-3 rounded-full border text-[10px] font-mono font-semibold uppercase transition cursor-pointer active:scale-95 shrink-0 ${
+            className={`flex items-center gap-1.5 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border text-[10px] font-bold uppercase transition cursor-pointer active:scale-95 shrink-0 ${
               isPrinterConfigActive
-                ? 'border-[var(--yellow)] bg-[var(--yellow)]/15 text-[var(--yellow)] shadow-xs'
-                : 'border-[var(--steel-line)] bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-[var(--text)] hover:border-[var(--yellow)]'
+                ? 'border-amber-400 bg-amber-500/15 text-amber-400'
+                : 'border-[var(--steel-line)] bg-[var(--panel-raised)] text-zinc-300 hover:border-amber-400'
             }`}
           >
             <span
-              className={`w-2 h-2 rounded-full shrink-0 transition-colors ${
-                isPrinterReady
-                  ? isBluetooth
-                    ? 'bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.8)]'
-                    : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]'
-                  : 'bg-amber-500 animate-pulse'
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                isPrinterReady ? 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]' : 'bg-amber-400 animate-pulse'
               }`}
             />
-            <span className="inline-flex items-center gap-1">
-              {isBluetooth ? (
-                <Bluetooth size={11} className={isPrinterReady ? 'text-sky-400' : 'text-amber-400'} />
-              ) : isWifi ? (
-                <Wifi size={11} className={isPrinterReady ? 'text-emerald-400' : 'text-amber-400'} />
-              ) : (
-                <Usb size={11} className={isPrinterReady ? 'text-emerald-400' : 'text-amber-400'} />
-              )}
-              <span className="hidden sm:inline">
-                {isBluetooth
-                  ? `BT: ${printerBadgeLabel}`
-                  : isWifi
-                  ? `Wi-Fi: ${printerSettings.wifiIpAddress ? 'Ready' : 'Setup'}`
-                  : 'USB: Ready'}
-              </span>
-              <span className="sm:hidden">
-                {isBluetooth ? 'BT' : isWifi ? 'WiFi' : 'USB'}
-              </span>
-              <span className="hidden md:inline text-[9px] px-1 py-0.2 rounded bg-black/25 text-[var(--text-dim)] font-mono border border-white/5 ml-0.5">
-                {printerSettings.paperSize}
-              </span>
+            {isBluetooth ? (
+              <Bluetooth size={11} className={isPrinterReady ? 'text-sky-400' : 'text-amber-400'} />
+            ) : isWifi ? (
+              <Wifi size={11} className={isPrinterReady ? 'text-emerald-400' : 'text-amber-400'} />
+            ) : (
+              <Usb size={11} className="text-zinc-400" />
+            )}
+            <span className="font-bold">
+              {printerBadgeLabel}
             </span>
           </button>
         </div>

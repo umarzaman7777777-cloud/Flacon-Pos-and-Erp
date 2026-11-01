@@ -41,6 +41,11 @@ export async function isNativeSpeechSupported(): Promise<boolean> {
   }
 }
 
+export function isWebSpeechSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+}
+
 export interface UnifiedSpeechListener {
   onResult: (transcript: string, isFinal: boolean) => void;
   onRms?: (level: number) => void;
@@ -51,14 +56,14 @@ export interface UnifiedSpeechListener {
 let activeSpeechStopFn: (() => void) | null = null;
 
 export async function startUnifiedSpeechRecognition(
-  language: 'ur' | 'en',
+  language: 'ur' | 'en' | string,
   listeners: UnifiedSpeechListener
 ): Promise<{ stop: () => void; isNative: boolean }> {
   // Always cancel any existing session
   stopUnifiedSpeechRecognition();
 
   const isNative = await isNativeSpeechSupported();
-  const langCode = language === 'ur' ? 'ur-PK' : 'en-US';
+  const langCode = language === 'ur' || language === 'ur-PK' ? 'ur-PK' : (language === 'en-PK' ? 'en-PK' : 'en-US');
 
   if (isNative) {
     // 1. Native Android SpeechRecognizer Plugin
@@ -112,7 +117,7 @@ export async function startUnifiedSpeechRecognition(
     }
   }
 
-  // 2. Web Speech API (Chrome / Safari / Desktop / Web)
+  // 2. Web Speech API (Chrome / Safari / Edge / Android Web)
   const SpeechRecognition =
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -120,64 +125,92 @@ export async function startUnifiedSpeechRecognition(
     throw new Error('Speech recognition not supported on this browser/environment');
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = langCode;
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    if (listeners.onState) listeners.onState('listening');
-  };
-
-  recognition.onspeechstart = () => {
-    if (listeners.onState) listeners.onState('listening');
-  };
-
-  recognition.onaudiostart = () => {
-    if (listeners.onRms) listeners.onRms(50);
-  };
-
-  recognition.onresult = (event: any) => {
-    let interim = '';
-    let final = '';
-    for (let i = 0; i < event.results.length; ++i) {
-      const res = event.results[i];
-      if (res.isFinal) {
-        final += res[0].transcript;
-      } else {
-        interim += res[0].transcript;
-      }
-    }
-    const current = (final || interim).trim();
-    if (current) {
-      listeners.onResult(current, Boolean(final));
-      if (listeners.onRms) {
-        listeners.onRms(Math.min(95, 30 + Math.floor(Math.random() * 50)));
-      }
-    }
-  };
-
-  recognition.onerror = (e: any) => {
-    if (listeners.onError) listeners.onError(e.error || 'speech_error');
-  };
-
-  recognition.onend = () => {
-    if (listeners.onState) listeners.onState('processing');
-  };
-
   let stopped = false;
+  let recognition: any = null;
+
+  try {
+    recognition = new SpeechRecognition();
+    recognition.lang = langCode;
+    recognition.continuous = true; // Continuous listening so small pauses don't cut off speech
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 2;
+
+    recognition.onstart = () => {
+      if (stopped) return;
+      if (listeners.onState) listeners.onState('listening');
+    };
+
+    recognition.onspeechstart = () => {
+      if (stopped) return;
+      if (listeners.onState) listeners.onState('listening');
+    };
+
+    recognition.onaudiostart = () => {
+      if (stopped) return;
+      if (listeners.onRms) listeners.onRms(60);
+    };
+
+    recognition.onresult = (event: any) => {
+      if (stopped) return;
+      let interim = '';
+      let final = '';
+      for (let i = 0; i < event.results.length; ++i) {
+        const res = event.results[i];
+        if (res.isFinal) {
+          final += res[0].transcript;
+        } else {
+          interim += res[0].transcript;
+        }
+      }
+      const current = (final || interim).trim();
+      if (current) {
+        listeners.onResult(current, Boolean(final));
+        if (listeners.onRms) {
+          listeners.onRms(Math.min(95, 40 + Math.floor(Math.random() * 45)));
+        }
+      }
+    };
+
+    recognition.onerror = (e: any) => {
+      if (stopped) return;
+      const err = e.error || 'speech_error';
+      // If error is just 'no-speech' or 'aborted', do not crash; keep listening if not stopped
+      if (err === 'no-speech') {
+        if (listeners.onRms) listeners.onRms(10);
+        return;
+      }
+      if (listeners.onError) listeners.onError(err);
+    };
+
+    recognition.onend = () => {
+      if (stopped) return;
+      // If continuous listening ended unexpectedly, gracefully restart unless user stopped
+      try {
+        if (!stopped && recognition) {
+          recognition.start();
+        }
+      } catch (_) {
+        if (listeners.onState) listeners.onState('processing');
+      }
+    };
+
+    recognition.start();
+  } catch (err: any) {
+    if (listeners.onError) listeners.onError(err.message || 'Microphone activation failed');
+  }
+
   const stopFn = () => {
     if (stopped) return;
     stopped = true;
     try {
-      recognition.abort();
+      if (recognition) {
+        recognition.stop();
+        recognition.abort();
+      }
     } catch (_) {}
   };
 
   activeSpeechStopFn = stopFn;
-  recognition.start();
-
   return { stop: stopFn, isNative: false };
 }
 

@@ -2734,13 +2734,19 @@ export const App: React.FC = () => {
               <CartPanel
                 cart={state.cart}
                 factories={state.factories}
+                products={state.products}
+                customerLedgers={state.customerLedgers}
                 nextTxnId={state.nextTxnId}
                 language={state.language}
+                onAddToCart={handleAddToCart}
                 onUpdateQty={handleUpdateCartQty}
                 onSetQty={handleSetCartQty}
                 onRemoveLine={handleRemoveCartLine}
                 onClearCart={handleClearCart}
                 onCheckoutUnpaid={handleCheckoutUnpaid}
+                onScrollToProducts={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
               />
               {/* Mobile Quick Cart Jump Floating Pill */}
               {state.cart.length > 0 && (
@@ -3027,9 +3033,12 @@ export const App: React.FC = () => {
               rawStock={state.rawStock}
               transactions={state.transactions}
               language={state.language}
+              companyName={state.companyName}
               onAddInquiry={handleAddInquiry}
               onResolveInquiry={handleResolveInquiry}
               onDeleteInquiry={handleDeleteInquiry}
+              onAttachGatePass={handleAttachGatePass}
+              onNavigate={setActiveView}
             />
           )}
         </main>
