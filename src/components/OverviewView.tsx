@@ -21,6 +21,16 @@ import {
   Calendar,
   Activity,
   Boxes,
+  FileCheck,
+  Truck,
+  AlertTriangle,
+  PlusCircle,
+  Receipt,
+  Users,
+  ArrowUpRight,
+  Clock,
+  ShieldAlert,
+  ArrowRight
 } from 'lucide-react';
 import { AppState, AppLanguage } from '../types';
 import { fmt, parseDMY } from '../utils/helpers';
@@ -122,6 +132,75 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
     const d = new Date(dStr);
     return isNaN(d.getTime()) ? null : d;
   };
+
+  // Live today operational metrics (revenue, orders count, pieces sold)
+  const todayMetrics = useMemo(() => {
+    const todayDate = new Date();
+    const todayTx = state.transactions.filter(t => {
+      const td = parseDateRobust(t.date);
+      if (!td) return false;
+      return (
+        td.getDate() === todayDate.getDate() &&
+        td.getMonth() === todayDate.getMonth() &&
+        td.getFullYear() === todayDate.getFullYear()
+      );
+    });
+    const revenue = todayTx.reduce((sum, t) => sum + (t.total || 0), 0);
+    const count = todayTx.length;
+    const pieces = todayTx.reduce((sum, t) => {
+      const match = (t.itemsSummary || '').match(/(\d+)\s*(?:pcs|items|rods|عدد)/i);
+      return sum + (match ? parseInt(match[1], 10) : 1);
+    }, 0);
+    return { revenue, count, pieces };
+  }, [state.transactions]);
+
+  // Operational alerts: Pending Gate Passes, Urgent Inquiries, Low Steel Pipe Stock
+  const operationsAlerts = useMemo(() => {
+    const pendingPasses = state.transactions.filter(t => !t.gatePass || !t.gatePassVerified);
+    const urgentInquiries = (state.inquiries || []).filter(i => !i.resolved && (i.urgency === 'urgent' || i.urgency === 'high'));
+    const lowStockPipes = (state.rawStock || []).filter(r => {
+      const threshold = r.lowStockThreshold || (r.unit === 'kg' ? 100 : 150);
+      const current = r.unit === 'kg' ? (r.weight ?? 0) : (r.quantity ?? r.items ?? 0);
+      return current <= threshold;
+    });
+    return {
+      pendingPassesCount: pendingPasses.length,
+      urgentInquiriesCount: urgentInquiries.length,
+      lowStockPipesCount: lowStockPipes.length,
+      hasAlerts: pendingPasses.length > 0 || urgentInquiries.length > 0 || lowStockPipes.length > 0
+    };
+  }, [state.transactions, state.inquiries, state.rawStock]);
+
+  // Raw Materials inventory summary (Steel Pipe kg, fittings pcs)
+  const rawMaterialsSummary = useMemo(() => {
+    const rawItems = state.rawStock || [];
+    let pipeKg = 0;
+    let fittingsCount = 0;
+    rawItems.forEach(r => {
+      if (r.unit === 'kg' || (r.name && r.name.toLowerCase().includes('pipe'))) {
+        pipeKg += (r.weight || 0);
+      } else {
+        fittingsCount += (r.quantity || r.items || 0);
+      }
+    });
+    return {
+      pipeKg,
+      fittingsCount,
+      items: rawItems.slice(0, 4)
+    };
+  }, [state.rawStock]);
+
+  // Finished down rods totals
+  const finishedRodsTotals = useMemo(() => {
+    let totalPieces = 0;
+    let totalValue = 0;
+    (state.products || []).forEach(p => {
+      const qty = p.stock || 0;
+      totalPieces += qty;
+      totalValue += qty * (p.price || 0);
+    });
+    return { totalPieces, totalValue };
+  }, [state.products]);
 
   // Compute active date boundaries and label based on dateRangePreset
   const dateRangeBounds = useMemo(() => {
@@ -458,7 +537,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   );
 
   return (
-    <div className="space-y-6 max-w-full overflow-x-hidden break-words">
+    <div className="space-y-6 max-w-full overflow-x-hidden break-words pb-28">
       {/* Header with Bilingual Brand & Title */}
       <div className="flex items-center justify-between flex-wrap gap-4 border-b border-[var(--steel-line)] pb-4">
         <div className="flex items-center gap-3">
@@ -483,24 +562,316 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
 
-        {/* Quick Jump Badges */}
-        <div className="flex items-center gap-2">
+        {/* Date & Quick Access Strip */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={() => onNavigate('sales')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text)] transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-xs font-bold text-amber-300 transition cursor-pointer"
           >
-            <TrendingUp size={14} className="text-[var(--yellow)]" />
-            {renderBilingual('Sales POS', 'سیلز کاؤنٹر')}
+            <TrendingUp size={14} className="text-amber-400" />
+            {renderBilingual('New Order (POS)', 'نیا آرڈر')}
           </button>
           <button
             type="button"
-            onClick={() => onNavigate('stock')}
+            onClick={() => onNavigate('transactions')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] hover:border-[var(--yellow)] text-xs font-semibold text-[var(--text)] transition cursor-pointer"
           >
-            <Boxes size={14} className="text-emerald-400" />
-            {renderBilingual('Stock Room', 'اسٹاک گودام')}
+            <FileCheck size={14} className="text-cyan-400" />
+            {renderBilingual('Gate Passes', 'گیٹ پاس رجسٹر')}
           </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION: WORKSHOP QUICK ACTIONS COMMAND BAR (1-TAP FACTORY SHORTCUTS)    */}
+      {/* ========================================================================= */}
+      <div className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl p-2.5 shadow-xs">
+        <div className="flex items-center justify-between mb-2 px-1 text-[11px] font-mono text-[var(--text-dim)]">
+          <span className="font-bold uppercase tracking-wider text-[var(--text)]">Factory Floor Quick Actions (فوری کارروائی)</span>
+          <span className="hidden sm:inline opacity-70">1-Tap Direct Operational Shortcuts</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          {/* Action 1: New Order */}
+          <button
+            type="button"
+            onClick={() => onNavigate('sales')}
+            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--panel)] hover:bg-amber-500/10 border border-[var(--steel-line)] hover:border-amber-500/40 text-left transition group cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-md bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <PlusCircle size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[var(--text)] group-hover:text-amber-300 truncate">Book Order</div>
+              <div className="font-serif text-[10px] text-[var(--text-dim)] truncate">نیا بل بنائیں</div>
+            </div>
+          </button>
+
+          {/* Action 2: Gate Passes */}
+          <button
+            type="button"
+            onClick={() => onNavigate('transactions')}
+            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--panel)] hover:bg-cyan-500/10 border border-[var(--steel-line)] hover:border-cyan-500/40 text-left transition group cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-md bg-cyan-500/15 text-cyan-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Truck size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[var(--text)] group-hover:text-cyan-300 truncate">Gate Passes</div>
+              <div className="font-serif text-[10px] text-[var(--text-dim)] truncate">ڈسپیچ اور گیٹ پاس</div>
+            </div>
+          </button>
+
+          {/* Action 3: Inward Steel Pipe */}
+          <button
+            type="button"
+            onClick={() => onNavigate('raw_material')}
+            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--panel)] hover:bg-emerald-500/10 border border-[var(--steel-line)] hover:border-emerald-500/40 text-left transition group cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Boxes size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[var(--text)] group-hover:text-emerald-300 truncate">Inward Pipe</div>
+              <div className="font-serif text-[10px] text-[var(--text-dim)] truncate">خام لوہا پائپ آمد</div>
+            </div>
+          </button>
+
+          {/* Action 4: Add Expense */}
+          <button
+            type="button"
+            onClick={() => onNavigate('expenses')}
+            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--panel)] hover:bg-rose-500/10 border border-[var(--steel-line)] hover:border-rose-500/40 text-left transition group cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-md bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Receipt size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[var(--text)] group-hover:text-rose-300 truncate">Daily Expense</div>
+              <div className="font-serif text-[10px] text-[var(--text-dim)] truncate">ورکشاپ اخراجات</div>
+            </div>
+          </button>
+
+          {/* Action 5: Customer Khata */}
+          <button
+            type="button"
+            onClick={() => onNavigate('factories')}
+            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--panel)] hover:bg-purple-500/10 border border-[var(--steel-line)] hover:border-purple-500/40 text-left transition group cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-md bg-purple-500/15 text-purple-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Layers size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[var(--text)] group-hover:text-purple-300 truncate">Customer Khata</div>
+              <div className="font-serif text-[10px] text-[var(--text-dim)] truncate">فیکٹری کھاتہ جات</div>
+            </div>
+          </button>
+
+          {/* Action 6: Labour & Workers Attendance */}
+          <button
+            type="button"
+            onClick={() => onNavigate('labour_ledger')}
+            className="flex items-center gap-2 p-2 rounded-lg bg-[var(--panel)] hover:bg-sky-500/10 border border-[var(--steel-line)] hover:border-sky-500/40 text-left transition group cursor-pointer"
+          >
+            <div className="w-7 h-7 rounded-md bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+              <Users size={15} />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[var(--text)] group-hover:text-sky-300 truncate">Labour Wages</div>
+              <div className="font-serif text-[10px] text-[var(--text-dim)] truncate">مزدور حاضری و اجر</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION: ACTIONABLE OPERATIONS ALERT CAPSULE (GATE PASSES & LOW STOCK)   */}
+      {/* ========================================================================= */}
+      {operationsAlerts.hasAlerts && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border border-amber-500/35 rounded-xl p-3.5 shadow-sm">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-500 text-black flex items-center justify-center font-bold shrink-0">
+                <AlertTriangle size={17} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-[var(--text)]">Workshop Attention Required</span>
+                  <span className="font-serif text-xs font-bold text-amber-300">(فوری توجہ طلب امور)</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono text-[var(--text-dim)] mt-0.5 flex-wrap">
+                  {operationsAlerts.pendingPassesCount > 0 && (
+                    <span className="text-amber-300 font-semibold">
+                      {operationsAlerts.pendingPassesCount} orders awaiting Gate Pass dispatch
+                    </span>
+                  )}
+                  {operationsAlerts.urgentInquiriesCount > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="text-rose-400 font-semibold">
+                        {operationsAlerts.urgentInquiriesCount} urgent customer inquiry
+                      </span>
+                    </>
+                  )}
+                  {operationsAlerts.lowStockPipesCount > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="text-orange-400 font-semibold">
+                        {operationsAlerts.lowStockPipesCount} raw material item below reorder level
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {operationsAlerts.pendingPassesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('transactions')}
+                  className="px-3 py-1.5 rounded-lg bg-amber-400 text-black hover:bg-amber-300 text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <FileCheck size={13} />
+                  <span>Attach Gate Pass ({operationsAlerts.pendingPassesCount})</span>
+                </button>
+              )}
+              {operationsAlerts.urgentInquiriesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('notifications')}
+                  className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/40 text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldAlert size={13} />
+                  <span>View Inquiries</span>
+                </button>
+              )}
+              {operationsAlerts.lowStockPipesCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('raw_material')}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 text-xs font-bold font-mono transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Boxes size={13} />
+                  <span>Restock Pipe</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION: 5-PILLAR EXECUTIVE HEARTBEAT STRIP (HIGH-IMPACT WORKSHOP METRICS) */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* KPI 1: Today's Orders & Revenue */}
+        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-dim)]">
+            <span className="font-semibold">Today's Sales</span>
+            <span className="font-serif text-amber-300">آج کی سیلز</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-lg font-mono font-bold text-amber-400 tabular-nums">
+              {fmt(todayMetrics.revenue)}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+              {todayMetrics.count} bills ({todayMetrics.pieces} pcs sold)
+            </div>
+          </div>
+          <div className="text-[10px] font-mono text-emerald-400 pt-1 border-t border-[var(--steel-line)]/50 flex items-center justify-between">
+            <span>Direct Counter POS</span>
+            <span>⚡ Live</span>
+          </div>
+        </div>
+
+        {/* KPI 2: Cash In Hand (Tijori / Cash Drawer) */}
+        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3.5 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-dim)]">
+            <span className="font-semibold">Cash In Drawer</span>
+            <span className="font-serif text-emerald-400">تجوری نقد رقم</span>
+          </div>
+          <div className="my-1.5">
+            <div className={`text-lg font-mono font-bold tabular-nums ${fin.cashInHand >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {fmt(fin.cashInHand)}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+              In: +{fmt(fin.cashInflow)} | Out: -{fmt(fin.cashOutflow)}
+            </div>
+          </div>
+          <div className="text-[10px] font-mono text-[var(--text-dim)] pt-1 border-t border-[var(--steel-line)]/50 flex items-center justify-between">
+            <span>Liquid Cash Position</span>
+            <span className="text-emerald-400 font-semibold">Tijori</span>
+          </div>
+        </div>
+
+        {/* KPI 3: Market Receivables (Customer Ledgers) */}
+        <div
+          onClick={() => onNavigate('factories')}
+          className="bg-[var(--panel)] border border-[var(--steel-line)] hover:border-amber-500/40 rounded-xl p-3.5 shadow-sm flex flex-col justify-between cursor-pointer transition group"
+        >
+          <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-dim)]">
+            <span className="font-semibold group-hover:text-amber-300 transition-colors">Market Receivables</span>
+            <span className="font-serif text-rose-400">مارکیٹ بقایا جات</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-lg font-mono font-bold text-rose-400 tabular-nums">
+              {fmt(fin.totalReceivables)}
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+              Across {debtorFactories.length} active customer accounts
+            </div>
+          </div>
+          <div className="text-[10px] font-mono text-amber-300 pt-1 border-t border-[var(--steel-line)]/50 flex items-center justify-between">
+            <span>View All Khata</span>
+            <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+
+        {/* KPI 4: Steel Pipe Raw Materials */}
+        <div
+          onClick={() => onNavigate('raw_material')}
+          className="bg-[var(--panel)] border border-[var(--steel-line)] hover:border-emerald-500/40 rounded-xl p-3.5 shadow-sm flex flex-col justify-between cursor-pointer transition group"
+        >
+          <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-dim)]">
+            <span className="font-semibold group-hover:text-emerald-300 transition-colors">Steel Pipe Stock</span>
+            <span className="font-serif text-teal-300">خام مال لوہا پائپ</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-lg font-mono font-bold text-teal-400 tabular-nums">
+              {rawMaterialsSummary.pipeKg} kg
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+              16G & 14G pipes + {rawMaterialsSummary.fittingsCount} fittings
+            </div>
+          </div>
+          <div className="text-[10px] font-mono text-emerald-400 pt-1 border-t border-[var(--steel-line)]/50 flex items-center justify-between">
+            <span>Raw Inventory: {fmt(fin.rawStockValue)}</span>
+            <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+
+        {/* KPI 5: Finished Down Rods Stock */}
+        <div
+          onClick={() => onNavigate('products')}
+          className="bg-[var(--panel)] border border-[var(--steel-line)] hover:border-sky-500/40 rounded-xl p-3.5 shadow-sm flex flex-col justify-between cursor-pointer transition group col-span-2 sm:col-span-1"
+        >
+          <div className="flex items-center justify-between text-[11px] font-mono text-[var(--text-dim)]">
+            <span className="font-semibold group-hover:text-sky-300 transition-colors">Ready Down Rods</span>
+            <span className="font-serif text-sky-300">تیار راڈز گودام</span>
+          </div>
+          <div className="my-1.5">
+            <div className="text-lg font-mono font-bold text-sky-400 tabular-nums">
+              {finishedRodsTotals.totalPieces} Pcs
+            </div>
+            <div className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+              Valued at {fmt(finishedRodsTotals.totalValue)}
+            </div>
+          </div>
+          <div className="text-[10px] font-mono text-sky-300 pt-1 border-t border-[var(--steel-line)]/50 flex items-center justify-between">
+            <span>Products Catalog</span>
+            <ArrowRight size={11} className="group-hover:translate-x-0.5 transition-transform" />
+          </div>
         </div>
       </div>
 
@@ -892,7 +1263,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <XAxis
                       dataKey="engDay"
-                      interval={0}
+                      interval={dateRangeBounds.totalDays > 20 ? 2 : (dateRangeBounds.totalDays > 10 ? 1 : 0)}
                       stroke="var(--steel-line)"
                       tick={(props: any) => {
                         const { x, y, payload } = props;
@@ -1460,21 +1831,40 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   <span className="text-[var(--text-dim)]">Liquid Cash vs Market Owed</span>
                   <span className="font-serif text-emerald-400 text-[11px]">نقد کیش بنام بقایا</span>
                 </div>
-                <div className="flex justify-between items-baseline font-bold">
+                <div className="flex justify-between items-baseline font-bold tabular-nums">
                   <span className="text-emerald-400">Cash (نقد): {fmt(fin.cashInHand)}</span>
                   <span className="text-rose-400">Owed (بقایا): {fmt(fin.totalReceivables)}</span>
+                </div>
+              </div>
+
+              {/* Raw Steel Pipe Stock Quick Gauge */}
+              <div className="p-3 rounded-lg bg-[var(--panel-raised)] border border-teal-500/30 space-y-1.5">
+                <div className="flex justify-between items-baseline text-[11px]">
+                  <span className="text-[var(--text-dim)]">Raw Steel Pipe & Materials</span>
+                  <span className="font-serif text-teal-300 text-[11px]">خام لوہا پائپ اسٹاک</span>
+                </div>
+                <div className="flex justify-between items-baseline font-bold font-mono tabular-nums">
+                  <span className="text-teal-400">{rawMaterialsSummary.pipeKg} kg (اسٹاک پائپ)</span>
+                  <span className="text-[var(--text-dim)] text-[10.5px]">{rawMaterialsSummary.fittingsCount} fittings (پرزہ جات)</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-[var(--steel-line)]">
+          <div className="pt-3 border-t border-[var(--steel-line)] grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => onNavigate('products')}
-              className="w-full py-2 rounded-lg bg-[var(--panel-raised)] hover:border-[var(--yellow)] border border-[var(--steel-line)] text-xs text-[var(--text)] hover:text-[var(--yellow)] transition text-center font-semibold"
+              className="py-2 px-2 rounded-lg bg-[var(--panel-raised)] hover:border-[var(--yellow)] border border-[var(--steel-line)] text-xs text-[var(--text)] hover:text-[var(--yellow)] transition text-center font-semibold truncate cursor-pointer"
             >
-              Open Products Catalog (پروڈکٹ کیٹلاگ) →
+              Ready Rods (تیار راڈز) →
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('raw_material')}
+              className="py-2 px-2 rounded-lg bg-[var(--panel-raised)] hover:border-teal-400 border border-[var(--steel-line)] text-xs text-[var(--text)] hover:text-teal-300 transition text-center font-semibold truncate cursor-pointer"
+            >
+              Raw Pipes (خام مال) →
             </button>
           </div>
         </div>
@@ -1751,21 +2141,34 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 <div
                   key={f.name}
                   onClick={() => onOpenCustomerLedger(f.name)}
-                  className="flex items-center justify-between p-3 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] cursor-pointer transition active:scale-[0.99]"
+                  className="flex items-center justify-between p-3 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:border-[var(--yellow)] cursor-pointer transition active:scale-[0.99] group"
                 >
-                  <div>
-                    <div className="font-semibold text-sm text-[var(--text)]">{f.name}</div>
-                    <div className="text-[11px] text-[var(--text-dim)] font-mono mt-0.5 flex items-center gap-1.5">
-                      <span>Tap to view account ledger</span>
+                  <div className="min-w-0 pr-2">
+                    <div className="font-semibold text-sm text-[var(--text)] group-hover:text-amber-300 transition-colors truncate">{f.name}</div>
+                    <div className="text-[11px] text-[var(--text-dim)] font-mono mt-0.5 flex items-center gap-1.5 truncate">
+                      <span>Tap to view factory ledger</span>
                       <span className="font-serif text-amber-300/80">(کھاتہ تفصیل)</span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-mono font-bold text-sm text-[var(--red)]">{fmt(f.balance)}</div>
-                    <div className="text-[10px] uppercase font-mono tracking-wider text-[var(--text-dim)] flex items-center justify-end gap-1">
-                      <span>Owed</span>
-                      <span className="font-serif text-rose-400/90">(بقایا)</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <div className="font-mono font-bold text-sm text-[var(--red)] tabular-nums">{fmt(f.balance)}</div>
+                      <div className="text-[10px] uppercase font-mono tracking-wider text-[var(--text-dim)] flex items-center justify-end gap-1">
+                        <span>Owed</span>
+                        <span className="font-serif text-rose-400/90">(بقایا)</span>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenCustomerLedger(f.name);
+                      }}
+                      className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <span>Ledger</span>
+                      <ArrowUpRight size={12} />
+                    </button>
                   </div>
                 </div>
               ))
@@ -1785,10 +2188,12 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 Realtime transaction & expenditure logs
               </p>
             </div>
-            <span className="text-xs text-[var(--text-dim)] font-mono flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Live Timeline</span>
-            </span>
+            <div className="text-[11px] text-[var(--text-dim)] font-mono flex items-center gap-1.5">
+              <span className="font-semibold text-emerald-400">Live</span>
+              <span className="opacity-40">·</span>
+              <span>Timeline</span>
+              <span className="font-serif text-[10px] opacity-75">(براہِ راست)</span>
+            </div>
           </div>
 
           <div className="space-y-2.5">
@@ -1798,11 +2203,16 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 className="flex items-center justify-between p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] font-mono text-xs"
               >
                 <div className="min-w-0 flex-1 pr-3">
-                  <div className="font-semibold text-[var(--text)] truncate">{item.title}</div>
+                  <div className="font-semibold text-[var(--text)] truncate flex items-center gap-1.5">
+                    <span className={item.type === 'sale' ? 'text-amber-400' : 'text-rose-400'}>
+                      {item.type === 'sale' ? '●' : '▲'}
+                    </span>
+                    <span>{item.title}</span>
+                  </div>
                   <div className="text-[10px] text-[var(--text-dim)] truncate mt-0.5">{item.sub}</div>
                 </div>
                 <div
-                  className={`font-bold shrink-0 text-sm ${
+                  className={`font-bold shrink-0 text-sm tabular-nums ${
                     item.positive ? 'text-[var(--green)]' : 'text-[var(--red)]'
                   }`}
                 >
