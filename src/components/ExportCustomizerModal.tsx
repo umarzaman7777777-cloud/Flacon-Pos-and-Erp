@@ -52,6 +52,7 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
   const [savedNotification, setSavedNotification] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<'theme' | 'page' | 'typography' | 'content'>('theme');
+  const [isSharing, setIsSharing] = useState(false);
   const [exportSuccess, setExportSuccess] = useState<{
     type: 'pdf' | 'jpg' | 'both';
     pdfDataUrl?: string;
@@ -245,7 +246,6 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
     });
   };
 
-  const [isSharing, setIsSharing] = useState(false);
   const handleShareToApps = async () => {
     if (!payload) return;
     setIsSharing(true);

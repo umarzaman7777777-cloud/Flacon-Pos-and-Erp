@@ -21,6 +21,7 @@ export interface UnifiedGateReceipt {
   weightIn?: number;
   rawSupplierName?: string;
   fileData: string;
+  docVaultId?: string;
   fileName: string;
   fileType: 'pdf' | 'image';
   fileSize?: number;
@@ -76,7 +77,7 @@ export function getAllGateReceipts(
   for (const t of solvedTxns) {
     const gp = t.gatePass;
     const fileData = gp?.fileData || t.receiptUrl || '';
-    if (!fileData) continue;
+    if (!fileData && !gp?.docVaultId) continue;
 
     const isPdf =
       gp?.fileType === 'pdf' ||
@@ -109,6 +110,7 @@ export function getAllGateReceipts(
       summary: t.itemsSummary,
       totalAmount: t.total,
       fileData,
+      docVaultId: gp?.docVaultId,
       fileName: gp?.fileName || `GatePass_${t.id}.${isPdf ? 'pdf' : 'jpg'}`,
       fileType: isPdf ? 'pdf' : 'image',
       fileSize: gp?.fileSize,
@@ -125,7 +127,7 @@ export function getAllGateReceipts(
 
       const gp = e.gatePass;
       const fileData = gp?.fileData || e.receiptUrl || '';
-      if (!fileData) continue;
+      if (!fileData && !gp?.docVaultId) continue;
 
       const isPdf =
         gp?.fileType === 'pdf' ||
@@ -160,6 +162,7 @@ export function getAllGateReceipts(
         totalAmount: e.credit || e.debit || 0,
         weightIn: e.weightIn,
         fileData,
+        docVaultId: gp?.docVaultId,
         fileName: gp?.fileName || `SupplierReceipt_${e.id}.${isPdf ? 'pdf' : 'jpg'}`,
         fileType: isPdf ? 'pdf' : 'image',
         fileSize: gp?.fileSize,

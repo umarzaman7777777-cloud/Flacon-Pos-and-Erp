@@ -59,6 +59,8 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
   const [isViewingGatePass, setIsViewingGatePass] = useState(false);
   const [pageSetup, setPageSetup] = useState<PrintPageSetup>(getEffectivePageSetup);
   const [isPageSetupOpen, setIsPageSetupOpen] = useState(false);
+  const [isSharingPdf, setIsSharingPdf] = useState(false);
+  const [sharePdfSuccess, setSharePdfSuccess] = useState(false);
 
   if (!transaction) return null;
 
@@ -71,9 +73,6 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
   const isPaid = dueAmount <= 0;
   const isPartial = totalPaid > 0 && dueAmount > 0;
   const items = parseTransactionItems(transaction);
-
-  const [isSharingPdf, setIsSharingPdf] = useState(false);
-  const [sharePdfSuccess, setSharePdfSuccess] = useState(false);
 
   const handleShareInvoice = async (targetFormat: 'jpg' | 'pdf' = 'jpg') => {
     try {

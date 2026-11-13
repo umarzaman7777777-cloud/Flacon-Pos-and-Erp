@@ -1,5 +1,19 @@
-import React, { useState } from 'react';
-import { Brush, Plus, Trash2, Edit2, Sliders } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import {
+  Brush,
+  Plus,
+  Trash2,
+  Edit2,
+  Sliders,
+  Truck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Layers,
+  ShieldAlert,
+  ArrowDownLeft,
+  ArrowUpRight
+} from 'lucide-react';
 import { Painter, PaintEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
@@ -67,6 +81,19 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   const [entryAccountNumber, setEntryAccountNumber] = useState('');
   const [entryChequeNo, setEntryChequeNo] = useState('');
 
+  // WIP Pipeline State
+  const [activePainterTab, setActivePainterTab] = useState<'financials' | 'wip_pipeline'>('financials');
+  const [wipDispatchType, setWipDispatchType] = useState<'outward' | 'inward'>('outward');
+  const [wipBatchId, setWipBatchId] = useState('BATCH-2026-09');
+  const [wipSize, setWipSize] = useState('18 inch');
+  const [wipColor, setWipColor] = useState('Matt Black');
+  const [wipDispatchedQty, setWipDispatchedQty] = useState('');
+  const [wipReceivedQty, setWipReceivedQty] = useState('');
+  const [wipRejectedQty, setWipRejectedQty] = useState('0');
+  const [wipRejectionReason, setWipRejectionReason] = useState('Uneven coating / paint run');
+  const [wipDeductPenalty, setWipDeductPenalty] = useState(true);
+  const [wipUnitRate, setWipUnitRate] = useState('18');
+
   const handleUpdateColConfig = (newCfg: LedgerColumnConfig) => {
     setColConfig(newCfg);
     saveStoredLedgerColumnConfig('paint', newCfg);
@@ -130,6 +157,90 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
   const currentBalance = currentPainter
     ? currentPainter.entries.reduce((s, e) => s + (e.credit || 0) - (e.debit || 0), 0)
     : 0;
+
+  // Closed-loop WIP Pipeline calculation for external spray painters
+  const wipMetrics = useMemo(() => {
+    if (!currentPainter) {
+      return { totalDispatched: 0, totalReceived: 0, totalRejected: 0, activeWip: 0, rejectionRate: 0, wipEntries: [] as PaintEntry[] };
+    }
+    let totalDispatched = 0;
+    let totalReceived = 0;
+    let totalRejected = 0;
+    const wipEntries: PaintEntry[] = [];
+
+    currentPainter.entries.forEach(e => {
+      const isOutward = e.entryType === 'dispatch_outward' || e.desc.includes('[JOB-OUT]');
+      const isInward = e.entryType === 'receive_inward' || e.desc.includes('[JOB-IN]');
+
+      if (isOutward) {
+        totalDispatched += e.dispatchedQty || parseFloat(e.itemCount || '0') || 0;
+        wipEntries.push(e);
+      } else if (isInward) {
+        totalReceived += e.receivedQty || parseFloat(e.itemCount || '0') || 0;
+        if (e.rejectedQty) totalRejected += e.rejectedQty;
+        wipEntries.push(e);
+      }
+    });
+
+    const activeWip = Math.max(0, totalDispatched - totalReceived);
+    const totalInspected = totalReceived;
+    const rejectionRate = totalInspected > 0 ? (totalRejected / totalInspected) * 100 : 0;
+
+    return { totalDispatched, totalReceived, totalRejected, activeWip, rejectionRate, wipEntries };
+  }, [currentPainter]);
+
+  const handleAddWipEntry = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPainter) return;
+
+    if (wipDispatchType === 'outward') {
+      const dQty = parseFloat(wipDispatchedQty) || 0;
+      if (dQty <= 0) return;
+      onAddPaintEntry(currentPainter.name, {
+        date,
+        time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        desc: `[JOB-OUT] Dispatched ${dQty} pcs ${wipSize} (${wipColor}) to spray booth`,
+        color: wipColor,
+        itemSize: wipSize,
+        itemCount: String(dQty),
+        entryType: 'dispatch_outward',
+        dispatchedQty: dQty,
+        batchId: wipBatchId.trim() || undefined,
+        debit: 0,
+        credit: 0
+      });
+      setWipDispatchedQty('');
+    } else {
+      const rQty = parseFloat(wipReceivedQty) || 0;
+      const rejQty = parseFloat(wipRejectedQty) || 0;
+      const rate = parseFloat(wipUnitRate) || 18;
+      if (rQty <= 0) return;
+
+      const goodQty = Math.max(0, rQty - rejQty);
+      const earnedWorkAmount = goodQty * rate;
+      const penaltyAmount = (wipDeductPenalty && rejQty > 0) ? rejQty * rate : 0;
+      const finalCredit = Math.max(0, earnedWorkAmount - penaltyAmount);
+
+      onAddPaintEntry(currentPainter.name, {
+        date,
+        time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        desc: `[JOB-IN] Received ${rQty} pcs ${wipSize} (${wipColor}) · ${goodQty} Passed${rejQty > 0 ? ` · ${rejQty} Defective (${wipRejectionReason})` : ''}`,
+        color: wipColor,
+        itemSize: wipSize,
+        itemCount: String(rQty),
+        ratePerItem: String(rate),
+        entryType: 'receive_inward',
+        receivedQty: rQty,
+        rejectedQty: rejQty,
+        rejectionReason: rejQty > 0 ? wipRejectionReason : undefined,
+        batchId: wipBatchId.trim() || undefined,
+        debit: 0,
+        credit: finalCredit
+      });
+      setWipReceivedQty('');
+      setWipRejectedQty('0');
+    }
+  };
 
   const handleExportCSV = (customCols?: LedgerColumnConfig) => {
     if (!currentPainter) return;
@@ -347,7 +458,42 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
               </div>
             </div>
 
-            {/* Balance Breakdown Cards */}
+            {/* Sub-tab navigation: Ledger & Financials vs WIP Pipeline */}
+            <div className="flex items-center gap-2 border-b border-[var(--steel-line)] pb-2 my-2.5">
+              <button
+                type="button"
+                onClick={() => setActivePainterTab('financials')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  activePainterTab === 'financials'
+                    ? 'bg-[var(--yellow)] text-black shadow'
+                    : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-[var(--text)]'
+                }`}
+              >
+                <Brush size={13} />
+                <span>Financial Ledger & Accounts</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePainterTab('wip_pipeline')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  activePainterTab === 'wip_pipeline'
+                    ? 'bg-[var(--yellow)] text-black shadow'
+                    : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-[var(--text)]'
+                }`}
+              >
+                <Truck size={13} />
+                <span>WIP & Powder Coating Pipeline</span>
+                {wipMetrics.activeWip > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-mono ml-1 font-bold">
+                    {wipMetrics.activeWip} WIP
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {activePainterTab === 'financials' ? (
+              <>
+                {/* Balance Breakdown Cards */}
             {(() => {
               const details = computePainterLedgerDetails(currentPainter.entries);
               return (
@@ -637,6 +783,331 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
                 </button>
               </div>
             </form>
+          </>
+        ) : (
+          /* WIP & Powder Coating Pipeline Sub-View */
+          <div className="space-y-3">
+            {/* WIP Metric Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-sky-500/30">
+                <div className="text-[10px] uppercase text-sky-400 font-bold flex items-center gap-1">
+                  <ArrowUpRight size={11} />
+                  <span>Total Dispatched</span>
+                </div>
+                <div className="text-base font-bold text-sky-300 mt-1 font-mono">
+                  {wipMetrics.totalDispatched} pcs
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-emerald-500/30">
+                <div className="text-[10px] uppercase text-emerald-400 font-bold flex items-center gap-1">
+                  <ArrowDownLeft size={11} />
+                  <span>Received Good</span>
+                </div>
+                <div className="text-base font-bold text-emerald-300 mt-1 font-mono">
+                  {wipMetrics.totalReceived} pcs
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-amber-500/30">
+                <div className="text-[10px] uppercase text-amber-400 font-bold flex items-center gap-1">
+                  <Clock size={11} />
+                  <span>Active WIP At Booth</span>
+                </div>
+                <div className="text-base font-bold text-amber-300 mt-1 font-mono">
+                  {wipMetrics.activeWip} pcs
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--panel-raised)] border border-rose-500/30">
+                <div className="text-[10px] uppercase text-rose-400 font-bold flex items-center gap-1">
+                  <ShieldAlert size={11} />
+                  <span>Rejection Rate</span>
+                </div>
+                <div className="text-base font-bold text-rose-300 mt-1 font-mono">
+                  {wipMetrics.rejectionRate.toFixed(1)}%
+                  <span className="text-[10px] text-zinc-400 font-normal ml-1">
+                    ({wipMetrics.totalRejected} pcs)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* WIP Log Table */}
+            <div className="flex-1 overflow-auto max-w-full min-h-[140px] max-h-[35vh] shrink-0 border border-[var(--steel-line)] rounded-lg ledger-scroll-container">
+              <table className="w-full text-left text-xs border-collapse min-w-[850px]">
+                <thead className="bg-[var(--panel-raised)] text-[var(--text-dim)] uppercase text-[10px] border-b border-[var(--steel-line)] sticky top-0 z-10">
+                  <tr>
+                    <th className="p-2.5 whitespace-nowrap">Date</th>
+                    <th className="p-2.5 whitespace-nowrap">Pipeline Event</th>
+                    <th className="p-2.5 whitespace-nowrap">Batch / Lot</th>
+                    <th className="p-2.5 whitespace-nowrap">Specs (Size / Color)</th>
+                    <th className="p-2.5 text-right whitespace-nowrap">Quantity</th>
+                    <th className="p-2.5 text-center whitespace-nowrap">QC Status</th>
+                    <th className="p-2.5 text-right whitespace-nowrap">Credit Note (Rs)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--steel-line)] font-mono">
+                  {wipMetrics.wipEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-6 text-[var(--text-dim)] font-sans">
+                        No WIP dispatch or return entries logged yet. Use the dispatch form below to send rods for coating.
+                      </td>
+                    </tr>
+                  ) : (
+                    wipMetrics.wipEntries.map(e => {
+                      const isOut = e.entryType === 'dispatch_outward' || e.desc.includes('[JOB-OUT]');
+                      return (
+                        <tr key={e.id} className="hover:bg-[var(--panel-raised)]/50">
+                          <td className="p-2.5 whitespace-nowrap text-zinc-400">{e.date}</td>
+                          <td className="p-2.5 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isOut ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30' : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {isOut ? '🚚 Outward Dispatch' : '📥 Inward Return'}
+                            </span>
+                          </td>
+                          <td className="p-2.5 whitespace-nowrap text-amber-300">
+                            {e.batchId || 'LOT-GENERAL'}
+                          </td>
+                          <td className="p-2.5 whitespace-nowrap text-zinc-200">
+                            {e.itemSize || '-'} · {e.color || '-'}
+                          </td>
+                          <td className="p-2.5 text-right font-bold text-zinc-100">
+                            {e.itemCount || e.dispatchedQty || e.receivedQty || 0} pcs
+                          </td>
+                          <td className="p-2.5 text-center">
+                            {e.rejectedQty && e.rejectedQty > 0 ? (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[10px] font-bold" title={e.rejectionReason}>
+                                ⚠️ {e.rejectedQty} Defective
+                              </span>
+                            ) : (
+                              <span className="text-emerald-400 text-[10px]">
+                                ✓ Passed QC
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right font-bold text-amber-400">
+                            {e.credit > 0 ? fmt(e.credit) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* WIP Outward / Inward Logging Form */}
+            <form onSubmit={handleAddWipEntry} className="border-t border-[var(--steel-line)] pt-3 space-y-2.5 bg-[var(--panel-raised)]/40 p-3 rounded-xl border">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 bg-black/40 p-0.5 rounded-lg border border-[var(--steel-line)]">
+                  <button
+                    type="button"
+                    onClick={() => setWipDispatchType('outward')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                      wipDispatchType === 'outward'
+                        ? 'bg-sky-500 text-black shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <ArrowUpRight size={12} />
+                    <span>1. Outward Dispatch (Send Raw Rods)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWipDispatchType('inward')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                      wipDispatchType === 'inward'
+                        ? 'bg-emerald-500 text-black shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <ArrowDownLeft size={12} />
+                    <span>2. Inward Return (Receive Painted Rods)</span>
+                  </button>
+                </div>
+
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  Subcontractor: <strong>{currentPainter.name}</strong>
+                </span>
+              </div>
+
+              {wipDispatchType === 'outward' ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Production Lot</label>
+                      <input
+                        type="text"
+                        value={wipBatchId}
+                        onChange={e => setWipBatchId(e.target.value.toUpperCase())}
+                        placeholder="e.g. BATCH-2026-09"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-amber-300 font-mono font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Rod Length / Size</label>
+                      <input
+                        type="text"
+                        value={wipSize}
+                        onChange={e => setWipSize(e.target.value)}
+                        placeholder='e.g. 18", 24", 36"'
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Target Powder Color</label>
+                      <input
+                        type="text"
+                        value={wipColor}
+                        onChange={e => setWipColor(e.target.value)}
+                        placeholder="e.g. Matt Black, Off-White"
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-sky-400 font-bold block mb-0.5">Dispatched Pieces (pcs)</label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={wipDispatchedQty}
+                        onChange={e => setWipDispatchedQty(e.target.value)}
+                        placeholder="e.g. 500"
+                        className="w-full bg-[var(--panel)] border border-sky-500/50 rounded px-2.5 py-1.5 text-xs text-sky-300 font-bold font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-bold uppercase text-xs shadow transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <ArrowUpRight size={13} />
+                      <span>Dispatch Rods to Painter</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Production Lot</label>
+                      <input
+                        type="text"
+                        value={wipBatchId}
+                        onChange={e => setWipBatchId(e.target.value.toUpperCase())}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-amber-300 font-mono font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Size & Color</label>
+                      <input
+                        type="text"
+                        value={`${wipSize} · ${wipColor}`}
+                        onChange={e => {
+                          const parts = e.target.value.split('·');
+                          if (parts[0]) setWipSize(parts[0].trim());
+                          if (parts[1]) setWipColor(parts[1].trim());
+                        }}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-emerald-400 font-bold block mb-0.5">Total Received (pcs)</label>
+                      <input
+                        type="number"
+                        required
+                        min="1"
+                        value={wipReceivedQty}
+                        onChange={e => setWipReceivedQty(e.target.value)}
+                        placeholder="e.g. 500"
+                        className="w-full bg-[var(--panel)] border border-emerald-500/50 rounded px-2.5 py-1.5 text-xs text-emerald-300 font-bold font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-rose-400 font-bold block mb-0.5">Defective / Rejected (pcs)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={wipRejectedQty}
+                        onChange={e => setWipRejectedQty(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-[var(--panel)] border border-rose-500/50 rounded px-2.5 py-1.5 text-xs text-rose-300 font-bold font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Defect Reason</label>
+                      <select
+                        value={wipRejectionReason}
+                        onChange={e => setWipRejectionReason(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2 py-1.5 text-xs text-zinc-300"
+                      >
+                        <option value="Uneven coating / paint run">Uneven coating / paint run</option>
+                        <option value="Pinholes & blistering">Pinholes & blistering</option>
+                        <option value="Scratched during transit">Scratched during transit</option>
+                        <option value="Color shade mismatch">Color shade mismatch</option>
+                        <option value="Incomplete coverage / bare spots">Incomplete coverage / bare spots</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] uppercase text-zinc-400 block mb-0.5">Coating Rate (Rs / pc)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={wipUnitRate}
+                        onChange={e => setWipUnitRate(e.target.value)}
+                        className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-4">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs text-rose-300">
+                        <input
+                          type="checkbox"
+                          checked={wipDeductPenalty}
+                          onChange={e => setWipDeductPenalty(e.target.checked)}
+                          className="rounded text-rose-500"
+                        />
+                        <span>Deduct defect penalty from bill</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--steel-line)]/50">
+                    <div className="text-xs text-zinc-400">
+                      Net Approved: <strong className="text-emerald-400 font-mono">
+                        {Math.max(0, (parseFloat(wipReceivedQty) || 0) - (parseFloat(wipRejectedQty) || 0))} pcs
+                      </strong> · Payable: <strong className="text-amber-400 font-mono">
+                        Rs {fmt(Math.max(0, ((parseFloat(wipReceivedQty) || 0) - (parseFloat(wipRejectedQty) || 0)) * (parseFloat(wipUnitRate) || 18) - (wipDeductPenalty ? (parseFloat(wipRejectedQty) || 0) * (parseFloat(wipUnitRate) || 18) : 0)))}
+                      </strong>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold uppercase text-xs shadow transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <ArrowDownLeft size={13} />
+                      <span>Receive Inward & Reconcile Bill</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </form>
+          </div>
+        )}
           </div>
         </div>
       )}

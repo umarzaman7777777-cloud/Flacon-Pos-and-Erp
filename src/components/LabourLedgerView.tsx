@@ -101,6 +101,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
   const [itemComponents, setItemComponents] = useState<string>('Swaged Ends & Cotter Hole');
   const [itemUnits, setItemUnits] = useState<string>('');
   const [itemRate, setItemRate] = useState<string>('8.5');
+  const [itemBatchId, setItemBatchId] = useState<string>('BATCH-2026-09');
 
   // Work By Daily Wage fields
   const [selectedWorkType, setSelectedWorkType] = useState<string>('');
@@ -346,6 +347,7 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
       units: activeUnits,
       qty: activeUnits,
       rate: activeRate,
+      batchId: entryKind === 'attendance' && workMode === 'product' ? (itemBatchId.trim() || undefined) : undefined,
       note: entryNote.trim() || undefined,
       debit,
       credit,
@@ -881,6 +883,11 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                                     {e.size}
                                   </span>
                                 )}
+                                {e.batchId && (
+                                  <span className="px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/25 text-[10px] font-mono text-amber-300 font-bold">
+                                    Lot: {e.batchId}
+                                  </span>
+                                )}
                                 {e.itemComponents && (
                                   <span className="px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] font-mono text-amber-300/90">
                                     ⚙️ {e.itemComponents}
@@ -1154,6 +1161,20 @@ export const LabourLedgerView: React.FC<LabourLedgerViewProps> = ({
                         onChange={e => setItemSize(e.target.value)}
                         placeholder="e.g. 18 inch, 24 inch"
                         className="w-full bg-[var(--panel)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] font-mono focus:border-[var(--yellow)] outline-hidden"
+                      />
+                    </div>
+
+                    {/* Batch / Lot Code */}
+                    <div>
+                      <label className="block text-[10px] text-amber-400 uppercase font-bold mb-1">
+                        Batch / Production Lot
+                      </label>
+                      <input
+                        type="text"
+                        value={itemBatchId}
+                        onChange={e => setItemBatchId(e.target.value.toUpperCase())}
+                        placeholder="e.g. BATCH-2026-09"
+                        className="w-full bg-[var(--panel)] border border-amber-500/40 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-mono font-bold focus:border-amber-400 outline-hidden"
                       />
                     </div>
 

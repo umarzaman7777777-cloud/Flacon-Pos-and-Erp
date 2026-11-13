@@ -443,7 +443,7 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                 {p.stock !== undefined && (
                   <span
                     className={`text-[10px] font-semibold ${
-                      isLowStock ? 'text-red-400 font-bold animate-pulse' : 'text-[var(--text-dim)]'
+                      isLowStock ? 'text-red-400 font-bold' : 'text-[var(--text-dim)]'
                     }`}
                   >
                     {p.stock} left

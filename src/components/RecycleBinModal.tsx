@@ -65,7 +65,6 @@ export const RecycleBinModal: React.FC<RecycleBinModalProps> = ({
   onPurgeItem,
   onEmptyBin
 }) => {
-  if (isOpen === false) return null;
   const activeItems = recycleBin || items || [];
   const isUrdu = language === 'ur';
   const [searchTerm, setSearchTerm] = useState('');
@@ -96,6 +95,8 @@ export const RecycleBinModal: React.FC<RecycleBinModalProps> = ({
       return true;
     });
   }, [activeItems, selectedFilter, searchTerm]);
+
+  if (isOpen === false) return null;
 
   const handleRestore = (item: RecycleBinItem) => {
     onRestoreItem(item);

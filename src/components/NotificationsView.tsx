@@ -15,11 +15,13 @@ import {
   Search,
   CheckCircle2,
   Layers,
-  ArrowRight
+  ArrowRight,
+  CreditCard
 } from 'lucide-react';
-import { Inquiry, RawStockItem, Transaction, AppLanguage, GatePassData } from '../types';
+import { Inquiry, RawStockItem, Transaction, AppLanguage, GatePassData, AppState } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { todayISO, fmt } from '../utils/helpers';
+import { extractAllCheques, updateChequeStatusAndAutoReverse } from '../utils/chequeManager';
 import { MobilePermissionsCard } from './MobilePermissionsCard';
 import { GatePassUploadModal } from './GatePassUploadModal';
 import { hapticTap, hapticTransactionComplete } from '../utils/haptics';
@@ -30,6 +32,8 @@ interface NotificationsViewProps {
   transactions: Transaction[];
   language: AppLanguage;
   companyName?: string;
+  state?: AppState;
+  onUpdateState?: (newState: AppState) => void;
   onAddInquiry: (inquiry: Omit<Inquiry, 'id' | 'resolved'>) => void;
   onResolveInquiry: (id: string) => void;
   onDeleteInquiry: (id: string) => void;
@@ -43,13 +47,15 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
   transactions,
   language,
   companyName = 'Falcon Rod Maker',
+  state,
+  onUpdateState,
   onAddInquiry,
   onResolveInquiry,
   onDeleteInquiry,
   onAttachGatePass,
   onNavigate
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'gatepass' | 'inquiries' | 'stock'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'gatepass' | 'inquiries' | 'stock' | 'cheques'>('all');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [party, setParty] = useState('');
   const [phone, setPhone] = useState('');
@@ -60,6 +66,26 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
   const [uploadTxn, setUploadTxn] = useState<Transaction | null>(null);
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
+
+  // Cheque alerts & dishonour protection
+  const chequesList = React.useMemo(() => (state ? extractAllCheques(state) : []), [state]);
+  const chequeAlerts = React.useMemo(
+    () => chequesList.filter(c => c.status === 'overdue' || c.status === 'bounced'),
+    [chequesList]
+  );
+
+  const handleQuickChequeAction = (chequeNo: string, newStatus: any) => {
+    if (!state || !onUpdateState) return;
+    const { newState } = updateChequeStatusAndAutoReverse(
+      state,
+      chequeNo,
+      newStatus,
+      undefined,
+      'Notifications Hub'
+    );
+    onUpdateState(newState);
+    hapticTransactionComplete();
+  };
 
   // System notifications
   const lowStockAlerts = rawStock.filter(
@@ -94,7 +120,11 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
     }
   };
 
-  const totalAlertsCount = undeliveredConfirmed.length + lowStockAlerts.length + inquiries.filter(i => !i.resolved).length;
+  const totalAlertsCount =
+    undeliveredConfirmed.length +
+    lowStockAlerts.length +
+    inquiries.filter(i => !i.resolved).length +
+    chequeAlerts.length;
 
   return (
     <div className="space-y-5 max-w-4xl max-w-full overflow-x-hidden break-words font-mono pb-24 sm:pb-8">
@@ -197,10 +227,153 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
             </span>
           </button>
         )}
+
+        {chequeAlerts.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('cheques')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              activeTab === 'cheques'
+                ? 'bg-amber-500 text-black shadow-sm'
+                : 'bg-[var(--panel-raised)] border border-[var(--steel-line)] text-zinc-400 hover:text-white'
+            }`}
+          >
+            <CreditCard size={13} />
+            <span>Cheques & Banking</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-mono font-bold">
+              {chequeAlerts.length}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Dedicated Push Notifications & Mobile Device Permissions Access Hub */}
       <MobilePermissionsCard language={language} />
+
+      {/* SECTION: CHEQUES CLEARANCE & DISHONOUR ALERTS */}
+      {(activeTab === 'all' || activeTab === 'cheques') && chequeAlerts.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between text-xs font-bold text-rose-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5">
+              <CreditCard size={14} />
+              <span>Cheques Clearance & Dishonour Watch ({chequeAlerts.length})</span>
+            </span>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('cheques')}
+                className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-sans cursor-pointer"
+              >
+                <span>Open Cheques Registry</span>
+                <ArrowRight size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-2.5">
+            {chequeAlerts.map(c => {
+              const isBounced = c.status === 'bounced';
+              return (
+                <div
+                  key={c.id}
+                  className={`p-3.5 rounded-2xl border text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs ${
+                    isBounced
+                      ? 'bg-rose-950/20 border-rose-500/40 text-rose-200'
+                      : 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        isBounced ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+                      }`}
+                    >
+                      <CreditCard size={18} />
+                    </div>
+
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-white font-mono">
+                          Chq #{c.chequeNo} ({c.bankName || 'Bank'})
+                        </span>
+                        <span className="font-mono font-bold text-amber-400">
+                          Rs {fmt(c.amount)}
+                        </span>
+                        {isBounced ? (
+                          <span className="px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-300 text-[10px] font-bold border border-rose-500/50">
+                            BOUNCED · REVERSAL POSTED
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 text-[10px] font-bold border border-amber-500/50">
+                            OVERDUE BY {Math.abs(c.daysRemaining)} DAYS
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-zinc-300 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-zinc-400">Flow:</span>
+                        <strong className="text-emerald-400">{c.customerLedgerName || c.payerParty}</strong>
+                        {c.supplierName && (
+                          <>
+                            <ArrowRight size={12} className="text-zinc-500" />
+                            <span className="text-zinc-400">Endorsed to:</span>
+                            <strong className="text-sky-400">{c.supplierName}</strong>
+                          </>
+                        )}
+                      </div>
+
+                      {isBounced ? (
+                        <p className="text-[11px] text-rose-300/90 font-sans">
+                          Auto-reversal applied: Customer receivable was restored (they still owe you) and raw supplier payable was restored.
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-amber-300/80 font-sans">
+                          Maturity date was {c.chequeDate}. Confirm whether this cheque cleared or bounced.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0 self-end md:self-center font-sans">
+                    {!isBounced && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickChequeAction(c.chequeNo, 'cleared')}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs cursor-pointer shadow-xs"
+                          title="Confirm cheque was cleared"
+                        >
+                          Mark Cleared
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickChequeAction(c.chequeNo, 'bounced')}
+                          className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs cursor-pointer shadow-xs"
+                          title="Mark bounced and auto-reverse ledgers"
+                        >
+                          Mark Bounced
+                        </button>
+                      </>
+                    )}
+
+                    {onNavigate && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('cheques')}
+                        className="p-1.5 rounded-xl bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 cursor-pointer"
+                        title="View in Cheques Management"
+                      >
+                        <ExternalLink size={15} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* SECTION 1: ACTIONABLE GATE PASS REQUIRED CARDS */}
       {(activeTab === 'all' || activeTab === 'gatepass') && undeliveredConfirmed.length > 0 && (

@@ -286,7 +286,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <Bell size={13} />
             {notificationCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white font-mono text-[9px] font-bold flex items-center justify-center animate-pulse">
+              <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white font-mono text-[9px] font-bold flex items-center justify-center">
                 {notificationCount > 99 ? '99+' : notificationCount}
               </span>
             )}
@@ -386,7 +386,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <span
               className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                isPrinterReady ? 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]' : 'bg-amber-400 animate-pulse'
+                isPrinterReady ? 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)]' : 'bg-amber-400'
               }`}
             />
             {isBluetooth ? (

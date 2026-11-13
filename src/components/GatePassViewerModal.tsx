@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Download,
@@ -10,11 +10,13 @@ import {
   Image as ImageIcon,
   ShieldCheck,
   UserCheck,
+  Loader2
 } from 'lucide-react';
 import { Transaction, AppLanguage } from '../types';
 import { fmt } from '../utils/helpers';
 import { triggerImagePrint, triggerDirectPrint } from '../utils/printPortal';
 import { UnifiedGateReceipt } from '../utils/gateSequenceManager';
+import { getDocumentFromVault } from '../utils/documentVault';
 
 interface GatePassViewerModalProps {
   transaction?: Transaction | null;
@@ -30,7 +32,30 @@ export const GatePassViewerModal: React.FC<GatePassViewerModalProps> = ({
   onClose
 }) => {
   const gatePass = transaction?.gatePass;
-  const fileData = receipt?.fileData || gatePass?.fileData || transaction?.receiptUrl;
+  const initialFileData = receipt?.fileData || gatePass?.fileData || transaction?.receiptUrl || '';
+  const [activeFileData, setActiveFileData] = useState<string>(initialFileData);
+  const [isLoadingDoc, setIsLoadingDoc] = useState(false);
+
+  useEffect(() => {
+    if (initialFileData) {
+      setActiveFileData(initialFileData);
+      return;
+    }
+    const vaultId = gatePass?.docVaultId || (receipt as any)?.docVaultId;
+    if (vaultId) {
+      setIsLoadingDoc(true);
+      getDocumentFromVault(vaultId).then(blob => {
+        if (blob) {
+          setActiveFileData(blob);
+        }
+        setIsLoadingDoc(false);
+      }).catch(() => {
+        setIsLoadingDoc(false);
+      });
+    }
+  }, [initialFileData, gatePass?.docVaultId, (receipt as any)?.docVaultId]);
+
+  const fileData = activeFileData;
   const isPdf =
     receipt?.fileType === 'pdf' ||
     gatePass?.fileType === 'pdf' ||
@@ -41,7 +66,7 @@ export const GatePassViewerModal: React.FC<GatePassViewerModalProps> = ({
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
 
-  if (!fileData) {
+  if (!fileData && !isLoadingDoc) {
     return null;
   }
 

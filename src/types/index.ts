@@ -33,7 +33,8 @@ export type AppView =
   | 'exports'
   | 'visualstudio'
   | 'settings'
-  | 'printer';
+  | 'printer'
+  | 'cheques';
 
 export type PrinterConnectionType = 'wifi' | 'bluetooth' | 'wired';
 export type PrinterPaperSize =
@@ -135,6 +136,8 @@ export interface RawStockItem {
   reorderLevel?: number;
   unit?: string;
   lastUpdated?: string;
+  supplier?: string;
+  supplierAssociation?: string;
 }
 
 export interface Inquiry {
@@ -152,6 +155,62 @@ export interface RecipeItem {
   weightPerUnit?: number;
   itemsPerUnit?: number;
   customerSupplied?: boolean;
+}
+
+export interface ProjectLabourOperation {
+  id: string;
+  name: string; // e.g. 'Pipe Cutting & Sizing', 'Punching & Hole Drilling', 'Swaging & Threading', 'Deburring & Buffing', 'Powder Coating & Curing', 'Hardware Assembly', 'Packaging & Bundling'
+  ratePerUnit: number; // e.g. Rs 4.5/pc
+  workerName?: string; // e.g. 'Ustad Tariq'
+  totalCost: number; // ratePerUnit * batchQuantity
+  notes?: string;
+  isCompleted?: boolean;
+}
+
+export interface ProjectMaterialEstimate {
+  id: string;
+  materialName: string; // e.g. 'M.S. Steel Pipe 16G', 'Safety Bolt & Pin', 'Pure White Powder', 'Corrugated Sleeves'
+  sourceType: 'factory_supplied' | 'customer_provided'; // Customer provided = Rs 0 cost to Falcon (Khari job work)
+  consumptionPerUnit: number; // e.g. 0.85 (kg per rod) or 1 (pc per rod)
+  unit: string; // 'kg', 'pcs', 'sets', 'grams'
+  unitRate: number; // e.g. Rs 290/kg (0 if customer_provided)
+  totalQuantityOrWeight: number; // consumptionPerUnit * batchQuantity
+  totalCost: number; // unitRate * totalQuantityOrWeight (0 if customer_provided)
+  notes?: string;
+}
+
+export interface ProductionProjectCostEstimate {
+  id: string;
+  projectName: string;
+  targetType: 'customer' | 'factory';
+  targetPartyName: string; // Factory name or Customer name (e.g. "Al-Madina Fan Workshop")
+  targetPartyId?: string;
+  rodSize: string; // '6"', '12"', '18"', '24"', '30"', '36"', '48"', '60"', 'Custom'
+  gauge?: string; // '16 Gauge', '14 Gauge', '18 Gauge'
+  diameter?: string; // '3/4"', '1"'
+  batchQuantity: number; // e.g. 500 pcs
+  date: string; // ISO date
+  status: 'draft' | 'in_progress' | 'completed' | 'billed';
+  materialEstimates: ProjectMaterialEstimate[];
+  labourOperations: ProjectLabourOperation[];
+  overheadPerUnit: number; // e.g. Rs 2.50/pc (Electricity, tooling wear, chemicals)
+  quotedPricePerUnit: number; // e.g. Rs 340/pc (Selling or billed rate)
+  totalMaterialCost: number;
+  materialCostPerUnit: number;
+  totalLabourCost: number;
+  labourCostPerUnit: number;
+  totalOverheadCost: number;
+  overheadCostPerUnit: number;
+  totalProductionCost: number;
+  productionCostPerUnit: number;
+  expectedRevenue: number;
+  expectedProfitTotal: number;
+  expectedProfitPerUnit: number;
+  profitMarginPercent: number;
+  customerSuppliedWeightSavedKg?: number; // Total kg steel provided by customer (Khari)
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RodBlueprintSpecs {
@@ -253,6 +312,7 @@ export interface GatePassData {
   fileType: 'pdf' | 'image';
   fileSize?: number;
   uploadedAt: string;
+  docVaultId?: string;
   gatePassNo?: string;
   gateSequence?: number;
   gateSequenceNo?: string;
@@ -302,6 +362,8 @@ export interface Transaction {
   trackingNumber?: string;
   itemBatches?: string;
   itemTrackingNumbers?: string;
+  rawDeducted?: boolean;
+  batchNotes?: string;
 }
 
 export interface Factory {
@@ -342,12 +404,71 @@ export interface CustomerLedgerEntry {
   bankName?: string;
   chequeNo?: string;
   chequeDate?: string;
-  chequeStatus?: 'pending' | 'cleared' | 'bounced' | '';
+  chequeStatus?: 'pending' | 'presented' | 'cleared' | 'bounced' | 'overdue' | 'returned' | '';
+  isEndorsedCheque?: boolean;
+  endorsedToSupplier?: string;
+  endorsedFromCustomer?: string;
+  reversalEntryId?: string;
+  isReversal?: boolean;
   taxPercent?: number;
   taxAmt?: number;
   txnId?: string;
   receiptUrl?: string;
   device?: string;
+}
+
+export type ChequeStatus = 'pending' | 'presented' | 'cleared' | 'bounced' | 'overdue' | 'returned';
+
+export type ChequeType =
+  | 'customer_received'
+  | 'endorsed_to_supplier'
+  | 'company_issued';
+
+export interface ChequeRecord {
+  id: string;
+  chequeNo: string;
+  bankName: string;
+  amount: number;
+  issueDate: string;
+  chequeDate: string; // Due / maturity clearing date
+  status: ChequeStatus;
+  chequeType: ChequeType;
+  payerParty: string; // e.g. "Al-Madina Fan Workshop" or "Falcon Rod Maker"
+  payeeParty: string; // e.g. "Falcon Rod Maker" or "Ittefaq Steel Mills"
+  customerLedgerName?: string;
+  customerEntryId?: string;
+  supplierName?: string;
+  supplierEntryId?: string;
+  otherLedgerType?: 'paint' | 'labour' | 'custom' | 'withdrawal';
+  otherLedgerName?: string;
+  otherEntryId?: string;
+  isCrossLinked: boolean; // True if this cheque links a customer receipt to a supplier payment!
+  reversalApplied?: boolean;
+  reversalDate?: string;
+  reversalNotes?: string;
+  isOverdue: boolean;
+  daysRemaining: number;
+  notes?: string;
+}
+
+export interface ChequeStatusLogEntry {
+  id: string;
+  chequeNo: string;
+  normalizedChequeNo: string;
+  previousStatus: ChequeStatus | 'created';
+  newStatus: ChequeStatus;
+  timestamp: string;
+  date: string;
+  time: string;
+  amount: number;
+  bankName: string;
+  payerParty: string;
+  payeeParty: string;
+  chequeType?: ChequeType;
+  source?: string;
+  notes?: string;
+  reversedParties?: string[];
+  isBaselineRecord?: boolean;
 }
 
 export interface CustomerLedgerAccount {
@@ -368,6 +489,12 @@ export interface PaintEntry {
   ratePerItem?: string;
   debit: number;
   credit: number;
+  entryType?: 'billing' | 'dispatch_outward' | 'receive_inward';
+  dispatchedQty?: number;
+  receivedQty?: number;
+  rejectedQty?: number;
+  rejectionReason?: string;
+  batchId?: string;
   method?: string;
   detail?: string;
   receivedBy?: string;
@@ -420,6 +547,11 @@ export interface RawEntry {
   chequeNo?: string;
   chequeDate?: string;
   chequeStatus?: string;
+  isEndorsedCheque?: boolean;
+  endorsedToSupplier?: string;
+  endorsedFromCustomer?: string;
+  reversalEntryId?: string;
+  isReversal?: boolean;
   receiptUrl?: string;
   gatePass?: GatePassData;
   gateSequence?: number;
@@ -528,6 +660,7 @@ export interface LabourEntry {
   dutyShift?: 'full' | 'half' | 'custom' | string;
   shifts?: number;
   dailyWageRate?: number;
+  batchId?: string;
   receiptUrl?: string;
   device?: string;
 }
@@ -697,6 +830,7 @@ export interface AppState {
   transactions: Transaction[];
   customerPayments: CustomerPayment[];
   rawStock: RawStockItem[];
+  productionProjects?: ProductionProjectCostEstimate[];
   cart: CartLine[];
   nextTxnId: string;
   inquiries: Inquiry[];
@@ -727,6 +861,7 @@ export interface AppState {
   exportedItems?: ExportedItem[];
   cloudTokens?: CloudTokensState;
   recycleBin?: RecycleBinItem[];
+  chequeStatusLogs?: ChequeStatusLogEntry[];
 }
 
 export type RecycleBinItemType =

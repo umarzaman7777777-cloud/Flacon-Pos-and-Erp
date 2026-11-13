@@ -1,6 +1,19 @@
-import React, { useState } from 'react';
-import { Recycle, Plus, Trash2, Edit2, Image as ImageIcon, Sliders } from 'lucide-react';
-import { ScrapBuyer, ScrapEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig } from '../types';
+import React, { useState, useMemo } from 'react';
+import {
+  Recycle,
+  Plus,
+  Trash2,
+  Edit2,
+  Image as ImageIcon,
+  Sliders,
+  Scale,
+  TrendingUp,
+  Gauge,
+  AlertCircle,
+  CheckCircle2,
+  Info
+} from 'lucide-react';
+import { ScrapBuyer, ScrapEntry, AppLanguage, LedgerColumnConfig, ExportDocumentConfig, RawStockItem, Transaction } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
@@ -15,6 +28,8 @@ import { LedgerStudioModal, DEFAULT_LEDGER_COLUMNS } from './LedgerStudioModal';
 
 interface ScrapLedgerViewProps {
   buyers: ScrapBuyer[];
+  rawStock?: RawStockItem[];
+  transactions?: Transaction[];
   language: AppLanguage;
   companyName: string;
   onSaveBuyer: (buyer: ScrapBuyer, oldName?: string) => void;
@@ -26,6 +41,8 @@ interface ScrapLedgerViewProps {
 
 export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
   buyers,
+  rawStock = [],
+  transactions = [],
   language,
   companyName,
   onSaveBuyer,
@@ -67,6 +84,41 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
   };
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
+
+  // Metal Loss & Workshop Scrap Efficiency Calculations
+  const totalScrapKgSold = useMemo(() => {
+    return buyers.reduce((sum, b) => {
+      return sum + b.entries.reduce((eSum, e) => eSum + (e.weight || 0), 0);
+    }, 0);
+  }, [buyers]);
+
+  const totalScrapRevenue = useMemo(() => {
+    return buyers.reduce((sum, b) => {
+      return sum + b.entries.reduce((eSum, e) => eSum + (e.debit || 0), 0);
+    }, 0);
+  }, [buyers]);
+
+  const estimatedSteelFabricatedKg = useMemo(() => {
+    let steelKg = 0;
+    transactions.forEach(t => {
+      const counts = (t.itemCounts || '').split(',').map(s => parseFloat(s.trim()) || 0);
+      const sizes = (t.sizes || '').split(',').map(s => s.trim().toLowerCase());
+      counts.forEach((qty, idx) => {
+        const s = sizes[idx] || '';
+        let unitWt = 0.85;
+        if (s.includes('12')) unitWt = 0.55;
+        else if (s.includes('18')) unitWt = 0.75;
+        else if (s.includes('24')) unitWt = 1.0;
+        else if (s.includes('36')) unitWt = 1.5;
+        else if (s.includes('48')) unitWt = 2.0;
+        else if (s.includes('60')) unitWt = 2.5;
+        steelKg += qty * unitWt;
+      });
+    });
+    return Math.max(steelKg, 1200);
+  }, [transactions]);
+
+  const scrapRecoveryRate = ((totalScrapKgSold / (estimatedSteelFabricatedKg + totalScrapKgSold)) * 100);
 
   const handleRecalcDebit = (wStr: string, rStr: string) => {
     const w = parseFloat(wStr) || 0;
@@ -180,6 +232,78 @@ export const ScrapLedgerView: React.FC<ScrapLedgerViewProps> = ({
           <Plus size={14} />
           <span>Add Scrap Buyer</span>
         </button>
+      </div>
+
+      {/* Workshop Metal Loss & Scrap Recovery Yield Benchmark Card */}
+      <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl p-4 shadow-sm space-y-3 font-mono">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Scale size={16} />
+            </div>
+            <div>
+              <h3 className="font-serif font-black text-sm text-[var(--text)]">
+                Workshop Metal Loss & Scrap Recovery Yield
+              </h3>
+              <p className="text-[10px] text-[var(--text-dim)]">
+                Lathe Turning Boring + Pipe Cutting Off-Cut Efficiency Tracking
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+              scrapRecoveryRate <= 4.5
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                : scrapRecoveryRate <= 7.0
+                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+            }`}>
+              {scrapRecoveryRate <= 4.5
+                ? '✓ High Cutting Efficiency (Under 4.5% Loss)'
+                : scrapRecoveryRate <= 7.0
+                ? '⚖️ Standard Cluster Yield (Normal Off-cuts)'
+                : '⚠️ High Waste Alert (>7% Loss)'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-[var(--steel-line)]/50">
+          <div className="p-2.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+            <span className="text-[10px] uppercase text-[var(--text-dim)] block">Total Scrap Sold</span>
+            <div className="text-sm font-bold text-amber-400 mt-0.5">
+              {totalScrapKgSold.toLocaleString()} kg
+            </div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+            <span className="text-[10px] uppercase text-[var(--text-dim)] block">Scrap Revenue Recovered</span>
+            <div className="text-sm font-bold text-emerald-400 mt-0.5">
+              Rs {fmt(totalScrapRevenue)}
+            </div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+            <span className="text-[10px] uppercase text-[var(--text-dim)] block">Est. Steel Processed</span>
+            <div className="text-sm font-bold text-sky-400 mt-0.5">
+              ~{Math.round(estimatedSteelFabricatedKg).toLocaleString()} kg
+            </div>
+          </div>
+
+          <div className="p-2.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+            <span className="text-[10px] uppercase text-[var(--text-dim)] block">Metal Loss Recovery Ratio</span>
+            <div className="text-sm font-bold text-amber-300 mt-0.5">
+              {scrapRecoveryRate.toFixed(1)}%
+            </div>
+          </div>
+        </div>
+
+        <div className="text-[10px] text-zinc-400 bg-black/20 p-2 rounded-lg flex items-start gap-1.5">
+          <Info size={12} className="text-amber-400 shrink-0 mt-0.5" />
+          <span>
+            Ceiling fan down rod turning boring (shavings) and 240-inch standard pipe cut-offs in Gujrat should yield between 3.5% and 5.5% metal scrap recovery. Tracking recovery ensures lathe cutting feeds and pipe nesting remain profitable.
+          </span>
+        </div>
       </div>
 
       {/* Buyers Grid */}

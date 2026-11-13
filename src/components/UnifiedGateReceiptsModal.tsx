@@ -368,7 +368,7 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
         {/* Footer info bar */}
         <div className="p-3 border-t border-[var(--steel-line)] bg-[var(--panel-raised)] flex items-center justify-between text-xs text-[var(--text-dim)] shrink-0">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <ShieldCheck size={14} className="text-emerald-400 shrink-0" />
             <span>Strict Gate Compliance: All orders logged by sequential gate receiving staff</span>
           </div>
 

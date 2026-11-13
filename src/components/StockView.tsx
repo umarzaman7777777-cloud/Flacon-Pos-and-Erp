@@ -284,7 +284,7 @@ export const StockView: React.FC<StockViewProps> = ({
               <span>Raw Materials</span>
               {lowStockRaw.length > 0 && (
                 <span
-                  className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse"
+                  className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center"
                   title={`${lowStockRaw.length} raw materials below safety threshold`}
                 >
                   {lowStockRaw.length}
@@ -302,7 +302,7 @@ export const StockView: React.FC<StockViewProps> = ({
               <span>Finished Goods</span>
               {lowStockProducts.length > 0 && (
                 <span
-                  className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center animate-pulse"
+                  className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-black flex items-center justify-center"
                   title={`${lowStockProducts.length} items below safety threshold`}
                 >
                   {lowStockProducts.length}
@@ -656,12 +656,12 @@ export const StockView: React.FC<StockViewProps> = ({
             <div className="p-3.5 sm:p-4 rounded-xl bg-red-500/15 border-2 border-red-500/60 shadow-lg shadow-red-950/40 text-[var(--text)] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 font-sans transition">
               <div className="flex items-start sm:items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-red-500/20 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0 mt-0.5 sm:mt-0 shadow-xs">
-                  <BellRing size={20} className="animate-pulse" />
+                  <BellRing size={20} />
                 </div>
                 <div>
                   <div className="text-sm font-black text-red-400 uppercase tracking-wide flex items-center gap-2 flex-wrap">
                     <span>Raw Material Low Stock Alert</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500 text-white font-bold animate-pulse">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500 text-white font-bold">
                       {lowStockRaw.length} {lowStockRaw.length === 1 ? 'Material Critical' : 'Materials Critical'}
                     </span>
                     <span className="text-xs font-mono text-[var(--text-dim)] font-normal">
@@ -738,14 +738,11 @@ export const StockView: React.FC<StockViewProps> = ({
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-sm text-[var(--text)] font-sans">{item.name}</span>
                         {isLow && (
-                          <span className="relative flex h-2.5 w-2.5" title="Below low-stock threshold!">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                          </span>
+                          <span className="inline-block h-2 w-2 rounded-full bg-red-500" title="Below low-stock threshold!" />
                         )}
                       </div>
                       {isLow ? (
-                        <span className="px-2 py-0.5 rounded bg-red-500 text-white text-[10px] font-black uppercase tracking-wider animate-pulse">
+                        <span className="px-2 py-0.5 rounded bg-red-500 text-white text-[10px] font-black uppercase tracking-wider">
                           CRITICAL LOW
                         </span>
                       ) : (
@@ -833,12 +830,12 @@ export const StockView: React.FC<StockViewProps> = ({
             <div className="p-3.5 sm:p-4 rounded-xl bg-red-500/15 border-2 border-red-500/60 shadow-lg shadow-red-950/40 text-[var(--text)] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 font-sans transition">
               <div className="flex items-start sm:items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-red-500/20 border border-red-500/50 flex items-center justify-center text-red-400 shrink-0 mt-0.5 sm:mt-0 shadow-xs">
-                  <BellRing size={20} className="animate-pulse" />
+                  <BellRing size={20} />
                 </div>
                 <div>
                   <div className="text-sm font-black text-red-400 uppercase tracking-wide flex items-center gap-2 flex-wrap">
                     <span>Low Stock Alert</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500 text-white font-bold animate-pulse">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-500 text-white font-bold">
                       {lowStockProducts.length} {lowStockProducts.length === 1 ? 'Item Critical' : 'Items Critical'}
                     </span>
                     <span className="text-xs font-mono text-[var(--text-dim)] font-normal">

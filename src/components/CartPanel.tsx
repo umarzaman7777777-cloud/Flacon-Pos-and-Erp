@@ -9,9 +9,14 @@ import {
   ArrowUp,
   AlertCircle,
   CheckCircle2,
-  PackageCheck
+  PackageCheck,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  Tag
 } from 'lucide-react';
-import { CartLine, Factory, Product, AppLanguage } from '../types';
+import { CartLine, Factory, Product, AppLanguage, RawStockItem, Transaction } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO } from '../utils/helpers';
 import { TouchRangeSlider } from './TouchRangeSlider';
@@ -21,6 +26,8 @@ interface CartPanelProps {
   cart: CartLine[];
   factories: Factory[];
   products?: Product[];
+  rawStock?: RawStockItem[];
+  transactions?: Transaction[];
   customerLedgers?: { name: string; entries: { debit?: number; credit?: number }[] }[];
   nextTxnId: string;
   language: AppLanguage;
@@ -29,7 +36,7 @@ interface CartPanelProps {
   onSetQty?: (id: number, qty: number) => void;
   onRemoveLine: (id: number) => void;
   onClearCart: () => void;
-  onCheckoutUnpaid: (factoryName: string, orderDate: string) => void;
+  onCheckoutUnpaid: (factoryName: string, orderDate: string, batchId?: string) => void;
   onScrollToProducts?: () => void;
 }
 
@@ -37,6 +44,8 @@ export const CartPanel: React.FC<CartPanelProps> = ({
   cart,
   factories,
   products = [],
+  rawStock = [],
+  transactions = [],
   customerLedgers = [],
   nextTxnId,
   language,
@@ -52,6 +61,24 @@ export const CartPanel: React.FC<CartPanelProps> = ({
   const [orderDate, setOrderDate] = useState(todayISO());
   const [expandedSliderId, setExpandedSliderId] = useState<number | null>(null);
 
+  // Discover existing batches across transactions
+  const availableBatches = useMemo(() => {
+    const set = new Set<string>();
+    const currentMonthBatch = `BATCH-${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    set.add(currentMonthBatch);
+    transactions.forEach(t => {
+      if (t.batchId && t.batchId.trim()) set.add(t.batchId.trim());
+    });
+    return Array.from(set);
+  }, [transactions]);
+
+  const [selectedBatch, setSelectedBatch] = useState<string>(availableBatches[0] || 'BATCH-2026-09');
+  const [isCustomBatch, setIsCustomBatch] = useState(false);
+  const [customBatchText, setCustomBatchText] = useState('');
+  const [showBomDrawer, setShowBomDrawer] = useState(true);
+
+  const effectiveBatchId = isCustomBatch ? (customBatchText.trim() || 'CUSTOM-LOT') : selectedBatch;
+
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
   const totalAmount = cart.reduce((sum, line) => sum + line.price * line.qty, 0);
@@ -65,6 +92,38 @@ export const CartPanel: React.FC<CartPanelProps> = ({
     return sum + (w * line.qty);
   }, 0);
 
+  // Calculate real-time BOM raw material requirements for all items in the invoice
+  const bomImpact = useMemo(() => {
+    const map = new Map<string, { material: string; requiredWeight: number; requiredPieces: number; currentStock?: RawStockItem }>();
+
+    cart.forEach(c => {
+      const prod = products.find(p => p.id === c.id || p.name === c.name);
+      if (prod && prod.recipe && prod.recipe.length > 0) {
+        prod.recipe.forEach(r => {
+          if (!r.material) return;
+          const mat = r.material.trim();
+          if (!map.has(mat)) {
+            const matchedStock = rawStock.find(rs => {
+              const rsn = rs.name.toLowerCase();
+              const mn = mat.toLowerCase();
+              return rsn.includes(mn) || mn.includes(rsn) || (mn.includes('steel pipe') && rsn.includes('steel pipe'));
+            });
+            map.set(mat, { material: mat, requiredWeight: 0, requiredPieces: 0, currentStock: matchedStock });
+          }
+          const entry = map.get(mat)!;
+          if (r.weightPerUnit) {
+            entry.requiredWeight += r.weightPerUnit * c.qty;
+          }
+          if (r.itemsPerUnit) {
+            entry.requiredPieces += r.itemsPerUnit * c.qty;
+          }
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [cart, products, rawStock]);
+
   // Calculate selected factory's current outstanding balance from customer ledger
   const factoryBalance = useMemo(() => {
     if (!selectedFactory) return null;
@@ -76,7 +135,7 @@ export const CartPanel: React.FC<CartPanelProps> = ({
   const handleCheckout = () => {
     if (cart.length === 0 || !selectedFactory) return;
     hapticTransactionComplete();
-    onCheckoutUnpaid(selectedFactory, orderDate);
+    onCheckoutUnpaid(selectedFactory, orderDate, effectiveBatchId);
   };
 
   const handleSetLineQty = (id: number, currentQty: number, targetQty: number) => {
@@ -162,17 +221,81 @@ export const CartPanel: React.FC<CartPanelProps> = ({
           </select>
         </div>
 
-        {/* Date picker */}
-        <div>
-          <label className="block text-[10px] uppercase font-bold text-[var(--text-dim)] tracking-wider mb-1">
-            {t('entry_date')}
-          </label>
-          <input
-            type="date"
-            value={orderDate}
-            onChange={e => setOrderDate(e.target.value)}
-            className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-[var(--yellow)] rounded-xl px-3 py-1.5 text-xs text-[var(--text)] outline-none"
-          />
+        {/* Date & Production Batch Row */}
+        <div className="grid grid-cols-2 gap-2">
+          {/* Date picker */}
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-[var(--text-dim)] tracking-wider mb-1">
+              {t('entry_date')}
+            </label>
+            <input
+              type="date"
+              value={orderDate}
+              onChange={e => setOrderDate(e.target.value)}
+              className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-[var(--yellow)] rounded-xl px-2.5 py-1.5 text-xs text-[var(--text)] outline-none"
+            />
+          </div>
+
+          {/* Production Batch Selector */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
+                <Layers size={10} />
+                <span>Batch Lot</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomBatch(!isCustomBatch);
+                  if (!isCustomBatch && !customBatchText) {
+                    setCustomBatchText(`BATCH-${new Date().getFullYear()}-LOT01`);
+                  }
+                }}
+                className="text-[9px] text-[var(--text-dim)] hover:text-amber-300 underline cursor-pointer"
+              >
+                {isCustomBatch ? 'Select List' : '+ New Lot'}
+              </button>
+            </div>
+
+            {isCustomBatch ? (
+              <input
+                type="text"
+                placeholder="e.g. BATCH-2026-LOT01"
+                value={customBatchText}
+                onChange={e => setCustomBatchText(e.target.value.toUpperCase())}
+                className="w-full bg-[var(--panel-raised)] border border-amber-500/40 focus:border-amber-400 rounded-xl px-2 py-1.5 text-[11px] text-amber-300 font-bold outline-none uppercase"
+              />
+            ) : (
+              <select
+                value={selectedBatch}
+                onChange={e => {
+                  if (e.target.value === '__NEW__') {
+                    setIsCustomBatch(true);
+                    setCustomBatchText(`BATCH-${new Date().getFullYear()}-LOT01`);
+                  } else {
+                    setSelectedBatch(e.target.value);
+                  }
+                }}
+                className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-amber-400 rounded-xl px-2 py-1.5 text-[11px] text-[var(--text)] font-semibold truncate outline-none cursor-pointer"
+              >
+                {availableBatches.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+                <option value="__NEW__">+ Custom Batch...</option>
+              </select>
+            )}
+          </div>
+        </div>
+
+        {/* Selected Batch Active Indicator */}
+        <div className="flex items-center justify-between px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-[10px]">
+          <span className="text-zinc-400 flex items-center gap-1">
+            <Tag size={10} className="text-amber-400" />
+            <span>Assigned Lot:</span>
+          </span>
+          <span className="font-bold text-amber-300 font-mono tracking-wider">
+            {effectiveBatchId}
+          </span>
         </div>
       </div>
 
@@ -364,6 +487,68 @@ export const CartPanel: React.FC<CartPanelProps> = ({
 
       {/* Footer / Checkout Controls - Styled with proper bottom clearance */}
       <div className="p-4 border-t border-[var(--steel-line)] bg-[var(--panel-raised)]/30 space-y-3 font-mono text-xs shrink-0 pb-16 lg:pb-4">
+        {/* Real-Time BOM Recipe Raw Material Draw Indicator */}
+        {bomImpact.length > 0 && (
+          <div className="bg-[var(--panel-raised)] border border-amber-500/25 rounded-xl p-2.5 space-y-2">
+            <button
+              type="button"
+              onClick={() => setShowBomDrawer(!showBomDrawer)}
+              className="w-full flex items-center justify-between text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+                <Layers size={12} />
+                <span>BOM Raw Stock Draw ({bomImpact.length} Mat)</span>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-zinc-400">
+                <span>{showBomDrawer ? 'Hide' : 'View Impact'}</span>
+                {showBomDrawer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </div>
+            </button>
+
+            {showBomDrawer && (
+              <div className="space-y-1.5 pt-1 border-t border-[var(--steel-line)]/50">
+                {bomImpact.map((b, idx) => {
+                  const stockWeight = b.currentStock?.weight ?? b.currentStock?.initialWeight ?? 0;
+                  const stockPieces = b.currentStock?.quantity ?? b.currentStock?.items ?? b.currentStock?.initialQuantity ?? 0;
+                  const isKg = b.requiredWeight > 0;
+                  const reqAmt = isKg ? b.requiredWeight : b.requiredPieces;
+                  const unitStr = isKg ? 'kg' : 'pcs';
+                  const availAmt = isKg ? stockWeight : stockPieces;
+                  const isShortage = availAmt < reqAmt;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-center justify-between text-[10px] px-2 py-1 rounded-lg border ${
+                        isShortage
+                          ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
+                      }`}
+                    >
+                      <div className="truncate max-w-[140px] font-medium" title={b.material}>
+                        {b.material}
+                      </div>
+                      <div className="flex items-center gap-2 font-mono">
+                        <span className="font-bold text-amber-400">
+                          -{reqAmt.toFixed(isKg ? 2 : 0)} {unitStr}
+                        </span>
+                        <span className="text-zinc-500 text-[9px]">
+                          (Stock: {availAmt.toFixed(isKg ? 1 : 0)})
+                        </span>
+                        {isShortage && (
+                          <span className="text-[9px] font-bold text-rose-400 bg-rose-500/20 px-1 rounded">
+                            Short
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Sums & Weight Totals */}
         <div className="space-y-1.5">
           <div className="flex justify-between items-center text-[var(--text-dim)]">

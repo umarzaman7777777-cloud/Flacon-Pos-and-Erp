@@ -24,7 +24,8 @@ import {
   Printer,
   ShieldCheck,
   Trash2,
-  Cloud
+  Cloud,
+  CreditCard
 } from 'lucide-react';
 import { AppLanguage, AppView } from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
@@ -43,6 +44,7 @@ interface SidebarProps {
   onOpenAbout?: () => void;
   onOpenGateReceipts?: () => void;
   recycleBinCount?: number;
+  chequeAlertCount?: number;
   onOpenRecycleBin?: () => void;
   onOpenGmailVault?: () => void;
   isOpen?: boolean;
@@ -56,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   companyName = 'Falcon Rod Maker',
   companyTagline = 'Fan Accessories • Gujrat',
   notificationCount,
+  chequeAlertCount = 0,
   onSelectView,
   onSelectCategory,
   onOpenAbout,
@@ -321,6 +324,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <button
               type="button"
+              id="sidebar-nav-cheques"
+              onClick={() => handleNavClick('cheques')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition ${
+                currentView === 'cheques'
+                  ? 'bg-[var(--yellow)] text-black shadow'
+                  : 'text-[var(--text-dim)] hover:bg-[var(--panel-raised)] hover:text-[var(--text)]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <CreditCard size={16} className="shrink-0" />
+                {renderBilingual('Cheques Registry', 'چیک سسٹم و لیجر')}
+              </div>
+              {chequeAlertCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold shrink-0 ml-1">
+                  {chequeAlertCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleNavClick('products')}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition ${
                 currentView === 'sales' || currentView === 'products'
@@ -545,7 +569,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {renderBilingual('Recycle Bin', 'بحالی کوڑا دان')}
                 </div>
                 {recycleBinCount > 0 && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-bold shrink-0 ml-1 shadow-xs animate-pulse">
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-bold shrink-0 ml-1 shadow-xs">
                     {recycleBinCount}
                   </span>
                 )}

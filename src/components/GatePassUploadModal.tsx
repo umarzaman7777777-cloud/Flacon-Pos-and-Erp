@@ -18,6 +18,7 @@ import { Transaction, GatePassData, AppLanguage, RawEntry } from '../types';
 import { todayISO } from '../utils/helpers';
 import { formatGateSequence } from '../utils/gateSequenceManager';
 import { hapticTransactionComplete, hapticWarning } from '../utils/haptics';
+import { saveDocumentToVault } from '../utils/documentVault';
 
 interface GatePassUploadModalProps {
   transaction?: Transaction | null;
@@ -207,8 +208,12 @@ export const GatePassUploadModal: React.FC<GatePassUploadModalProps> = ({
       return;
     }
 
+    const vaultId = `gp_vault_${targetId}_${Date.now()}`;
+    saveDocumentToVault(vaultId, fileData);
+
     const gatePass: GatePassData = {
       fileData,
+      docVaultId: vaultId,
       fileName: fileName || `GatePass_${targetId}`,
       fileType,
       fileSize,

@@ -323,7 +323,11 @@ export const INITIAL_STATE: AppState = {
       colors: 'Matt Black',
       paid: true,
       method: 'Cash',
-      detailCash: 'Received at shop'
+      detailCash: 'Received at shop',
+      batchId: 'BATCH-202609-LOT01',
+      trackingNumber: 'TRK-20260901-0001',
+      itemBatches: 'BATCH-202609-LOT01-L1',
+      itemTrackingNumbers: 'TRK-20260901-0001-01'
     },
     {
       id: '0002',
@@ -340,7 +344,11 @@ export const INITIAL_STATE: AppState = {
       colors: 'Off-White',
       paid: false,
       method: 'Cheque',
-      detailBank: 'HBL Chq #884912'
+      detailBank: 'HBL Chq #884912',
+      batchId: 'BATCH-202609-LOT02',
+      trackingNumber: 'TRK-20260903-0002',
+      itemBatches: 'BATCH-202609-LOT02-L1',
+      itemTrackingNumbers: 'TRK-20260903-0002-01'
     },
     {
       id: '0003',
@@ -356,7 +364,11 @@ export const INITIAL_STATE: AppState = {
       sizes: '36 inch',
       colors: 'Smoke Grey',
       paid: true,
-      method: 'Cash'
+      method: 'Cash',
+      batchId: 'BATCH-202609-LOT02',
+      trackingNumber: 'TRK-20260905-0003',
+      itemBatches: 'BATCH-202609-LOT02-L1',
+      itemTrackingNumbers: 'TRK-20260905-0003-01'
     },
     {
       id: '0004',
@@ -371,7 +383,11 @@ export const INITIAL_STATE: AppState = {
       confirmed: true,
       sizes: '24 inch',
       colors: 'Pure White',
-      paid: false
+      paid: false,
+      batchId: 'BATCH-202609-LOT01',
+      trackingNumber: 'TRK-20260908-0004',
+      itemBatches: 'BATCH-202609-LOT01-L1',
+      itemTrackingNumbers: 'TRK-20260908-0004-01'
     }
   ],
 
@@ -487,6 +503,244 @@ export const INITIAL_STATE: AppState = {
     { id: 'rs_2', name: 'M.S. Heavy Pipe (14 Gauge - 1" Dia)', category: 'Raw Material', initialWeight: 220, weight: 220, unit: 'kg', reorderLevel: 50, lastUpdated: '2026-09-10' },
     { id: 'rs_3', name: 'Safety Bolt & Cotter Pin Fittings', category: 'Fittings', initialWeight: 0, weight: 0, initialQuantity: 1200, quantity: 1200, unit: 'pcs', reorderLevel: 150, lastUpdated: '2026-09-03' },
     { id: 'rs_4', name: 'Rubber Bushings & Canopy Rings', category: 'Fittings', initialWeight: 0, weight: 0, initialQuantity: 1500, quantity: 1500, unit: 'pcs', reorderLevel: 200, lastUpdated: '2026-09-03' }
+  ],
+  productionProjects: [
+    {
+      id: 'proj_1',
+      projectName: '18" Deluxe Fan Down Rods (Al-Madina Batch #401)',
+      targetType: 'factory',
+      targetPartyName: 'Al-Madina Fan Workshop',
+      rodSize: '18"',
+      gauge: '16 Gauge',
+      diameter: '3/4"',
+      batchQuantity: 500,
+      date: '2026-09-05',
+      status: 'completed',
+      materialEstimates: [
+        {
+          id: 'mat_1',
+          materialName: 'M.S. Steel Pipe (16 Gauge - 3/4" Dia)',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 0.85,
+          unit: 'kg',
+          unitRate: 290,
+          totalQuantityOrWeight: 425,
+          totalCost: 123250
+        },
+        {
+          id: 'mat_2',
+          materialName: 'Safety Bolt & Cotter Pin Fittings',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 1,
+          unit: 'pcs',
+          unitRate: 14,
+          totalQuantityOrWeight: 500,
+          totalCost: 7000
+        },
+        {
+          id: 'mat_3',
+          materialName: 'Rubber Bushings & Canopy Rings',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 1,
+          unit: 'pcs',
+          unitRate: 6,
+          totalQuantityOrWeight: 500,
+          totalCost: 3000
+        },
+        {
+          id: 'mat_4',
+          materialName: 'Pure White Polyester Powder',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 0.05,
+          unit: 'kg',
+          unitRate: 1200,
+          totalQuantityOrWeight: 25,
+          totalCost: 30000
+        }
+      ],
+      labourOperations: [
+        {
+          id: 'lab_1',
+          name: 'Pipe Cutting & Deburring',
+          ratePerUnit: 4.0,
+          workerName: 'Ustad Tariq',
+          totalCost: 2000,
+          isCompleted: true
+        },
+        {
+          id: 'lab_2',
+          name: 'Hole Punching & Drilling',
+          ratePerUnit: 3.5,
+          workerName: 'M. Asif',
+          totalCost: 1750,
+          isCompleted: true
+        },
+        {
+          id: 'lab_3',
+          name: 'Swaging & Threading (Lathe)',
+          ratePerUnit: 4.5,
+          workerName: 'Rashid Machining',
+          totalCost: 2250,
+          isCompleted: true
+        },
+        {
+          id: 'lab_4',
+          name: 'Electrostatic Powder Coating',
+          ratePerUnit: 7.0,
+          workerName: 'Ustad Babar',
+          totalCost: 3500,
+          isCompleted: true
+        },
+        {
+          id: 'lab_5',
+          name: 'Inspection, Hardware Fitting & Packaging',
+          ratePerUnit: 3.0,
+          workerName: 'Bilal Packaging',
+          totalCost: 1500,
+          isCompleted: true
+        }
+      ],
+      overheadPerUnit: 2.5,
+      quotedPricePerUnit: 420,
+      totalMaterialCost: 163250,
+      materialCostPerUnit: 326.5,
+      totalLabourCost: 11000,
+      labourCostPerUnit: 22.0,
+      totalOverheadCost: 1250,
+      overheadCostPerUnit: 2.5,
+      totalProductionCost: 175500,
+      productionCostPerUnit: 351.0,
+      expectedRevenue: 210000,
+      expectedProfitTotal: 34500,
+      expectedProfitPerUnit: 69.0,
+      profitMarginPercent: 16.4,
+      notes: 'Full Falcon production with white powder coat and safety bolt set.',
+      createdAt: '2026-09-05',
+      updatedAt: '2026-09-05'
+    },
+    {
+      id: 'proj_2',
+      projectName: '24" Heavy Job-Work (Customer Pipe Khari)',
+      targetType: 'customer',
+      targetPartyName: 'Super Asia Ancillary Job-Work',
+      rodSize: '24"',
+      gauge: '14 Gauge',
+      diameter: '1"',
+      batchQuantity: 1000,
+      date: '2026-09-12',
+      status: 'in_progress',
+      materialEstimates: [
+        {
+          id: 'mat_201',
+          materialName: 'Customer M.S. Heavy Steel Pipe 14G',
+          sourceType: 'customer_provided',
+          consumptionPerUnit: 1.15,
+          unit: 'kg',
+          unitRate: 0,
+          totalQuantityOrWeight: 1150,
+          totalCost: 0,
+          notes: 'Supplied directly by Super Asia — Rs 0 steel cost to Falcon'
+        },
+        {
+          id: 'mat_202',
+          materialName: 'Safety Bolt Fitting Heavy',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 1,
+          unit: 'pcs',
+          unitRate: 16,
+          totalQuantityOrWeight: 1000,
+          totalCost: 16000
+        },
+        {
+          id: 'mat_203',
+          materialName: 'Rubber Bushings & Canopy Rings',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 1,
+          unit: 'pcs',
+          unitRate: 8,
+          totalQuantityOrWeight: 1000,
+          totalCost: 8000
+        },
+        {
+          id: 'mat_204',
+          materialName: 'Epoxy Matte Black Powder',
+          sourceType: 'factory_supplied',
+          consumptionPerUnit: 0.06,
+          unit: 'kg',
+          unitRate: 1100,
+          totalQuantityOrWeight: 60,
+          totalCost: 66000
+        }
+      ],
+      labourOperations: [
+        {
+          id: 'lab_201',
+          name: 'Heavy Pipe Cutting & Sizing',
+          ratePerUnit: 5.5,
+          workerName: 'Ustad Tariq',
+          totalCost: 5500,
+          isCompleted: true
+        },
+        {
+          id: 'lab_202',
+          name: 'Dual Hole Punching',
+          ratePerUnit: 4.0,
+          workerName: 'M. Asif',
+          totalCost: 4000,
+          isCompleted: true
+        },
+        {
+          id: 'lab_203',
+          name: 'Heavy Swaging & Threading (Lathe)',
+          ratePerUnit: 6.5,
+          workerName: 'Rashid Machining',
+          totalCost: 6500,
+          isCompleted: true
+        },
+        {
+          id: 'lab_204',
+          name: 'Degreasing & Chemical Pre-treatment',
+          ratePerUnit: 2.5,
+          workerName: 'Wash Bay Staff',
+          totalCost: 2500,
+          isCompleted: false
+        },
+        {
+          id: 'lab_205',
+          name: 'Electrostatic Powder Coating (Matte Black)',
+          ratePerUnit: 8.5,
+          workerName: 'Ustad Babar',
+          totalCost: 8500,
+          isCompleted: false
+        },
+        {
+          id: 'lab_206',
+          name: 'Packaging in Protective Corrugated Sleeves',
+          ratePerUnit: 3.0,
+          workerName: 'Bilal Packaging',
+          totalCost: 3000,
+          isCompleted: false
+        }
+      ],
+      overheadPerUnit: 3.0,
+      quotedPricePerUnit: 165,
+      totalMaterialCost: 90000,
+      materialCostPerUnit: 90.0,
+      totalLabourCost: 30000,
+      labourCostPerUnit: 30.0,
+      totalOverheadCost: 3000,
+      overheadCostPerUnit: 3.0,
+      totalProductionCost: 123000,
+      productionCostPerUnit: 123.0,
+      expectedRevenue: 165000,
+      expectedProfitTotal: 42000,
+      expectedProfitPerUnit: 42.0,
+      profitMarginPercent: 25.5,
+      customerSuppliedWeightSavedKg: 1150,
+      notes: 'Customer provided 1,150 kg steel pipe. Falcon provides fittings, black powder & full labour operations.',
+      createdAt: '2026-09-12',
+      updatedAt: '2026-09-12'
+    }
   ],
   cart: [],
   nextTxnId: '0005',

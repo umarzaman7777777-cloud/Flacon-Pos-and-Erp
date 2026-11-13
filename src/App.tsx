@@ -1,11 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowDown,
   RefreshCw,
   Check,
   RotateCcw,
   Trash2,
-  ShoppingCart
+  ShoppingCart,
+  Printer,
+  UploadCloud,
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import {
   AppState,
@@ -24,7 +28,9 @@ import {
   CartLine,
   CustomLedger,
   GatePassData,
-  RecycleBinItem
+  RecycleBinItem,
+  RawStockItem,
+  ProductionProjectCostEstimate
 } from './types';
 import { INITIAL_STATE, INITIAL_PRODUCTS } from './utils/initialData';
 import { todayISO, generateId, fmt } from './utils/helpers';
@@ -67,6 +73,8 @@ import { SettingsView } from './components/SettingsView';
 import { GalleryView } from './components/GalleryView';
 import { BackupView } from './components/BackupView';
 import { NotificationsView } from './components/NotificationsView';
+import { ChequesView } from './components/ChequesView';
+import { extractAllCheques } from './utils/chequeManager';
 import { VoiceModal } from './components/VoiceModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { CustomLedgerDetailModal } from './components/CustomLedgerDetailModal';
@@ -92,6 +100,9 @@ import {
   sendNativeNotification
 } from './utils/mobilePermissions';
 import { initBackgroundSyncEngine } from './utils/backgroundSyncEngine';
+import { saveDocumentToVault, getDocumentFromVault } from './utils/documentVault';
+import { GatePassUploadModal } from './components/GatePassUploadModal';
+import { printThermalReceiptDocument } from './utils/transactionPdf';
 
 const STORAGE_KEY = 'falcon_rod_erp_state_v1';
 
@@ -327,6 +338,9 @@ export const App: React.FC = () => {
           }
           if (!parsed.rawStock || !Array.isArray(parsed.rawStock) || parsed.rawStock.length === 0) {
             parsed.rawStock = INITIAL_STATE.rawStock;
+          }
+          if (!parsed.productionProjects || !Array.isArray(parsed.productionProjects) || parsed.productionProjects.length === 0) {
+            parsed.productionProjects = INITIAL_STATE.productionProjects;
           }
           // Ensure visual settings retain all user-customized preferences (themes, grids, density, etc.)
           parsed.visualSettings = {
@@ -656,6 +670,32 @@ export const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [undoToast]);
 
+  // Cart Clear Undo Protection
+  const [cartUndoToast, setCartUndoToast] = useState<{
+    items: CartLine[];
+    count: number;
+    total: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!cartUndoToast) return;
+    const timer = setTimeout(() => setCartUndoToast(null), 8000);
+    return () => clearTimeout(timer);
+  }, [cartUndoToast]);
+
+  // Order Completion Immediate Action Toast
+  const [orderSuccessToast, setOrderSuccessToast] = useState<{
+    txn: Transaction;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!orderSuccessToast) return;
+    const timer = setTimeout(() => setOrderSuccessToast(null), 12000);
+    return () => clearTimeout(timer);
+  }, [orderSuccessToast]);
+
+  const [globalUploadGatePassTxn, setGlobalUploadGatePassTxn] = useState<Transaction | null>(null);
+
   const handleRestoreBinItem = (item: RecycleBinItem) => {
     setState(prev => {
       const restored = restoreItemFromBin(item, prev);
@@ -724,10 +764,53 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Auto-save to localStorage with version timestamp
+  // Auto-save to localStorage with version timestamp & Document Vault quota protection
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      // Offload heavy gate pass fileData (> 10KB) to IndexedDB Document Vault
+      // This prevents browser 5MB QuotaExceededError and preserves swift performance
+      const sanitizedTransactions = state.transactions.map(t => {
+        if (t.gatePass && t.gatePass.fileData && t.gatePass.fileData.length > 10000) {
+          const vaultId = t.gatePass.docVaultId || `gp_${t.id}_${Date.now()}`;
+          saveDocumentToVault(vaultId, t.gatePass.fileData);
+          return {
+            ...t,
+            gatePass: {
+              ...t.gatePass,
+              docVaultId: vaultId,
+              fileData: '' // Stripped from localStorage copy to save quota
+            }
+          };
+        }
+        return t;
+      });
+
+      const sanitizedSuppliers = state.rawSuppliers.map(s => ({
+        ...s,
+        entries: s.entries.map(e => {
+          if (e.gatePass && e.gatePass.fileData && e.gatePass.fileData.length > 10000) {
+            const vaultId = e.gatePass.docVaultId || `gp_raw_${e.id}_${Date.now()}`;
+            saveDocumentToVault(vaultId, e.gatePass.fileData);
+            return {
+              ...e,
+              gatePass: {
+                ...e.gatePass,
+                docVaultId: vaultId,
+                fileData: ''
+              }
+            };
+          }
+          return e;
+        })
+      }));
+
+      const stateToPersist = {
+        ...state,
+        transactions: sanitizedTransactions,
+        rawSuppliers: sanitizedSuppliers
+      };
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToPersist));
       localStorage.setItem('falcon_erp_state_version', String(Date.now()));
     } catch (e) {
       console.error('Error saving state to localStorage:', e);
@@ -824,11 +907,23 @@ export const App: React.FC = () => {
   };
 
   const handleClearCart = () => {
-    hapticError();
+    if (!state.cart || state.cart.length === 0) return;
+    hapticWarning();
+    const backup = [...state.cart];
+    const total = backup.reduce((s, l) => s + (l.price * l.qty), 0);
+    const count = backup.reduce((s, l) => s + l.qty, 0);
+    setCartUndoToast({ items: backup, count, total });
     setState(prev => ({ ...prev, cart: [] }));
   };
 
-  const handleCheckoutUnpaid = (factoryName: string, orderDate: string) => {
+  const handleRestoreCart = () => {
+    if (!cartUndoToast) return;
+    hapticAddToCart();
+    setState(prev => ({ ...prev, cart: cartUndoToast.items }));
+    setCartUndoToast(null);
+  };
+
+  const handleCheckoutUnpaid = (factoryName: string, orderDate: string, chosenBatchId?: string) => {
     if (!state.cart || state.cart.length === 0) {
       console.warn('[Falcon ERP] handleCheckoutUnpaid aborted: Cart is empty.');
       return;
@@ -890,6 +985,7 @@ export const App: React.FC = () => {
     // 5. Generate Batch ID and Tracking Number generator for every transaction items list
     // Ensures multi-item orders are clearly segmented by batch in transaction metadata
     const batchMeta = generateBatchTrackingMetadata(assignedId, validLines, safeDate);
+    const effectiveBatchId = chosenBatchId && chosenBatchId.trim() ? chosenBatchId.trim() : batchMeta.batchId;
 
     const newTxn: Transaction = {
       id: assignedId,
@@ -907,10 +1003,11 @@ export const App: React.FC = () => {
       sizes: sizesStr,
       confirmed: false,
       device: 'POS-Terminal',
-      batchId: batchMeta.batchId,
+      batchId: effectiveBatchId,
       trackingNumber: batchMeta.trackingNumber,
       itemBatches: batchMeta.itemBatches,
-      itemTrackingNumbers: batchMeta.itemTrackingNumbers
+      itemTrackingNumbers: batchMeta.itemTrackingNumbers,
+      rawDeducted: true
     };
 
     console.info('[Falcon ERP] handleCheckoutUnpaid: New transaction created & validated:', {
@@ -1022,6 +1119,9 @@ export const App: React.FC = () => {
     // 9. Sync newly created transaction to Google Sheets live mirror if connected
     workspaceSync.syncTransactionToSheets(newTxn, updatedState);
 
+    // 10. Trigger high-priority order success toast with instant Print Slip and Gate Pass actions
+    setOrderSuccessToast({ txn: newTxn });
+
     console.info(`[Falcon ERP] State committed with Order #${assignedId}. Total transactions in state: ${updatedState.transactions.length}`);
 
     setActiveView('transactions');
@@ -1070,12 +1170,57 @@ export const App: React.FC = () => {
         return prev;
       }
 
+      let updatedRawStock = prev.rawStock;
+      if (!target.rawDeducted) {
+        let stockCopy = (prev.rawStock || []).map(rs => ({ ...rs }));
+        const rawIds = (target.itemProductIds || '').split(',').map(s => s.trim()).filter(Boolean);
+        const rawCounts = (target.itemCounts || '').split(',').map(s => parseFloat(s.trim()) || 0);
+
+        rawIds.forEach((pid, idx) => {
+          const qty = rawCounts[idx] || 1;
+          const prod = prev.products.find(p => String(p.id) === pid);
+          if (prod?.recipe && prod.recipe.length > 0) {
+            prod.recipe.forEach(r => {
+              if (!r.material) return;
+              const targetMat = r.material.toLowerCase().trim();
+              stockCopy = stockCopy.map(rs => {
+                const rsName = rs.name.toLowerCase().trim();
+                const isMatch =
+                  rsName.includes(targetMat) ||
+                  targetMat.includes(rsName) ||
+                  (targetMat.includes('steel pipe') && rsName.includes('steel pipe')) ||
+                  (targetMat.includes('bolt') && rsName.includes('bolt')) ||
+                  (targetMat.includes('bush') && rsName.includes('bush'));
+
+                if (isMatch) {
+                  const deductKg = (r.weightPerUnit || 0) * qty;
+                  const deductPieces = (r.itemsPerUnit || 0) * qty;
+                  const currentWeight = rs.weight !== undefined ? rs.weight : (rs.initialWeight || 0);
+                  const currentQty = rs.quantity !== undefined ? rs.quantity : (rs.items || rs.initialQuantity || 0);
+
+                  return {
+                    ...rs,
+                    weight: deductKg > 0 ? Math.max(0, currentWeight - deductKg) : currentWeight,
+                    quantity: deductPieces > 0 ? Math.max(0, currentQty - deductPieces) : currentQty,
+                    items: deductPieces > 0 ? Math.max(0, currentQty - deductPieces) : currentQty,
+                    lastUpdated: todayISO()
+                  };
+                }
+                return rs;
+              });
+            });
+          }
+        });
+        updatedRawStock = stockCopy;
+      }
+
       const updatedTransactions = prev.transactions.map(t => {
         if (t.id === id) {
           const isDelivered = !!t.receiptUrl;
           return {
             ...t,
             confirmed: true,
+            rawDeducted: true,
             gatePassVerified: isDelivered ? true : (t.gatePassVerified ?? false)
           };
         }
@@ -1083,20 +1228,22 @@ export const App: React.FC = () => {
       });
 
       const confirmedTxn = updatedTransactions.find(t => t.id === id)!;
-      console.info(`[Falcon ERP] Order #${id} successfully confirmed into sales.`, {
+      console.info(`[Falcon ERP] Order #${id} successfully confirmed into sales with raw stock reconciliation.`, {
         orderId: id,
         customer: confirmedTxn.factory,
         total: confirmedTxn.total,
         receiptUrl: confirmedTxn.receiptUrl ? 'Present' : 'None',
-        gatePassVerified: confirmedTxn.gatePassVerified
+        gatePassVerified: confirmedTxn.gatePassVerified,
+        rawDeducted: confirmedTxn.rawDeducted
       });
 
       // Synchronize confirmed status with Google Sheets live mirror if connected
-      workspaceSync.syncTransactionToSheets(confirmedTxn, { ...prev, transactions: updatedTransactions });
+      workspaceSync.syncTransactionToSheets(confirmedTxn, { ...prev, transactions: updatedTransactions, rawStock: updatedRawStock });
 
       return {
         ...prev,
-        transactions: updatedTransactions
+        transactions: updatedTransactions,
+        rawStock: updatedRawStock
       };
     });
   };
@@ -1602,14 +1749,16 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateSelfWeightStock = (ledgerId: string, deltaKg: number) => {
-    setState(prev => ({
-      ...prev,
-      customLedgersList: (prev.customLedgersList || []).map(cl =>
+    setState(prev => {
+      const updatedList = (prev.customLedgersList || []).map(cl =>
         cl.id === ledgerId
           ? { ...cl, selfWeightStock: Math.max(0, (cl.selfWeightStock || 0) + deltaKg) }
           : cl
-      )
-    }));
+      );
+      const nextState: AppState = { ...prev, customLedgersList: updatedList };
+      pushStateImmediately(nextState);
+      return nextState;
+    });
     if (selectedCustomLedger?.id === ledgerId) {
       setSelectedCustomLedger(prev =>
         prev
@@ -2268,6 +2417,97 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleAddRawStock = (newItem: RawStockItem) => {
+    setState(prev => {
+      const currentList = prev.rawStock || [];
+      const trimmedName = newItem.name.trim();
+      const existingIdx = currentList.findIndex(
+        rs => rs.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      let updatedRawStock: RawStockItem[];
+
+      const incomingWeight = newItem.initialWeight !== undefined ? newItem.initialWeight : (newItem.weight || 0);
+      const incomingItems = newItem.initialQuantity !== undefined ? newItem.initialQuantity : (newItem.items || newItem.quantity || 0);
+
+      if (existingIdx >= 0) {
+        // If material with this name already exists, increase its initial & current stock quantities and update supplier
+        updatedRawStock = currentList.map((rs, idx) =>
+          idx === existingIdx
+            ? {
+                ...rs,
+                initialWeight: (rs.initialWeight || 0) + incomingWeight,
+                weight: (rs.weight !== undefined ? rs.weight : (rs.initialWeight || 0)) + incomingWeight,
+                initialQuantity: (rs.initialQuantity || 0) + incomingItems,
+                quantity: (rs.quantity !== undefined ? rs.quantity : (rs.initialQuantity || 0)) + incomingItems,
+                initialItems: (rs.initialItems || 0) + incomingItems,
+                items: (rs.items !== undefined ? rs.items : (rs.initialItems || 0)) + incomingItems,
+                category: newItem.category || rs.category || 'Raw Material',
+                supplier: newItem.supplier || rs.supplier,
+                supplierAssociation: newItem.supplierAssociation || newItem.supplier || rs.supplierAssociation,
+                lowStockThreshold: newItem.lowStockThreshold || rs.lowStockThreshold,
+                reorderLevel: newItem.reorderLevel || rs.reorderLevel,
+                unit: newItem.unit || rs.unit || (incomingWeight > 0 ? 'kg' : 'pcs'),
+                lastUpdated: new Date().toISOString().split('T')[0]
+              }
+            : rs
+        );
+      } else {
+        const preparedItem: RawStockItem = {
+          ...newItem,
+          id: newItem.id || `rs_${Date.now()}`,
+          name: trimmedName,
+          category: newItem.category || 'Raw Material',
+          initialWeight: incomingWeight,
+          weight: incomingWeight,
+          initialQuantity: incomingItems,
+          quantity: incomingItems,
+          initialItems: incomingItems,
+          items: incomingItems,
+          unit: newItem.unit || (incomingWeight > 0 ? 'kg' : 'pcs'),
+          supplier: newItem.supplier || undefined,
+          supplierAssociation: newItem.supplierAssociation || newItem.supplier || undefined,
+          lowStockThreshold: newItem.lowStockThreshold,
+          reorderLevel: newItem.reorderLevel,
+          lastUpdated: newItem.lastUpdated || new Date().toISOString().split('T')[0]
+        };
+        updatedRawStock = [...currentList, preparedItem];
+      }
+
+      const newState: AppState = {
+        ...prev,
+        rawStock: updatedRawStock
+      };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
+  // ----------------------------------------------------
+  // PRODUCTION PROJECT COSTING ACTIONS
+  // ----------------------------------------------------
+  const handleSaveProductionProject = (project: ProductionProjectCostEstimate) => {
+    setState(prev => {
+      const list = prev.productionProjects || [];
+      const exists = list.some(p => p.id === project.id);
+      const updated = exists
+        ? list.map(p => (p.id === project.id ? { ...project, updatedAt: todayISO() } : p))
+        : [{ ...project, createdAt: todayISO(), updatedAt: todayISO() }, ...list];
+      const newState: AppState = { ...prev, productionProjects: updated };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
+  const handleDeleteProductionProject = (id: string) => {
+    setState(prev => {
+      const list = prev.productionProjects || [];
+      const updated = list.filter(p => p.id !== id);
+      const newState: AppState = { ...prev, productionProjects: updated };
+      pushStateImmediately(newState);
+      return newState;
+    });
+  };
+
   // ----------------------------------------------------
   // PRODUCT RETURNS ACTIONS
   // ----------------------------------------------------
@@ -2502,6 +2742,12 @@ export const App: React.FC = () => {
     }, 60);
   };
 
+  const activeInquiryCount = (state.inquiries || []).filter(i => !i.resolved).length;
+  const chequeAlertCount = useMemo(() => {
+    const list = extractAllCheques(state);
+    return list.filter(c => c.status === 'overdue' || c.status === 'bounced').length;
+  }, [state]);
+
   // ----------------------------------------------------
   // LOCK SCREEN CHECK
   // ----------------------------------------------------
@@ -2537,8 +2783,6 @@ export const App: React.FC = () => {
       </>
     );
   }
-
-  const activeInquiryCount = (state.inquiries || []).filter(i => !i.resolved).length;
 
   return (
     <div
@@ -2625,6 +2869,7 @@ export const App: React.FC = () => {
           companyName={state.companyName}
           companyTagline={state.companyTagline}
           notificationCount={activeInquiryCount}
+          chequeAlertCount={chequeAlertCount}
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
           onOpenGateReceipts={() => setIsUnifiedGateReceiptsOpen(true)}
@@ -2711,6 +2956,7 @@ export const App: React.FC = () => {
                 setSelectedLedgerFactory(factoryName);
                 setActiveView('factories');
               }}
+              onUpdateState={setState}
             />
           )}
 
@@ -2735,6 +2981,8 @@ export const App: React.FC = () => {
                 cart={state.cart}
                 factories={state.factories}
                 products={state.products}
+                rawStock={state.rawStock}
+                transactions={state.transactions}
                 customerLedgers={state.customerLedgers}
                 nextTxnId={state.nextTxnId}
                 language={state.language}
@@ -2774,6 +3022,8 @@ export const App: React.FC = () => {
               transactions={state.transactions}
               rawSuppliers={state.rawSuppliers}
               customerPayments={state.customerPayments}
+              rawStock={state.rawStock}
+              products={state.products}
               language={state.language}
               companyName={state.companyName}
               onConfirmOrder={handleConfirmOrder}
@@ -2820,6 +3070,11 @@ export const App: React.FC = () => {
           {(activeView === 'raw_material' || activeView === 'rawmaterial') && (
             <RawMaterialView
               suppliers={state.rawSuppliers}
+              rawStock={state.rawStock}
+              productionProjects={state.productionProjects || []}
+              factories={state.factories}
+              customLedgers={state.customLedgersList}
+              workers={state.workers || state.labourWorkers || []}
               transactions={state.transactions}
               language={state.language}
               companyName={state.companyName}
@@ -2830,6 +3085,9 @@ export const App: React.FC = () => {
               onDeleteRawEntry={handleDeleteRawEntry}
               onUpdateRawEntry={handleUpdateRawEntry}
               onAttachGatePass={handleAttachRawGatePass}
+              onAddRawStock={handleAddRawStock}
+              onSaveProject={handleSaveProductionProject}
+              onDeleteProject={handleDeleteProductionProject}
               onNavigate={setActiveView}
             />
           )}
@@ -2852,6 +3110,8 @@ export const App: React.FC = () => {
           {activeView === 'scrapledger' && (
             <ScrapLedgerView
               buyers={state.scrapBuyers}
+              rawStock={state.rawStock}
+              transactions={state.transactions}
               language={state.language}
               companyName={state.companyName}
               onSaveBuyer={handleSaveScrapBuyer}
@@ -3034,11 +3294,22 @@ export const App: React.FC = () => {
               transactions={state.transactions}
               language={state.language}
               companyName={state.companyName}
+              state={state}
+              onUpdateState={setState}
               onAddInquiry={handleAddInquiry}
               onResolveInquiry={handleResolveInquiry}
               onDeleteInquiry={handleDeleteInquiry}
               onAttachGatePass={handleAttachGatePass}
               onNavigate={setActiveView}
+            />
+          )}
+
+          {activeView === 'cheques' && (
+            <ChequesView
+              state={state}
+              onUpdateState={setState}
+              language={state.language}
+              onNavigateToView={setActiveView}
             />
           )}
         </main>
@@ -3230,6 +3501,129 @@ export const App: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Cart Clear Undo Floating Toast */}
+      {cartUndoToast && (
+        <div
+          className="fixed bottom-5 right-5 z-[99] max-w-sm w-[90vw] sm:w-auto bg-slate-950/95 text-white border border-amber-500/40 rounded-2xl p-3.5 shadow-2xl backdrop-blur-md flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-3 duration-200 font-mono"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <ShoppingCart size={16} />
+            </div>
+            <div className="truncate">
+              <p className="text-xs font-semibold text-white truncate">
+                Cleared Invoice ({cartUndoToast.count} items)
+              </p>
+              <p className="text-[10px] text-amber-400 font-bold">
+                {fmt(cartUndoToast.total)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleRestoreCart}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black flex items-center gap-1 transition-all active:scale-95 shadow-sm cursor-pointer"
+            >
+              <RotateCcw size={12} />
+              <span>Restore</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCartUndoToast(null)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Instant Order Placed Confirmation & Action Bar */}
+      {orderSuccessToast && (
+        <div
+          className="fixed bottom-5 right-5 z-[99] max-w-md w-[92vw] sm:w-auto bg-[var(--panel)] text-[var(--text)] border border-emerald-500/50 rounded-2xl p-4 shadow-2xl backdrop-blur-md space-y-2.5 animate-in fade-in slide-in-from-bottom-3 duration-200 font-mono"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-emerald-400 uppercase">Order Booked</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold">
+                    #{orderSuccessToast.txn.id}
+                  </span>
+                  {orderSuccessToast.txn.batchId && (
+                    <span className="text-[10px] text-zinc-400">
+                      Lot: {orderSuccessToast.txn.batchId}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-semibold text-[var(--text)] truncate mt-0.5">
+                  {orderSuccessToast.txn.factory} · {fmt(orderSuccessToast.txn.total)}
+                </p>
+                <p className="text-[10px] text-[var(--text-dim)] truncate">
+                  {orderSuccessToast.txn.itemsSummary}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOrderSuccessToast(null)}
+              className="text-[var(--text-dim)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1 border-t border-[var(--steel-line)]/50">
+            <button
+              type="button"
+              onClick={() => {
+                printThermalReceiptDocument({
+                  transaction: orderSuccessToast.txn,
+                  customerPayments: state.customerPayments,
+                  companyName: state.companyName
+                });
+              }}
+              className="flex-1 py-1.5 px-2.5 rounded-lg bg-[var(--yellow)] hover:bg-amber-400 text-black font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+            >
+              <Printer size={13} />
+              <span>Print Slip</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setGlobalUploadGatePassTxn(orderSuccessToast.txn);
+                setOrderSuccessToast(null);
+              }}
+              className="flex-1 py-1.5 px-2.5 rounded-lg bg-[var(--panel-raised)] hover:bg-amber-500/20 border border-[var(--steel-line)] hover:border-amber-500/50 text-xs font-bold text-[var(--text)] flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              <UploadCloud size={13} className="text-amber-400" />
+              <span>Attach Gate Pass</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Global Gate Pass Upload Modal */}
+      {globalUploadGatePassTxn && (
+        <GatePassUploadModal
+          transaction={globalUploadGatePassTxn}
+          language={state.language}
+          companyName={state.companyName}
+          onClose={() => setGlobalUploadGatePassTxn(null)}
+          onConfirmUpload={(id, gatePass) => {
+            handleAttachGatePass(id, gatePass);
+            setGlobalUploadGatePassTxn(null);
+          }}
+        />
       )}
       {/* Global Export Download Toast Notification */}
       <ExportDownloadToast />

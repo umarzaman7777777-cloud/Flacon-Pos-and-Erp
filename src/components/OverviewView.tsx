@@ -35,12 +35,14 @@ import {
 import { AppState, AppLanguage } from '../types';
 import { fmt, parseDMY } from '../utils/helpers';
 import { computeSystemFinancials, computeCustomerLedgerDetails } from '../utils/mathEngine';
+import { ChequeManagementWidget } from './ChequeManagementWidget';
 
 interface OverviewViewProps {
   state: AppState;
   language: AppLanguage;
   onNavigate: (view: any) => void;
   onOpenCustomerLedger: (factoryName: string) => void;
+  onUpdateState?: (newState: AppState) => void;
 }
 
 export type DateRangePreset = 
@@ -54,8 +56,10 @@ export type DateRangePreset =
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
   state,
+  language,
   onNavigate,
-  onOpenCustomerLedger
+  onOpenCustomerLedger,
+  onUpdateState
 }) => {
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [salesPeriod, setSalesPeriod] = useState('monthly');
@@ -2103,6 +2107,17 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* SECTION: CHEQUE MANAGEMENT & DISHONOUR RECONCILIATION WATCH WIDGET */}
+      {/* ========================================================================= */}
+      <ChequeManagementWidget
+        state={state}
+        language={language}
+        onNavigate={onNavigate}
+        onOpenCustomerLedger={onOpenCustomerLedger}
+        onUpdateState={onUpdateState}
+      />
 
       {/* ========================================================================= */}
       {/* SECTION: TWO-COLUMN LOWER GRID: LEADERBOARD & RECENT ACTIVITY */}

@@ -45,13 +45,14 @@ export const GmailCloudVaultModal: React.FC<GmailCloudVaultModalProps> = ({
   onRestoreFromCloud,
   onRestoreFromVault,
 }) => {
-  if (isOpen === false) return null;
   const isUrdu = language === 'ur';
   const defaultEmail = currentEmail || ALLOWED_SHEETS_OWNER_EMAIL || 'umarzaman7777777@gmail.com';
   const [emailInput, setEmailInput] = useState(defaultEmail);
   const [isRestoring, setIsRestoring] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
+
+  if (isOpen === false) return null;
 
   const txnCount = appState?.transactions?.length || 0;
   const custCount = appState?.customerLedgers?.length || 0;

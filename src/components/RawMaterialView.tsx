@@ -18,9 +18,29 @@ import {
   Calculator,
   BarChart3,
   Search,
-  ArrowLeftRight
+  ArrowLeftRight,
+  PackagePlus,
+  CheckCircle2,
+  X,
+  Building,
+  AlertTriangle,
+  Briefcase,
+  CreditCard
 } from 'lucide-react';
-import { RawSupplier, RawEntry, AppLanguage, Transaction, GatePassData, LedgerColumnConfig, ExportDocumentConfig } from '../types';
+import {
+  RawSupplier,
+  RawEntry,
+  AppLanguage,
+  Transaction,
+  GatePassData,
+  LedgerColumnConfig,
+  ExportDocumentConfig,
+  RawStockItem,
+  ProductionProjectCostEstimate,
+  Factory,
+  CustomLedger,
+  Worker
+} from '../types';
 import { TRANSLATIONS } from '../utils/i18n';
 import { fmt, todayISO, downloadCSV, exportTablePDF } from '../utils/helpers';
 import { exportTableJPG } from '../utils/exportManager';
@@ -37,9 +57,15 @@ import { GatePassUploadModal } from './GatePassUploadModal';
 import { GatePassViewerModal } from './GatePassViewerModal';
 import { UnifiedGateReceiptsModal } from './UnifiedGateReceiptsModal';
 import { RawMaterialConverterModal } from './RawMaterialConverterModal';
+import { ProjectCostingSection } from './ProjectCostingSection';
 
 interface RawMaterialViewProps {
   suppliers: RawSupplier[];
+  rawStock?: RawStockItem[];
+  productionProjects?: ProductionProjectCostEstimate[];
+  factories?: Factory[];
+  customLedgers?: CustomLedger[];
+  workers?: Worker[];
   transactions?: Transaction[];
   language: AppLanguage;
   companyName: string;
@@ -50,11 +76,19 @@ interface RawMaterialViewProps {
   onDeleteRawEntry: (supplierName: string, entryId: string) => void;
   onUpdateRawEntry?: (supplierName: string, entryId: string, updatedData: any) => void;
   onAttachGatePass?: (supplierName: string, entryId: string, gatePass: GatePassData) => void;
+  onAddRawStock?: (item: RawStockItem) => void;
+  onSaveProject?: (project: ProductionProjectCostEstimate) => void;
+  onDeleteProject?: (id: string) => void;
   onNavigate?: (view: any) => void;
 }
 
 export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
   suppliers,
+  rawStock = [],
+  productionProjects = [],
+  factories = [],
+  customLedgers = [],
+  workers = [],
   transactions = [],
   language,
   companyName,
@@ -65,8 +99,12 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
   onDeleteRawEntry,
   onUpdateRawEntry,
   onAttachGatePass,
+  onAddRawStock,
+  onSaveProject,
+  onDeleteProject,
   onNavigate
 }) => {
+  const [activeSectionTab, setActiveSectionTab] = useState<'suppliers' | 'project_costing'>('suppliers');
   const [selectedSupplierIdx, setSelectedSupplierIdx] = useState<number | null>(null);
   const [addSupplierModal, setAddSupplierModal] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
@@ -112,6 +150,111 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
   const [entryBankName, setEntryBankName] = useState('');
   const [entryAccountNumber, setEntryAccountNumber] = useState('');
   const [entryChequeNo, setEntryChequeNo] = useState('');
+
+  // Add Raw Material Inventory Modal State
+  const [isAddMaterialModalOpen, setIsAddMaterialModalOpen] = useState(false);
+  const [newMatName, setNewMatName] = useState('');
+  const [newMatCategory, setNewMatCategory] = useState('Pipes & Steel');
+  const [newMatInitialWeight, setNewMatInitialWeight] = useState('');
+  const [newMatWeightUnit, setNewMatWeightUnit] = useState<'kg' | 'grams' | 'tons'>('kg');
+  const [newMatInitialQty, setNewMatInitialQty] = useState('');
+  const [newMatQtyUnit, setNewMatQtyUnit] = useState('Pcs');
+  const [newMatSupplierAssoc, setNewMatSupplierAssoc] = useState('');
+  const [newMatCustomSupplier, setNewMatCustomSupplier] = useState('');
+  const [newMatLowThreshold, setNewMatLowThreshold] = useState('');
+  const [newMatUnitPrice, setNewMatUnitPrice] = useState('');
+  const [createSupplierIfNew, setCreateSupplierIfNew] = useState(true);
+  const [materialSuccessMessage, setMaterialSuccessMessage] = useState<string | null>(null);
+
+  const handleOpenAddMaterialModal = (defaultSupplierName?: string) => {
+    if (defaultSupplierName) {
+      setNewMatSupplierAssoc(defaultSupplierName);
+    } else if (suppliers.length > 0) {
+      setNewMatSupplierAssoc(suppliers[0].name);
+    } else {
+      setNewMatSupplierAssoc('__none__');
+    }
+    setNewMatCustomSupplier('');
+    setIsAddMaterialModalOpen(true);
+  };
+
+  const handleSaveNewRawMaterial = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedName = newMatName.trim();
+    if (!trimmedName) return;
+
+    // Weight conversion to kg
+    const rawWeightVal = parseFloat(newMatInitialWeight) || 0;
+    let weightInKg = rawWeightVal;
+    if (newMatWeightUnit === 'grams') {
+      weightInKg = Number((rawWeightVal / 1000).toFixed(3));
+    } else if (newMatWeightUnit === 'tons') {
+      weightInKg = Number((rawWeightVal * 1000).toFixed(2));
+    }
+
+    const qtyVal = parseInt(newMatInitialQty, 10) || 0;
+    const thresholdVal = parseFloat(newMatLowThreshold) || 0;
+
+    // Determine final supplier association name
+    let finalSupplier = newMatSupplierAssoc;
+    if (newMatSupplierAssoc === '__new__') {
+      finalSupplier = newMatCustomSupplier.trim();
+    } else if (newMatSupplierAssoc === '__none__') {
+      finalSupplier = 'In-House / Direct Purchase';
+    }
+
+    // If new supplier entered and is not registered, create them if toggle is on
+    if (finalSupplier && finalSupplier !== 'In-House / Direct Purchase') {
+      const exists = suppliers.some(s => s.name.toLowerCase() === finalSupplier.toLowerCase());
+      if (!exists && createSupplierIfNew) {
+        onSaveSupplier({ name: finalSupplier, entries: [] });
+      }
+    }
+
+    const newStockItem: RawStockItem = {
+      id: `rs_${Date.now()}`,
+      name: trimmedName,
+      category: newMatCategory || 'Raw Material',
+      initialWeight: weightInKg,
+      weight: weightInKg,
+      initialQuantity: qtyVal,
+      quantity: qtyVal,
+      initialItems: qtyVal,
+      items: qtyVal,
+      unit: weightInKg > 0 && qtyVal === 0 ? 'kg' : (newMatQtyUnit || 'pcs'),
+      lowStockThreshold: thresholdVal > 0 ? thresholdVal : undefined,
+      reorderLevel: thresholdVal > 0 ? thresholdVal : undefined,
+      supplier: finalSupplier || undefined,
+      supplierAssociation: finalSupplier || undefined,
+      lastUpdated: todayISO()
+    };
+
+    if (onAddRawStock) {
+      onAddRawStock(newStockItem);
+    }
+
+    // Feedback
+    const summary = weightInKg > 0 && qtyVal > 0
+      ? `${weightInKg} kg & ${qtyVal} ${newMatQtyUnit}`
+      : weightInKg > 0
+      ? `${weightInKg} kg`
+      : `${qtyVal} ${newMatQtyUnit}`;
+
+    setMaterialSuccessMessage(`"${trimmedName}" (${summary}) saved to Raw Inventory with supplier: ${finalSupplier || 'Unassigned'}`);
+    setTimeout(() => {
+      setMaterialSuccessMessage(null);
+    }, 5000);
+
+    // Reset & close
+    setIsAddMaterialModalOpen(false);
+    setNewMatName('');
+    setNewMatInitialWeight('');
+    setNewMatInitialQty('');
+    setNewMatSupplierAssoc('');
+    setNewMatCustomSupplier('');
+    setNewMatLowThreshold('');
+    setNewMatUnitPrice('');
+  };
 
   const handleUpdateColConfig = (newCfg: LedgerColumnConfig) => {
     setColConfig(newCfg);
@@ -363,118 +506,300 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-full overflow-x-hidden break-words">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3">
-        <div>
-          <h2 className="font-serif font-black text-xl text-[var(--text)]">{t('rawledger_title')}</h2>
-          <p className="text-xs text-[var(--text-dim)]">{t('rawledger_sub')}</p>
-        </div>
+      {/* View Section Tabs: Suppliers & Raw Ledgers vs Project Cost Estimator */}
+      <div className="flex items-center gap-2 border-b border-[var(--steel-line)] pb-3 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setActiveSectionTab('suppliers')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold uppercase transition cursor-pointer border ${
+            activeSectionTab === 'suppliers'
+              ? 'bg-[var(--yellow)] text-black border-[var(--yellow)] shadow-sm'
+              : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-white border-[var(--steel-line)]'
+          }`}
+        >
+          <Layers size={14} />
+          <span>Suppliers & Raw Ledgers</span>
+          <span
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+              activeSectionTab === 'suppliers' ? 'bg-black/20 text-black' : 'bg-zinc-800 text-zinc-300'
+            }`}
+          >
+            {suppliers.length}
+          </span>
+        </button>
 
-        <div className="flex items-center gap-2">
-          {onNavigate && (
-            <button
-              type="button"
-              id="raw-view-forecast-btn"
-              onClick={() => onNavigate('inventory_forecast')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/20 transition cursor-pointer"
-              title="Open Raw Material Inventory Forecast & Predictive Reorder Point Engine"
-            >
-              <TrendingUp size={14} className="text-amber-400" />
-              <span>Forecast & ROP</span>
-            </button>
+        <button
+          type="button"
+          id="raw-view-project-costing-tab-btn"
+          onClick={() => setActiveSectionTab('project_costing')}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold uppercase transition cursor-pointer border ${
+            activeSectionTab === 'project_costing'
+              ? 'bg-amber-500 text-black border-amber-400 shadow-sm'
+              : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-white border-[var(--steel-line)]'
+          }`}
+        >
+          <Calculator size={14} />
+          <span>Customer & Factory Project Costing</span>
+          <span
+            className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+              activeSectionTab === 'project_costing'
+                ? 'bg-black/20 text-black'
+                : 'bg-amber-500/20 text-amber-300'
+            }`}
+          >
+            {productionProjects.length} Projects
+          </span>
+        </button>
+      </div>
+
+      {activeSectionTab === 'project_costing' ? (
+        <ProjectCostingSection
+          projects={productionProjects}
+          rawStock={rawStock}
+          factories={factories}
+          customLedgers={customLedgers}
+          workers={workers}
+          companyName={companyName}
+          language={language}
+          onSaveProject={onSaveProject || (() => {})}
+          onDeleteProject={onDeleteProject || (() => {})}
+        />
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-3">
+            <div>
+              <h2 className="font-serif font-black text-xl text-[var(--text)]">{t('rawledger_title')}</h2>
+              <p className="text-xs text-[var(--text-dim)]">{t('rawledger_sub')}</p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {onNavigate && (
+                <button
+                  type="button"
+                  id="raw-view-forecast-btn"
+                  onClick={() => onNavigate('inventory_forecast')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/20 transition cursor-pointer"
+                  title="Open Raw Material Inventory Forecast & Predictive Reorder Point Engine"
+                >
+                  <TrendingUp size={14} className="text-amber-400" />
+                  <span>Forecast & ROP</span>
+                </button>
+              )}
+
+              {onNavigate && (
+                <button
+                  type="button"
+                  id="raw-view-cheques-btn"
+                  onClick={() => onNavigate('cheques')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer"
+                  title="Open Cheques Management & Cross-Check Endorsed Cheques with Raw Material Suppliers"
+                >
+                  <CreditCard size={14} className="text-amber-400" />
+                  <span>Cheques & Endorsements</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                id="raw-view-gate-registry-btn"
+                onClick={() => setIsGateRegistryOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer"
+              >
+                <ShieldCheck size={14} className="text-amber-400" />
+                <span>Gate Registry (#SEQ)</span>
+              </button>
+
+              <button
+                type="button"
+                id="raw-view-unit-converter-btn"
+                onClick={() => setIsConverterOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 font-bold text-xs uppercase shadow hover:bg-sky-500/25 transition cursor-pointer"
+                title="Open Unit Converter (Tons, Maund, kg, Grams, Packaging Items)"
+              >
+                <ArrowLeftRight size={14} className="text-sky-400" />
+                <span>Converter</span>
+              </button>
+
+              <button
+                type="button"
+                id="raw-view-add-material-btn"
+                onClick={() => handleOpenAddMaterialModal()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+                title="Add a new raw material item to warehouse inventory stock"
+              >
+                <PackagePlus size={14} strokeWidth={2.5} />
+                <span>Add Raw Material</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAddSupplierModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold text-xs uppercase shadow transition active:scale-95"
+              >
+                <Plus size={14} />
+                <span>{t('add_supplier')}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Success Notification Banner */}
+          {materialSuccessMessage && (
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/50 text-emerald-300 text-xs flex items-center justify-between gap-3 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                <span>{materialSuccessMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMaterialSuccessMessage(null)}
+                className="text-emerald-400 hover:text-emerald-200 text-xs px-2 py-0.5 rounded border border-emerald-500/30"
+              >
+                Dismiss
+              </button>
+            </div>
           )}
 
-          <button
-            type="button"
-            id="raw-view-gate-registry-btn"
-            onClick={() => setIsGateRegistryOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer"
-          >
-            <ShieldCheck size={14} className="text-amber-400" />
-            <span>Gate Registry (#SEQ)</span>
-          </button>
-
-          <button
-            type="button"
-            id="raw-view-unit-converter-btn"
-            onClick={() => setIsConverterOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 font-bold text-xs uppercase shadow hover:bg-sky-500/25 transition cursor-pointer"
-            title="Open Unit Converter (Tons, Maund, kg, Grams, Packaging Items)"
-          >
-            <ArrowLeftRight size={14} className="text-sky-400" />
-            <span>Converter</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setAddSupplierModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold text-xs uppercase shadow transition active:scale-95"
-          >
-            <Plus size={14} />
-            <span>{t('add_supplier')}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Suppliers Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {suppliers.map((s, idx) => {
-          const totalPaid = s.entries.reduce((sum, e) => sum + (e.debit || 0), 0);
-          const totalReceived = s.entries.reduce((sum, e) => sum + (e.credit || 0), 0);
-          const bal = totalReceived - totalPaid;
-
-          return (
-            <div
-              key={s.name}
-              className="bg-[var(--panel)] border border-[var(--steel-line)] hover:border-[var(--yellow)] rounded-xl p-4 flex flex-col justify-between gap-3 shadow-sm transition group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="w-8 h-8 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] flex items-center justify-center text-[var(--yellow)]">
-                  <Layers size={16} />
+          {/* Live Raw Stock Inventory Strip */}
+          <div className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl p-3 sm:p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  <Boxes size={16} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm((t('confirm_delete_supplier') || 'Delete supplier {name}?').replace('{name}', s.name))) {
-                      onDeleteSupplier(s.name);
-                    }
-                  }}
-                  className="p-1.5 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:text-red-400 opacity-80 group-hover:opacity-100 transition"
-                  title="Delete"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-sm text-[var(--text)]">{s.name}</h4>
-                <div className="text-[11px] text-[var(--text-dim)] font-mono mt-0.5">
-                  {s.entries.length} delivery/payment entries
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text)] flex items-center gap-2">
+                    <span>Warehouse Raw Inventory</span>
+                    <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
+                      {rawStock.length} Items Active
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-[var(--text-dim)]">
+                    Live steel, pipes, hardware & chemicals in inventory ({rawStock.reduce((acc, r) => acc + (r.weight !== undefined ? r.weight : (r.initialWeight || 0)), 0).toFixed(1)} kg steel · {rawStock.reduce((acc, r) => acc + (r.quantity !== undefined ? r.quantity : (r.items !== undefined ? r.items : (r.initialQuantity || 0))), 0).toLocaleString()} units)
+                  </p>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-[var(--steel-line)] flex items-center justify-between font-mono">
-                <div className="text-xs">
-                  <span className={`font-bold ${bal > 0 ? 'text-[var(--red)]' : 'text-[var(--green)]'}`}>
-                    {fmt(Math.abs(bal))}
-                  </span>{' '}
-                  <span className="text-[10px] text-[var(--text-dim)]">
-                    ({bal > 0 ? t('owed') : t('advance')})
-                  </span>
-                </div>
-
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedSupplierIdx(idx)}
-                  className="px-2.5 py-1 rounded bg-[var(--panel-raised)] hover:bg-[var(--yellow)] hover:text-black border border-[var(--steel-line)] text-xs font-semibold transition"
+                  onClick={() => handleOpenAddMaterialModal()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase transition cursor-pointer"
                 >
-                  Ledger
+                  <PackagePlus size={13} />
+                  <span>+ New Material</span>
                 </button>
+                {onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('stock')}
+                    className="text-xs text-[var(--yellow)] hover:underline flex items-center gap-1 font-mono"
+                  >
+                    <span>Full Stock View &rarr;</span>
+                  </button>
+                )}
               </div>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Quick Material Cards / Badges */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 pt-1">
+              {rawStock.slice(0, 8).map(item => {
+                const currentW = item.weight !== undefined ? item.weight : (item.initialWeight || 0);
+                const currentQ = item.quantity !== undefined ? item.quantity : (item.items !== undefined ? item.items : (item.initialQuantity || 0));
+                const supplierLabel = item.supplier || item.supplierAssociation || 'General Direct';
+
+                return (
+                  <div
+                    key={item.name}
+                    className="p-2.5 rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] hover:border-emerald-500/40 transition flex flex-col justify-between gap-1.5"
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <span className="font-semibold text-xs text-[var(--text)] line-clamp-1" title={item.name}>
+                        {item.name}
+                      </span>
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-800 text-zinc-300 uppercase shrink-0 font-mono">
+                        {item.category || 'Raw'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline justify-between font-mono text-xs">
+                      <span className="font-bold text-[var(--yellow)]">
+                        {currentW > 0 ? `${currentW.toFixed(1)} kg` : ''}
+                        {currentW > 0 && currentQ > 0 ? ' · ' : ''}
+                        {currentQ > 0 ? `${currentQ.toLocaleString()} ${item.unit || 'pcs'}` : ''}
+                        {currentW === 0 && currentQ === 0 ? '0' : ''}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-dim)] truncate max-w-[110px]" title={`Supplier: ${supplierLabel}`}>
+                        {supplierLabel}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Suppliers Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {suppliers.map((s, idx) => {
+              const totalPaid = s.entries.reduce((sum, e) => sum + (e.debit || 0), 0);
+              const totalReceived = s.entries.reduce((sum, e) => sum + (e.credit || 0), 0);
+              const bal = totalReceived - totalPaid;
+
+              return (
+                <div
+                  key={s.name}
+                  className="bg-[var(--panel)] border border-[var(--steel-line)] hover:border-[var(--yellow)] rounded-xl p-4 flex flex-col justify-between gap-3 shadow-sm transition group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="w-8 h-8 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] flex items-center justify-center text-[var(--yellow)]">
+                      <Layers size={16} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm((t('confirm_delete_supplier') || 'Delete supplier {name}?').replace('{name}', s.name))) {
+                          onDeleteSupplier(s.name);
+                        }
+                      }}
+                      className="p-1.5 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] hover:text-red-400 opacity-80 group-hover:opacity-100 transition"
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-sm text-[var(--text)]">{s.name}</h4>
+                    <div className="text-[11px] text-[var(--text-dim)] font-mono mt-0.5">
+                      {s.entries.length} delivery/payment entries
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-[var(--steel-line)] flex items-center justify-between font-mono">
+                    <div className="text-xs">
+                      <span className={`font-bold ${bal > 0 ? 'text-[var(--red)]' : 'text-[var(--green)]'}`}>
+                        {fmt(Math.abs(bal))}
+                      </span>{' '}
+                      <span className="text-[10px] text-[var(--text-dim)]">
+                        ({bal > 0 ? t('owed') : t('advance')})
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSupplierIdx(idx)}
+                      className="px-2.5 py-1 rounded bg-[var(--panel-raised)] hover:bg-[var(--yellow)] hover:text-black border border-[var(--steel-line)] text-xs font-semibold transition"
+                    >
+                      Ledger
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Add Supplier Modal */}
       {addSupplierModal && (
@@ -623,6 +948,15 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAddMaterialModal(currentSupplier.name)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold uppercase transition shadow cursor-pointer"
+                    title={`Add new raw material supplied by ${currentSupplier.name}`}
+                  >
+                    <PackagePlus size={13} strokeWidth={2.5} />
+                    <span>+ Add Material</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setIsStudioOpen(true)}
@@ -1802,6 +2136,316 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
             setIsConverterOpen(false);
           }}
         />
+      )}
+
+      {/* NEW MODAL: Add Raw Material Inventory Window */}
+      {isAddMaterialModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 font-mono animate-in fade-in duration-150"
+        >
+          <div className="w-full max-w-xl bg-[var(--panel)] border border-emerald-500/50 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-[var(--steel-line)] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                  <PackagePlus size={20} />
+                </div>
+                <div>
+                  <h3 className="font-serif font-black text-base sm:text-lg text-[var(--text)]">
+                    Add Raw Material Inventory
+                  </h3>
+                  <p className="text-xs text-emerald-400/90 font-sans">
+                    Register new raw material into warehouse stock (<span className="font-mono font-bold text-white">state.rawStock</span>) & link supplier
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddMaterialModalOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white transition hover:bg-[var(--panel-raised)]"
+                title="Close modal"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Quick Presets for Gujrat Ceiling Fan Down Rod Fabrication */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold flex items-center gap-1">
+                  <span>Quick Presets (Ceiling Fan Rod Industry)</span>
+                </label>
+                <span className="text-[10px] text-zinc-500">Click to autofill</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { name: 'M.S. Steel Pipe (16 Gauge - 3/4" Dia)', cat: 'Pipes & Steel', w: '500', unit: 'kg' },
+                  { name: 'M.S. Heavy Pipe (14 Gauge - 1" Dia)', cat: 'Pipes & Steel', w: '350', unit: 'kg' },
+                  { name: 'M.S. Steel Pipe (18 Gauge - 3/4" Dia)', cat: 'Pipes & Steel', w: '300', unit: 'kg' },
+                  { name: 'Safety Bolt & Cotter Pin Sets', cat: 'Fittings & Hardware', q: '1000', unit: 'Pcs' },
+                  { name: 'Rubber Bushings & Canopy Collars', cat: 'Fittings & Hardware', q: '1200', unit: 'Pcs' },
+                  { name: 'Powder Pure Polyester (White)', cat: 'Coating & Paint', w: '50', unit: 'kg' },
+                  { name: 'Powder Epoxy (Matte Black)', cat: 'Coating & Paint', w: '50', unit: 'kg' },
+                  { name: 'Corrugated Down Rod Packing Sleeves', cat: 'Packaging Material', q: '800', unit: 'Pcs' },
+                  { name: 'Taar 18 Gauge / Safety Wire', cat: 'Electrical / Wire', w: '80', unit: 'kg' }
+                ].map(preset => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => {
+                      setNewMatName(preset.name);
+                      setNewMatCategory(preset.cat);
+                      if (preset.w) {
+                        setNewMatInitialWeight(preset.w);
+                        setNewMatWeightUnit('kg');
+                      }
+                      if (preset.q) {
+                        setNewMatInitialQty(preset.q);
+                        setNewMatQtyUnit(preset.unit || 'Pcs');
+                      }
+                    }}
+                    className="px-2 py-1 rounded bg-[var(--panel-raised)] hover:bg-emerald-500/20 border border-[var(--steel-line)] hover:border-emerald-500/40 text-[10px] text-zinc-300 hover:text-emerald-300 transition text-left"
+                  >
+                    + {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Input Form */}
+            <form onSubmit={handleSaveNewRawMaterial} className="space-y-3.5 text-xs">
+              {/* Material Name */}
+              <div>
+                <label className="text-[10px] uppercase text-zinc-400 font-bold block mb-1">
+                  Raw Material Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newMatName}
+                  onChange={e => setNewMatName(e.target.value)}
+                  placeholder="e.g. M.S. Steel Pipe (16 Gauge - 3/4&quot; Dia) or Pure White Powder"
+                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] outline-none"
+                />
+              </div>
+
+              {/* Category & Unit Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase text-zinc-400 font-bold block mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={newMatCategory}
+                    onChange={e => setNewMatCategory(e.target.value)}
+                    className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] outline-none"
+                  >
+                    <option value="Pipes & Steel">Pipes & Steel</option>
+                    <option value="Fittings & Hardware">Fittings & Hardware</option>
+                    <option value="Coating & Paint">Coating & Paint</option>
+                    <option value="Packaging Material">Packaging Material</option>
+                    <option value="Electrical / Wire">Electrical / Wire</option>
+                    <option value="General Raw">General Raw</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase text-zinc-400 font-bold block mb-1">
+                    Primary Count Unit
+                  </label>
+                  <select
+                    value={newMatQtyUnit}
+                    onChange={e => setNewMatQtyUnit(e.target.value)}
+                    className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] outline-none"
+                  >
+                    <option value="Pcs">Pcs (Pieces)</option>
+                    <option value="Bundles">Bundles</option>
+                    <option value="Coils">Coils</option>
+                    <option value="Boxes">Boxes</option>
+                    <option value="Bags">Bags / Sacks</option>
+                    <option value="Sets">Sets</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Quantities (Initial Weight & Initial Quantity) */}
+              <div className="p-3 rounded-xl bg-[var(--panel-raised)]/70 border border-[var(--steel-line)] space-y-2">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">
+                  Initial Stock Inward (Weight & Quantity)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Initial Weight */}
+                  <div>
+                    <label className="text-[10px] uppercase text-zinc-400 block mb-1">
+                      Initial Weight
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={newMatInitialWeight}
+                        onChange={e => setNewMatInitialWeight(e.target.value)}
+                        placeholder="e.g. 500"
+                        className="flex-1 bg-[var(--panel)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] font-mono outline-none"
+                      />
+                      <select
+                        value={newMatWeightUnit}
+                        onChange={e => setNewMatWeightUnit(e.target.value as any)}
+                        className="bg-[var(--panel)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-2.5 py-2 text-xs text-zinc-300 font-mono outline-none shrink-0"
+                      >
+                        <option value="kg">kg</option>
+                        <option value="grams">grams</option>
+                        <option value="tons">Tons</option>
+                      </select>
+                    </div>
+                    <span className="text-[9px] text-zinc-500 mt-0.5 block">
+                      {newMatWeightUnit === 'tons' && parseFloat(newMatInitialWeight) > 0
+                        ? `= ${(parseFloat(newMatInitialWeight) * 1000).toLocaleString()} kg`
+                        : newMatWeightUnit === 'grams' && parseFloat(newMatInitialWeight) > 0
+                        ? `= ${(parseFloat(newMatInitialWeight) / 1000).toFixed(3)} kg`
+                        : 'Stored in kg for math & valuation'}
+                    </span>
+                  </div>
+
+                  {/* Initial Quantity */}
+                  <div>
+                    <label className="text-[10px] uppercase text-zinc-400 block mb-1">
+                      Initial Quantity / Items
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        value={newMatInitialQty}
+                        onChange={e => setNewMatInitialQty(e.target.value)}
+                        placeholder="e.g. 1000"
+                        className="flex-1 bg-[var(--panel)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] font-mono outline-none"
+                      />
+                      <div className="px-3 py-2 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] text-zinc-300 font-mono text-xs flex items-center justify-center shrink-0">
+                        {newMatQtyUnit}
+                      </div>
+                    </div>
+                    <span className="text-[9px] text-zinc-500 mt-0.5 block">
+                      Number of units, bolts, pipes, or boxes
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Supplier Association */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase text-zinc-400 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Building size={12} className="text-emerald-400" />
+                    <span>Supplier Association</span>
+                  </span>
+                  <span className="text-[9px] text-zinc-500 font-normal">Procurement source</span>
+                </label>
+                <select
+                  value={newMatSupplierAssoc}
+                  onChange={e => setNewMatSupplierAssoc(e.target.value)}
+                  className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] outline-none"
+                >
+                  <option value="__none__">-- In-House / Direct Purchase / Self --</option>
+                  {suppliers.map(s => (
+                    <option key={s.name} value={s.name}>
+                      {s.name} ({s.entries.length} entries on file)
+                    </option>
+                  ))}
+                  <option value="__new__">+ Enter New Supplier / Mill Name...</option>
+                </select>
+
+                {/* Inline New Supplier Name Input */}
+                {newMatSupplierAssoc === '__new__' && (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 mt-1.5 animate-in fade-in duration-150">
+                    <label className="text-[10px] uppercase text-amber-300 font-bold block">
+                      New Supplier / Mill Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newMatCustomSupplier}
+                      onChange={e => setNewMatCustomSupplier(e.target.value)}
+                      placeholder="e.g. Mughal Steel Rolling Mills or Tariq Hardware"
+                      className="w-full bg-[var(--panel)] border border-amber-500/50 focus:border-amber-400 rounded-lg px-3 py-1.5 text-xs text-[var(--text)] outline-none"
+                    />
+                    <label className="flex items-center gap-2 text-[10px] text-zinc-300 cursor-pointer pt-0.5">
+                      <input
+                        type="checkbox"
+                        checked={createSupplierIfNew}
+                        onChange={e => setCreateSupplierIfNew(e.target.checked)}
+                        className="rounded border-[var(--steel-line)] text-emerald-500"
+                      />
+                      <span>Also create new supplier account ledger in Directory (`rawSuppliers`)</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Low Stock Alert Threshold & Cost */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="text-[10px] uppercase text-zinc-400 block mb-1">
+                    Reorder / Low Stock Alert Level
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={newMatLowThreshold}
+                    onChange={e => setNewMatLowThreshold(e.target.value)}
+                    placeholder="e.g. 100 kg or 200 pcs"
+                    className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] font-mono outline-none"
+                  />
+                  <span className="text-[9px] text-zinc-500 mt-0.5 block">
+                    Triggers low stock badge & notifications
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase text-zinc-400 block mb-1">
+                    Est. Unit Cost / Rate (Rs)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={newMatUnitPrice}
+                    onChange={e => setNewMatUnitPrice(e.target.value)}
+                    placeholder="e.g. 290 Rs/kg or 15 Rs/pc"
+                    className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] focus:border-emerald-400 rounded-xl px-3 py-2 text-xs text-[var(--text)] font-mono outline-none"
+                  />
+                  <span className="text-[9px] text-zinc-500 mt-0.5 block">
+                    Reference rate for inventory valuation
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[var(--steel-line)]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMaterialModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-[var(--steel-line)] hover:border-zinc-400 text-xs text-zinc-300 hover:text-white transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow-md transition cursor-pointer active:scale-95"
+                >
+                  <PackagePlus size={14} strokeWidth={2.5} />
+                  <span>Save to Raw Inventory</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
