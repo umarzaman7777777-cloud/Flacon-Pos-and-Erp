@@ -547,8 +547,8 @@ export const ProjectCostingSection: React.FC<ProjectCostingSectionProps> = ({
 
       {/* Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative flex-1 max-w-xs">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
@@ -560,7 +560,7 @@ export const ProjectCostingSection: React.FC<ProjectCostingSectionProps> = ({
           </div>
 
           {/* Target Type Filter */}
-          <div className="flex rounded-lg border border-[var(--steel-line)] overflow-hidden text-xs">
+          <div className="flex flex-wrap rounded-lg border border-[var(--steel-line)] overflow-hidden text-xs">
             <button
               type="button"
               onClick={() => setTargetFilter('all')}

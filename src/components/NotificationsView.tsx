@@ -67,10 +67,18 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
 
   const t = (key: string) => TRANSLATIONS[language]?.[key] || TRANSLATIONS.en[key] || key;
 
-  // Cheque alerts & dishonour protection
+  // Cheque alerts & dishonour protection (includes bounced, overdue, and maturing within 3 days)
   const chequesList = React.useMemo(() => (state ? extractAllCheques(state) : []), [state]);
   const chequeAlerts = React.useMemo(
-    () => chequesList.filter(c => c.status === 'overdue' || c.status === 'bounced'),
+    () =>
+      chequesList.filter(
+        (c) =>
+          c.status === 'overdue' ||
+          c.status === 'bounced' ||
+          ((c.status === 'pending' || c.status === 'presented') &&
+            c.daysRemaining >= 0 &&
+            c.daysRemaining <= 3)
+      ),
     [chequesList]
   );
 
@@ -248,7 +256,11 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
       </div>
 
       {/* Dedicated Push Notifications & Mobile Device Permissions Access Hub */}
-      <MobilePermissionsCard language={language} />
+      <MobilePermissionsCard
+        language={language}
+        appState={state}
+        onNavigate={onNavigate}
+      />
 
       {/* SECTION: CHEQUES CLEARANCE & DISHONOUR ALERTS */}
       {(activeTab === 'all' || activeTab === 'cheques') && chequeAlerts.length > 0 && (
@@ -303,9 +315,13 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                           <span className="px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-300 text-[10px] font-bold border border-rose-500/50">
                             BOUNCED · REVERSAL POSTED
                           </span>
-                        ) : (
+                        ) : c.status === 'overdue' ? (
                           <span className="px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-300 text-[10px] font-bold border border-amber-500/50">
                             OVERDUE BY {Math.abs(c.daysRemaining)} DAYS
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-yellow-500/25 text-yellow-200 text-[10px] font-bold border border-yellow-400/50">
+                            {c.daysRemaining === 0 ? 'DUE TODAY' : `DUE IN ${c.daysRemaining} DAY${c.daysRemaining > 1 ? 'S' : ''}`}
                           </span>
                         )}
                       </div>
@@ -320,6 +336,11 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                             <strong className="text-sky-400">{c.supplierName}</strong>
                           </>
                         )}
+                        {c.batchId && (
+                          <span className="px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[10px] font-mono">
+                            {c.batchId}
+                          </span>
+                        )}
                       </div>
 
                       {isBounced ? (
@@ -328,14 +349,14 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                         </p>
                       ) : (
                         <p className="text-[11px] text-amber-300/80 font-sans">
-                          Maturity date was {c.chequeDate}. Confirm whether this cheque cleared or bounced.
+                          Maturity date: {c.chequeDate}. Confirm whether this cheque cleared or bounced.
                         </p>
                       )}
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 shrink-0 self-end md:self-center font-sans">
+                  <div className="flex flex-wrap items-center gap-2 self-end md:self-center font-sans">
                     {!isBounced && (
                       <>
                         <button
@@ -426,7 +447,7 @@ export const NotificationsView: React.FC<NotificationsViewProps> = ({
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setUploadTxn(u)}

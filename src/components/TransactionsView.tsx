@@ -844,7 +844,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => jumpToBatchHistory(batchInfo.effectiveBatchId)}
@@ -1117,7 +1117,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         {/* Global Toolbar & Export Controls */}
         <div className="flex items-center gap-2 flex-wrap font-mono">
           {/* View Mode Toggle */}
-          <div className="flex items-center p-0.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+          <div className="flex flex-wrap items-center p-0.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
             <button
               type="button"
               onClick={() => setViewMode('table')}
@@ -1190,11 +1190,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
       {/* Primary Tab Navigation: Orders Ledger vs Batch History */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--steel-line)] pb-2 font-mono">
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)]">
           <button
             type="button"
             onClick={() => setActiveMainTab('orders')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold font-sans transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold font-sans transition cursor-pointer whitespace-nowrap ${
               activeMainTab === 'orders'
                 ? 'bg-[var(--yellow)] text-black shadow-xs font-black'
                 : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1217,7 +1217,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 setSelectedBatchId(batchList[0].batchId);
               }
             }}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold font-sans transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold font-sans transition cursor-pointer whitespace-nowrap ${
               activeMainTab === 'batch_history'
                 ? 'bg-[var(--yellow)] text-black shadow-xs font-black'
                 : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -2605,11 +2605,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 </div>
 
                 {/* Metric Display Mode Switcher */}
-                <div className="flex items-center p-0.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-sans">
+                <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-sans">
                   <button
                     type="button"
                     onClick={() => setTrendMetricMode('per_order')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                       trendMetricMode === 'per_order'
                         ? 'bg-[var(--yellow)] text-black shadow-xs font-bold'
                         : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -2621,7 +2621,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setTrendMetricMode('cumulative')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer whitespace-nowrap ${
                       trendMetricMode === 'cumulative'
                         ? 'bg-[var(--yellow)] text-black shadow-xs font-bold'
                         : 'text-[var(--text-dim)] hover:text-[var(--text)]'

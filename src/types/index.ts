@@ -413,11 +413,21 @@ export interface CustomerLedgerEntry {
   taxPercent?: number;
   taxAmt?: number;
   txnId?: string;
+  batchId?: string;
   receiptUrl?: string;
   device?: string;
 }
 
 export type ChequeStatus = 'pending' | 'presented' | 'cleared' | 'bounced' | 'overdue' | 'returned';
+
+export interface BatchDueAlertStatus {
+  isWithinWarningWindow: boolean;
+  isDueToday: boolean;
+  isOverdue: boolean;
+  daysUntilDue: number | null;
+  urgencyLevel: 'none' | 'within_3_days' | 'due_today' | 'overdue';
+  label: string;
+}
 
 export type ChequeType =
   | 'customer_received'
@@ -449,6 +459,11 @@ export interface ChequeRecord {
   isOverdue: boolean;
   daysRemaining: number;
   notes?: string;
+  batchId?: string;
+  batchIds?: string[];
+  linkedOrderIds?: string[];
+  batchDueAlert?: BatchDueAlertStatus;
+  isBatchDueSoon?: boolean;
 }
 
 export interface ChequeStatusLogEntry {
@@ -465,6 +480,7 @@ export interface ChequeStatusLogEntry {
   payerParty: string;
   payeeParty: string;
   chequeType?: ChequeType;
+  batchId?: string;
   source?: string;
   notes?: string;
   reversedParties?: string[];
@@ -559,6 +575,7 @@ export interface RawEntry {
   gatePassNo?: string;
   gateReceivedAt?: string;
   gatePost?: string;
+  batchId?: string;
   device?: string;
 }
 

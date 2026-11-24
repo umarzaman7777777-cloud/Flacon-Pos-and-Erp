@@ -17,7 +17,15 @@ import {
   Lock,
   ChevronDown,
   ChevronUp,
-  Radio
+  Radio,
+  Cloud,
+  FileCheck2,
+  CreditCard,
+  ShoppingCart,
+  Package,
+  Download,
+  ShieldCheck,
+  Send
 } from 'lucide-react';
 import {
   checkAllMobilePermissions,
@@ -27,20 +35,35 @@ import {
   sendNativeNotification,
   scheduleLockscreenTestNotification,
   getDirectAppUrl,
-  MobilePermissionsState
+  getNotificationCategoryPrefs,
+  saveNotificationCategoryPrefs,
+  MobilePermissionsState,
+  NotificationCategory,
+  NotificationCategoryPrefs,
+  NOTIF_PREFS_CHANGED_EVENT
 } from '../utils/mobilePermissions';
-import { AppLanguage } from '../types';
+import {
+  computeWorkshopAlertSummary,
+  evaluateAndDispatchWorkshopNotifications,
+  triggerAllCategoryLockscreenTest
+} from '../utils/workshopNotifications';
+import { usePWAInstall } from '../hooks/usePWAInstall';
+import { AppLanguage, AppState } from '../types';
 
 interface MobilePermissionsCardProps {
   language: AppLanguage;
   compact?: boolean;
+  appState?: AppState;
   onPermissionsUpdated?: () => void;
+  onNavigate?: (view: any) => void;
 }
 
 export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
   language,
   compact = false,
-  onPermissionsUpdated
+  appState,
+  onPermissionsUpdated,
+  onNavigate
 }) => {
   const [permState, setPermState] = useState<MobilePermissionsState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,8 +71,14 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
   const [testNotificationSent, setTestNotificationSent] = useState(false);
   const [lockscreenTestPending, setLockscreenTestPending] = useState(false);
   const [lockscreenCountdown, setLockscreenCountdown] = useState<number | null>(null);
+  const [allCatTestPending, setAllCatTestPending] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [showTroubleshootGuide, setShowTroubleshootGuide] = useState(false);
+  const [showIOSInstallModal, setShowIOSInstallModal] = useState(false);
+  const [categoryPrefs, setCategoryPrefs] = useState<NotificationCategoryPrefs>(() =>
+    getNotificationCategoryPrefs()
+  );
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [isMuted, setIsMuted] = useState(() => {
     try {
       return localStorage.getItem('falcon_block_permission_notifications') === 'true';
@@ -93,8 +122,14 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
 
   useEffect(() => {
     loadPermissions();
+    const handlePrefsUpdate = (ev: Event) => {
+      const detail = (ev as CustomEvent<NotificationCategoryPrefs>).detail;
+      if (detail) setCategoryPrefs(detail);
+    };
+    window.addEventListener(NOTIF_PREFS_CHANGED_EVENT, handlePrefsUpdate);
     return () => {
       stopMicTest();
+      window.removeEventListener(NOTIF_PREFS_CHANGED_EVENT, handlePrefsUpdate);
     };
   }, []);
 
@@ -215,7 +250,7 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
   const handleTestLockscreenNotification = async () => {
     setLockscreenTestPending(true);
     setLockscreenCountdown(3);
-    setActionMessage('Lockscreen alert scheduled! LOCK YOUR PHONE NOW to test lockscreen banner...');
+    setActionMessage('Lockscreen alert scheduled! LOCK YOUR PHONE NOW to see banner on off screen...');
 
     let seconds = 3;
     const interval = setInterval(() => {
@@ -233,8 +268,77 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
       clearInterval(interval);
       setLockscreenTestPending(false);
       setLockscreenCountdown(null);
-      setActionMessage('Could not schedule lockscreen alert. Please verify notification permission.');
+      setActionMessage('Could not schedule lockscreen alert. Open Direct URL or allow notifications first.');
       setShowTroubleshootGuide(true);
+    }
+  };
+
+  const handleToggleCategoryPref = (key: keyof NotificationCategoryPrefs) => {
+    const next = saveNotificationCategoryPrefs({ [key]: !categoryPrefs[key] });
+    setCategoryPrefs(next);
+  };
+
+  const handleTestSingleCategory = async (category: NotificationCategory) => {
+    const ok = await scheduleLockscreenTestNotification(0, category);
+    if (ok) {
+      setActionMessage(`Sent "${category.toUpperCase()}" notification to device tray & lockscreen!`);
+    } else {
+      setActionMessage('Notifications are blocked or denied. Enable Push Permissions first.');
+      setShowTroubleshootGuide(true);
+    }
+  };
+
+  const handleTestAllCategoriesLockscreen = async () => {
+    setAllCatTestPending(true);
+    setLockscreenCountdown(3);
+    setActionMessage(
+      'All-Category Lockscreen Burst scheduled (3s)! LOCK YOUR PHONE SCREEN NOW to verify Backups, Gate Passes, Cheques, Stock & Orders.'
+    );
+    let seconds = 3;
+    const interval = setInterval(() => {
+      seconds -= 1;
+      setLockscreenCountdown(seconds);
+      if (seconds <= 0) {
+        clearInterval(interval);
+        setAllCatTestPending(false);
+        setLockscreenCountdown(null);
+      }
+    }, 1000);
+
+    const ok = await triggerAllCategoryLockscreenTest(3);
+    if (!ok) {
+      clearInterval(interval);
+      setAllCatTestPending(false);
+      setLockscreenCountdown(null);
+      setActionMessage('Could not send multi-category lockscreen alerts. Verify permission is GRANTED.');
+      setShowTroubleshootGuide(true);
+    }
+  };
+
+  const handleSendLiveWorkshopDigest = async () => {
+    if (!appState) return;
+    setLoading(true);
+    try {
+      const count = await evaluateAndDispatchWorkshopNotifications(appState, { triggerReason: 'manual' });
+      setActionMessage(
+        count > 0
+          ? `Dispatched ${count} active lockscreen notification channel(s) to your phone!`
+          : 'All enabled categories checked — or notifications need permission granted first.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePwaInstall = async () => {
+    if (isInstallable) {
+      const accepted = await install();
+      if (accepted) {
+        setActionMessage('Falcon POS installed to Home Screen! Lockscreen notifications now run reliably.');
+        await loadPermissions();
+      }
+    } else if (isIOS) {
+      setShowIOSInstallModal(true);
     }
   };
 
@@ -413,18 +517,18 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
             <p className="font-semibold leading-snug">
               {language === 'ur'
                 ? 'براؤزر پریویو فریم میں ڈیوائس پرمیشن بلاک ہو سکتی ہے۔'
-                : 'Running inside embedded preview sandbox.'}
+                : 'Running inside embedded preview sandbox — Lockscreen alerts require Direct URL or Installed App.'}
             </p>
             <p className="text-[11px] text-amber-300/80 leading-relaxed">
               {language === 'ur'
-                ? 'موبائل کروم اور سفاری عام طور پر فریم کے اندر مائیک اور پش کے پاپ اپس روک دیتے ہیں۔ حقیقی موبائل تجربے کے لیے براہ راست کھولیں۔'
-                : 'Mobile browsers (Chrome, Safari) automatically block microphone & push popups inside embedded preview frames. Launch directly in your mobile browser to allow with 1 tap.'}
+                ? 'موبائل کروم اور سفاری فریم کے اندر نوٹیفکیشن پاپ اپ بلاک کر دیتے ہیں۔ موبائل لاک اسکرین پر تمام الرٹس (بیک اپ، گیٹ پاس، چیک) حاصل کرنے کے لیے نیچے دیے گئے بٹن سے براہ راست کھولیں اور Install کریں۔'
+                : 'Mobile browsers (Chrome, Safari) automatically block push notifications inside embedded preview frames. Open the Direct App URL in mobile Chrome/Safari and tap Enable Push (or Add to Home Screen) so Backups, Gate Passes, and Cheques appear on your locked screen.'}
             </p>
             <div className="flex items-center gap-2 pt-1 flex-wrap">
               <button
                 type="button"
                 onClick={handleOpenInNewTab}
-                className="px-2.5 py-1 rounded bg-amber-400 text-black font-bold text-[11px] font-mono flex items-center gap-1 hover:bg-amber-300 transition"
+                className="px-2.5 py-1 rounded bg-amber-400 text-black font-bold text-[11px] font-mono flex items-center gap-1 hover:bg-amber-300 transition cursor-pointer"
               >
                 <ExternalLink size={12} />
                 <span>{language === 'ur' ? 'براہ راست موبائل براؤزر میں کھولیں' : 'Open Direct App URL'}</span>
@@ -432,13 +536,45 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
               <button
                 type="button"
                 onClick={handleCopyDirectUrl}
-                className="px-2.5 py-1 rounded bg-[var(--panel)] border border-amber-400/40 text-amber-300 font-mono text-[11px] flex items-center gap-1 hover:text-white transition"
+                className="px-2.5 py-1 rounded bg-[var(--panel)] border border-amber-400/40 text-amber-300 font-mono text-[11px] flex items-center gap-1 hover:text-white transition cursor-pointer"
               >
                 {copiedUrl ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
                 <span>{copiedUrl ? 'Copied Link!' : 'Copy Direct Link'}</span>
               </button>
+              {!isInstalled && (isInstallable || isIOS) && (
+                <button
+                  type="button"
+                  onClick={handlePwaInstall}
+                  className="px-2.5 py-1 rounded bg-emerald-500 text-black font-bold text-[11px] font-mono flex items-center gap-1 hover:bg-emerald-400 transition cursor-pointer"
+                >
+                  <Download size={12} />
+                  <span>{isIOS ? 'Install on iPhone' : 'Install Mobile App'}</span>
+                </button>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Standalone PWA Home Screen Install Banner when running directly in mobile browser */}
+      {!permState.isIframe && !permState.isNative && !isInstalled && (isInstallable || isIOS) && (
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between flex-wrap gap-2 text-xs text-emerald-300">
+          <div className="flex items-center gap-2 min-w-0">
+            <Download size={15} className="shrink-0 text-emerald-400" />
+            <span className="text-[11px] font-mono leading-snug">
+              {isIOS
+                ? 'iOS Lockscreen notifications require "Add to Home Screen" installation.'
+                : 'Install Falcon POS to your phone Home Screen for most reliable off-screen / locked notifications.'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handlePwaInstall}
+            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-[11px] font-mono flex items-center gap-1.5 cursor-pointer shrink-0"
+          >
+            <Download size={12} />
+            <span>{isIOS ? 'iPhone Install Steps' : 'Install App'}</span>
+          </button>
         </div>
       )}
 
@@ -717,6 +853,255 @@ export const MobilePermissionsCard: React.FC<MobilePermissionsCardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ALL-CATEGORIES LOCKSCREEN CHANNELS MATRIX */}
+      {!compact && (() => {
+        const liveSummary = appState ? computeWorkshopAlertSummary(appState) : null;
+        const categoryRows: Array<{
+          key: NotificationCategory;
+          label: string;
+          sub: string;
+          icon: React.ReactNode;
+          accentCls: string;
+          badgeText?: string;
+          targetView: string;
+        }> = [
+          {
+            key: 'backups',
+            label: language === 'ur' ? 'بیک اپ اور کلاؤڈ سنک' : 'Backups & Cloud Sync',
+            sub: 'Drive auto-backups, JSON/SQL exports, stale backup & sync warnings',
+            icon: <Cloud size={15} />,
+            accentCls: 'text-sky-400 bg-sky-500/15 border-sky-500/30',
+            badgeText: liveSummary
+              ? liveSummary.backups.isStale
+                ? 'Backup Due'
+                : 'Synced'
+              : undefined,
+            targetView: 'backup'
+          },
+          {
+            key: 'gatepasses',
+            label: language === 'ur' ? 'گیٹ پاس اور ڈسپیچ' : 'Gate Passes & Dispatch',
+            sub: 'Outward dispatch slips, inward mill gate entries & pending orders',
+            icon: <FileCheck2 size={15} />,
+            accentCls: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
+            badgeText: liveSummary && liveSummary.gatepasses.pendingCount > 0
+              ? `${liveSummary.gatepasses.pendingCount} Pending`
+              : undefined,
+            targetView: 'notifications'
+          },
+          {
+            key: 'cheques',
+            label: language === 'ur' ? 'چیک اور بینکنگ الرٹس' : 'Cheques & Due Dates (≤3d)',
+            sub: 'Cleared, bounced reversals, overdue cheques & ≤3-day batch maturities',
+            icon: <CreditCard size={15} />,
+            accentCls: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
+            badgeText: liveSummary && (liveSummary.cheques.bouncedCount + liveSummary.cheques.overdueCount + liveSummary.cheques.dueWithin3DaysCount) > 0
+              ? `${liveSummary.cheques.bouncedCount + liveSummary.cheques.overdueCount + liveSummary.cheques.dueWithin3DaysCount} Watch`
+              : undefined,
+            targetView: 'cheques'
+          },
+          {
+            key: 'orders',
+            label: language === 'ur' ? 'آرڈرز اور ادائیگیاں' : 'Orders & Payments',
+            sub: 'New sales invoices, confirmed bookings & payment receipts',
+            icon: <ShoppingCart size={15} />,
+            accentCls: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
+            targetView: 'transactions'
+          },
+          {
+            key: 'stock',
+            label: language === 'ur' ? 'خام مال لو اسٹاک' : 'Low Stock Raw Material',
+            sub: 'Critical steel pipe, rod & accessory inventory reorder alerts',
+            icon: <Package size={15} />,
+            accentCls: 'text-orange-400 bg-orange-500/15 border-orange-500/30',
+            badgeText: liveSummary && liveSummary.stock.lowCount > 0
+              ? `${liveSummary.stock.lowCount} Low`
+              : undefined,
+            targetView: 'raw_material'
+          },
+          {
+            key: 'inquiries',
+            label: language === 'ur' ? 'کسٹمر انکوائریز' : 'Customer Inquiries',
+            sub: 'High-priority & urgent buyer follow-up alerts',
+            icon: <Bell size={15} />,
+            accentCls: 'text-purple-400 bg-purple-500/15 border-purple-500/30',
+            badgeText: liveSummary && liveSummary.inquiries.urgentCount > 0
+              ? `${liveSummary.inquiries.urgentCount} Urgent`
+              : undefined,
+            targetView: 'notifications'
+          }
+        ];
+
+        return (
+          <div className="p-3.5 sm:p-4 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--steel-line)]/70">
+              <div className="min-w-0">
+                <h5 className="text-xs font-bold text-[var(--text)] flex items-center gap-2 flex-wrap">
+                  <ShieldCheck size={15} className="text-emerald-400 shrink-0" />
+                  <span>
+                    {language === 'ur'
+                      ? 'لاک اسکرین اور آف اسکرین تمام کیٹیگری الرٹس'
+                      : 'Lockscreen & Off-Screen Alert Channels (All Workshop Modules)'}
+                  </span>
+                </h5>
+                <p className="text-[11px] text-[var(--text-dim)] mt-0.5 leading-snug">
+                  Dedicated Android &amp; PWA channels ensure Backups, Gate Passes, Cheques &amp; Stock remain visible even when screen is off or locked.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {appState && permState.notifications === 'granted' && (
+                  <button
+                    type="button"
+                    onClick={handleSendLiveWorkshopDigest}
+                    disabled={loading}
+                    className="px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition"
+                  >
+                    <Send size={11} />
+                    <span>Push Active Alerts Now</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleTestAllCategoriesLockscreen}
+                  disabled={allCatTestPending || permState.notifications !== 'granted'}
+                  title="Schedules all 6 alert categories in 3s — Lock phone screen to verify!"
+                  className="px-2.5 py-1.5 rounded-lg bg-[var(--yellow)]/15 hover:bg-[var(--yellow)]/25 border border-[var(--yellow)]/45 text-[var(--yellow)] font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-45 transition"
+                >
+                  <Lock size={11} />
+                  <span>
+                    {allCatTestPending && lockscreenCountdown !== null
+                      ? `Lock Screen Now (${lockscreenCountdown}s)...`
+                      : 'Test All 6 on Lockscreen (3s)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Off-Screen Digest Toggle */}
+            <div className="p-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
+                  <Lock size={13} className="text-amber-400 shrink-0" />
+                  <span>Off-Screen / Screen-Lock Background Sweep</span>
+                </div>
+                <p className="text-[10px] text-[var(--text-dim)] font-mono mt-0.5">
+                  Automatically dispatches urgent cheques, gate passes &amp; backup status when locking phone + syncs Service Worker &amp; native AlarmManager schedules.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggleCategoryPref('offScreenDigest')}
+                className={`px-3 py-1 rounded-full text-[11px] font-mono font-bold border transition cursor-pointer shrink-0 ${
+                  categoryPrefs.offScreenDigest
+                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-400'
+                }`}
+              >
+                {categoryPrefs.offScreenDigest ? 'ACTIVE ON LOCKSCREEN' : 'PAUSED'}
+              </button>
+            </div>
+
+            {/* 6 Category Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {categoryRows.map((cat) => {
+                const enabled = categoryPrefs[cat.key];
+                return (
+                  <div
+                    key={cat.key}
+                    className={`p-3 rounded-xl border transition flex flex-col justify-between gap-2.5 ${
+                      enabled
+                        ? 'bg-[var(--panel-raised)]/80 border-[var(--steel-line)]'
+                        : 'bg-black/20 border-[var(--steel-line)]/50 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`p-1.5 rounded-lg border shrink-0 ${cat.accentCls}`}>
+                          {cat.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-[var(--text)] truncate">
+                            {cat.label}
+                          </div>
+                          {cat.badgeText && (
+                            <span className="inline-block mt-0.5 text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
+                              {cat.badgeText}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCategoryPref(cat.key)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border cursor-pointer shrink-0 transition ${
+                          enabled
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                        }`}
+                      >
+                        {enabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-[var(--text-dim)] leading-relaxed">
+                      {cat.sub}
+                    </p>
+
+                    <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-[var(--steel-line)]/50">
+                      <button
+                        type="button"
+                        onClick={() => handleTestSingleCategory(cat.key)}
+                        disabled={!enabled}
+                        className="px-2 py-1 rounded-md bg-black/30 hover:bg-black/50 border border-[var(--steel-line)] text-[10px] font-mono text-[var(--text)] cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                      >
+                        <BellRing size={10} className="text-amber-400" />
+                        <span>Test</span>
+                      </button>
+
+                      {onNavigate && (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(cat.targetView)}
+                          className="text-[10px] font-mono text-[var(--text-dim)] hover:text-[var(--yellow)] cursor-pointer flex items-center gap-1"
+                        >
+                          <span>Open</span>
+                          <ExternalLink size={10} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* iOS Safari Add to Home Screen Modal */}
+      {showIOSInstallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--panel)] border border-[var(--steel-line)] p-5 shadow-2xl space-y-3">
+            <h3 className="font-bold text-base text-[var(--text)]">Enable Lockscreen Alerts on iPhone / iPad</h3>
+            <p className="text-xs text-[var(--text-dim)] leading-relaxed font-mono">
+              1. Open Direct App URL in <strong>Safari</strong>.<br />
+              2. Tap the <strong>Share</strong> icon in the bottom toolbar.<br />
+              3. Scroll and tap <strong>Add to Home Screen</strong>.<br />
+              4. Launch Falcon POS from Home Screen &amp; tap <strong>Enable Push</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowIOSInstallModal(false)}
+              className="w-full py-2 rounded-xl bg-[var(--yellow)] text-black font-bold text-xs font-mono cursor-pointer"
+            >
+              Got It
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Troubleshoot Accordion if any permission is denied */}
       {(anyDenied || showTroubleshootGuide) && (

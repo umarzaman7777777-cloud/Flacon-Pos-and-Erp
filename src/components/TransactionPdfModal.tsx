@@ -658,7 +658,7 @@ export const TransactionPdfModal: React.FC<TransactionPdfModalProps> = ({
               Change Setup
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handlePrintDocument}

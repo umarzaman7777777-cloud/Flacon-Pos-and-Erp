@@ -573,16 +573,16 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
               <p className="text-xs text-[var(--text-dim)]">{t('rawledger_sub')}</p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               {onNavigate && (
                 <button
                   type="button"
                   id="raw-view-forecast-btn"
                   onClick={() => onNavigate('inventory_forecast')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/20 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/20 transition cursor-pointer whitespace-nowrap shrink-0"
                   title="Open Raw Material Inventory Forecast & Predictive Reorder Point Engine"
                 >
-                  <TrendingUp size={14} className="text-amber-400" />
+                  <TrendingUp size={14} className="text-amber-400 shrink-0" />
                   <span>Forecast & ROP</span>
                 </button>
               )}
@@ -592,10 +592,10 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                   type="button"
                   id="raw-view-cheques-btn"
                   onClick={() => onNavigate('cheques')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer whitespace-nowrap shrink-0"
                   title="Open Cheques Management & Cross-Check Endorsed Cheques with Raw Material Suppliers"
                 >
-                  <CreditCard size={14} className="text-amber-400" />
+                  <CreditCard size={14} className="text-amber-400 shrink-0" />
                   <span>Cheques & Endorsements</span>
                 </button>
               )}
@@ -604,9 +604,9 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                 type="button"
                 id="raw-view-gate-registry-btn"
                 onClick={() => setIsGateRegistryOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs uppercase shadow hover:bg-amber-500/25 transition cursor-pointer whitespace-nowrap shrink-0"
               >
-                <ShieldCheck size={14} className="text-amber-400" />
+                <ShieldCheck size={14} className="text-amber-400 shrink-0" />
                 <span>Gate Registry (#SEQ)</span>
               </button>
 
@@ -614,10 +614,10 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                 type="button"
                 id="raw-view-unit-converter-btn"
                 onClick={() => setIsConverterOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 font-bold text-xs uppercase shadow hover:bg-sky-500/25 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 font-bold text-xs uppercase shadow hover:bg-sky-500/25 transition cursor-pointer whitespace-nowrap shrink-0"
                 title="Open Unit Converter (Tons, Maund, kg, Grams, Packaging Items)"
               >
-                <ArrowLeftRight size={14} className="text-sky-400" />
+                <ArrowLeftRight size={14} className="text-sky-400 shrink-0" />
                 <span>Converter</span>
               </button>
 
@@ -625,19 +625,19 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                 type="button"
                 id="raw-view-add-material-btn"
                 onClick={() => handleOpenAddMaterialModal()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
                 title="Add a new raw material item to warehouse inventory stock"
               >
-                <PackagePlus size={14} strokeWidth={2.5} />
+                <PackagePlus size={14} strokeWidth={2.5} className="shrink-0" />
                 <span>Add Raw Material</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setAddSupplierModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold text-xs uppercase shadow transition active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--yellow)] text-black font-bold text-xs uppercase shadow transition active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Plus size={14} />
+                <Plus size={14} className="shrink-0" />
                 <span>{t('add_supplier')}</span>
               </button>
             </div>
@@ -680,11 +680,11 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleOpenAddMaterialModal()}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase transition cursor-pointer"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold uppercase transition cursor-pointer whitespace-nowrap"
                 >
                   <PackagePlus size={13} />
                   <span>+ New Material</span>
@@ -693,7 +693,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onNavigate('stock')}
-                    className="text-xs text-[var(--yellow)] hover:underline flex items-center gap-1 font-mono"
+                    className="text-xs text-[var(--yellow)] hover:underline flex items-center gap-1 font-mono whitespace-nowrap"
                   >
                     <span>Full Stock View &rarr;</span>
                   </button>
@@ -1077,7 +1077,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
 
               {/* Auto Detailed Tabs Bar & Search */}
               <div className="flex items-center justify-between gap-2 border-b border-[var(--steel-line)] pb-2 flex-wrap">
-                <div className="flex items-center gap-1 overflow-x-auto py-0.5">
+                <div className="flex flex-wrap items-center gap-1 py-0.5">
                   <button
                     type="button"
                     onClick={() => setActiveLedgerTab('all')}
@@ -1551,7 +1551,7 @@ export const RawMaterialView: React.FC<RawMaterialViewProps> = ({
                     </span>
 
                     {/* Toggle Switch Component between Quantity and Weight */}
-                    <div className="inline-flex items-center p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] shadow-inner">
+                    <div className="inline-flex flex-wrap items-center p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] shadow-inner max-w-full gap-1">
                       {/* Quantity Option Button */}
                       <button
                         type="button"

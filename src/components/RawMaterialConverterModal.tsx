@@ -154,11 +154,11 @@ export const RawMaterialConverterModal: React.FC<RawMaterialConverterModalProps>
       </div>
 
       {/* Mode Navigation Tabs */}
-      <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
+      <div className="flex flex-wrap items-center gap-1 p-1 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)]">
         <button
           type="button"
           onClick={() => setActiveTab('weight')}
-          className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+          className={`flex-1 py-1.5 px-2.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'weight'
               ? 'bg-amber-500 text-black font-bold shadow'
               : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -171,7 +171,7 @@ export const RawMaterialConverterModal: React.FC<RawMaterialConverterModalProps>
         <button
           type="button"
           onClick={() => setActiveTab('packaging')}
-          className={`flex-1 py-1.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+          className={`flex-1 py-1.5 px-2.5 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'packaging'
               ? 'bg-sky-500 text-black font-bold shadow'
               : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -184,7 +184,7 @@ export const RawMaterialConverterModal: React.FC<RawMaterialConverterModalProps>
         <button
           type="button"
           onClick={() => setActiveTab('length')}
-          className={`py-1.5 px-3 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+          className={`flex-1 sm:flex-initial py-1.5 px-3 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap ${
             activeTab === 'length'
               ? 'bg-purple-500 text-white font-bold shadow'
               : 'text-[var(--text-dim)] hover:text-[var(--text)]'

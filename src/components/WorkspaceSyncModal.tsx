@@ -619,7 +619,7 @@ export const WorkspaceSyncModal: React.FC<WorkspaceSyncModalProps> = ({
                     <span>{isUploadingDrive ? 'Backing Up All Files...' : '⚡ Backup All Files (JSON + SQL)'}</span>
                   </button>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       disabled={isUploadingDrive}

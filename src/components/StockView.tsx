@@ -256,12 +256,12 @@ export const StockView: React.FC<StockViewProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap max-w-full">
           {/* Tab Switcher */}
-          <div className="flex items-center p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-mono max-w-full overflow-x-auto no-scrollbar">
+          <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] text-xs font-mono max-w-full">
             <button
               type="button"
               id="stock-tab-ready"
               onClick={() => setActiveTab('ready')}
-              className={`px-3 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg transition font-bold flex items-center gap-1.5 whitespace-nowrap ${
                 activeTab === 'ready' ? 'bg-[var(--yellow)] text-black' : 'text-[var(--text-dim)] hover:text-[var(--text)]'
               }`}
             >
@@ -472,12 +472,12 @@ export const StockView: React.FC<StockViewProps> = ({
             </div>
 
             {/* Sub-tab switcher */}
-            <div className="flex items-center p-1 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] text-xs font-mono shrink-0 w-full sm:w-auto justify-center">
+            <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-[var(--panel)] border border-[var(--steel-line)] text-xs font-mono shrink-0 w-full sm:w-auto justify-center">
               <button
                 type="button"
                 id="gatepass-subtab-awaiting"
                 onClick={() => setGatePassSubTab('awaiting')}
-                className={`px-3 py-1 rounded-lg transition font-bold flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-lg transition font-bold flex items-center gap-1.5 whitespace-nowrap ${
                   gatePassSubTab === 'awaiting'
                     ? 'bg-amber-500 text-black shadow'
                     : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -495,7 +495,7 @@ export const StockView: React.FC<StockViewProps> = ({
                 type="button"
                 id="gatepass-subtab-solved"
                 onClick={() => setGatePassSubTab('solved')}
-                className={`px-3 py-1 rounded-lg transition font-bold flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-lg transition font-bold flex items-center gap-1.5 whitespace-nowrap ${
                   gatePassSubTab === 'solved'
                     ? 'bg-emerald-500 text-black shadow'
                     : 'text-[var(--text-dim)] hover:text-[var(--text)]'

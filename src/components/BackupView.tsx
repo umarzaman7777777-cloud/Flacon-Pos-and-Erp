@@ -79,6 +79,7 @@ import { getStoredSheetsToken, WORKSPACE_SYNC_EVENT, isNativeOrLocalEnvironment 
 import { auth, db } from '../firebase/config';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { doc, getDoc } from 'firebase/firestore';
+import { notifyBackupEvent } from '../utils/workshopNotifications';
 
 const firestoreDbId: string = (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-falconrodmakerpo-4ec08e17-6c91-4aca-b59a-d747b503ca3a';
 
@@ -353,9 +354,19 @@ export const BackupView: React.FC<BackupViewProps> = ({
       });
       setDriveSuccessMsg(`✓ Successfully backed up database to Google Drive: ${uploaded.name}`);
       setTimeout(() => setDriveSuccessMsg(null), 5000);
+      notifyBackupEvent({
+        status: 'success',
+        title: '☁️ JSON Backup Saved to Drive',
+        body: `${uploaded.name} (${databaseMetrics.totalRecords} records)`
+      }).catch(() => {});
       await handleRefreshDriveFiles(token);
     } catch (err: any) {
       setDriveError(err?.message || 'Failed to upload JSON backup to Google Drive.');
+      notifyBackupEvent({
+        status: 'error',
+        title: '❌ JSON Drive Backup Failed',
+        body: err?.message || 'Could not upload JSON backup.'
+      }).catch(() => {});
     } finally {
       setIsUploadingDriveJSON(false);
     }
@@ -379,9 +390,19 @@ export const BackupView: React.FC<BackupViewProps> = ({
       });
       setDriveSuccessMsg(`✓ Successfully uploaded SQL backup to Google Drive: ${uploaded.name}`);
       setTimeout(() => setDriveSuccessMsg(null), 5000);
+      notifyBackupEvent({
+        status: 'success',
+        title: '☁️ SQL Dump Saved to Drive',
+        body: `${uploaded.name} (${databaseMetrics.totalRecords} records)`
+      }).catch(() => {});
       await handleRefreshDriveFiles(token);
     } catch (err: any) {
       setDriveError(err?.message || 'Failed to upload SQL backup to Google Drive.');
+      notifyBackupEvent({
+        status: 'error',
+        title: '❌ SQL Drive Backup Failed',
+        body: err?.message || 'Could not upload SQL backup.'
+      }).catch(() => {});
     } finally {
       setIsUploadingDriveSQL(false);
     }
@@ -416,9 +437,19 @@ export const BackupView: React.FC<BackupViewProps> = ({
 
       setDriveSuccessMsg('✓ Successfully backed up all files (JSON & SQL) to Google Drive!');
       setTimeout(() => setDriveSuccessMsg(null), 5000);
+      notifyBackupEvent({
+        status: 'success',
+        title: '☁️ All Backups Saved (JSON & SQL)',
+        body: `Synced to Google Drive (${databaseMetrics.totalRecords} records).`
+      }).catch(() => {});
       await handleRefreshDriveFiles(token);
     } catch (err: any) {
       setDriveError(err?.message || 'Failed to backup all files to Google Drive.');
+      notifyBackupEvent({
+        status: 'error',
+        title: '❌ Drive Backup All Failed',
+        body: err?.message || 'Could not upload all backup files.'
+      }).catch(() => {});
     } finally {
       setIsUploadingAllFiles(false);
     }
@@ -518,12 +549,22 @@ export const BackupView: React.FC<BackupViewProps> = ({
     exportLocalDatabaseJSON(appState, currentUserEmail, terminalId, !isFirebaseUnreachable);
     setExportNotice(`✓ Full JSON database snapshot exported (${databaseMetrics.totalRecords} records, ${databaseMetrics.storageSizeKB} KB). Local file saved.`);
     setTimeout(() => setExportNotice(null), 5000);
+    notifyBackupEvent({
+      status: 'success',
+      title: '💾 Local JSON Backup Downloaded',
+      body: `${databaseMetrics.totalRecords} records (${databaseMetrics.storageSizeKB} KB) exported.`
+    }).catch(() => {});
   };
 
   const handleExportEmergencySQL = () => {
     exportLocalDatabaseSQL(appState, currentUserEmail);
     setExportNotice(`✓ Relational ANSI SQL dump generated & downloaded. Compatible with SQLite, PostgreSQL, and MySQL.`);
     setTimeout(() => setExportNotice(null), 5000);
+    notifyBackupEvent({
+      status: 'success',
+      title: '💾 Local SQL Backup Downloaded',
+      body: `Relational SQL dump saved (${databaseMetrics.totalRecords} records).`
+    }).catch(() => {});
   };
 
   const handleCopyDiagnosticReport = () => {
@@ -549,6 +590,11 @@ export const BackupView: React.FC<BackupViewProps> = ({
   const handleCreateJSONBackup = () => {
     const filename = `Falcon_ERP_Backup_${todayISO().replace(/-/g, '')}`;
     downloadJSON(appState, filename);
+    notifyBackupEvent({
+      status: 'success',
+      title: '💾 JSON Backup Created',
+      body: `${filename}.json downloaded (${databaseMetrics.totalRecords} records).`
+    }).catch(() => {});
   };
 
   const handleDownloadSQL = () => {
@@ -558,6 +604,11 @@ export const BackupView: React.FC<BackupViewProps> = ({
       firebaseConfig.projectId,
       firestoreDbId
     );
+    notifyBackupEvent({
+      status: 'success',
+      title: '💾 PostgreSQL SQL Dump Saved',
+      body: `Complete relational dump downloaded (${databaseMetrics.totalRecords} records).`
+    }).catch(() => {});
   };
 
   const handleCopySQL = () => {
@@ -757,7 +808,7 @@ export const BackupView: React.FC<BackupViewProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-[var(--steel-line)] pb-2 font-mono text-xs overflow-x-auto no-scrollbar scroll-smooth">
+      <div className="flex flex-wrap gap-2 border-b border-[var(--steel-line)] pb-2 font-mono text-xs">
         <button
           type="button"
           onClick={() => setActiveTab('cloud_status')}
@@ -2069,11 +2120,11 @@ export const BackupView: React.FC<BackupViewProps> = ({
                   </pre>
                 </div>
 
-                <div className="p-3 border-t border-[var(--steel-line)] bg-[var(--panel-raised)] flex items-center justify-between">
+                <div className="p-3 border-t border-[var(--steel-line)] bg-[var(--panel-raised)] flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[10px] text-[var(--text-dim)] font-mono">
                     Total Characters: {previewDriveFile.content.length.toLocaleString()}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {

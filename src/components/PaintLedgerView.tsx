@@ -459,11 +459,11 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
             </div>
 
             {/* Sub-tab navigation: Ledger & Financials vs WIP Pipeline */}
-            <div className="flex items-center gap-2 border-b border-[var(--steel-line)] pb-2 my-2.5">
+            <div className="flex flex-wrap items-center gap-2 border-b border-[var(--steel-line)] pb-2 my-2.5">
               <button
                 type="button"
                 onClick={() => setActivePainterTab('financials')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                   activePainterTab === 'financials'
                     ? 'bg-[var(--yellow)] text-black shadow'
                     : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -475,7 +475,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
               <button
                 type="button"
                 onClick={() => setActivePainterTab('wip_pipeline')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                   activePainterTab === 'wip_pipeline'
                     ? 'bg-[var(--yellow)] text-black shadow'
                     : 'bg-[var(--panel-raised)] text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -901,11 +901,11 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
             {/* WIP Outward / Inward Logging Form */}
             <form onSubmit={handleAddWipEntry} className="border-t border-[var(--steel-line)] pt-3 space-y-2.5 bg-[var(--panel-raised)]/40 p-3 rounded-xl border">
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 bg-black/40 p-0.5 rounded-lg border border-[var(--steel-line)]">
+                <div className="flex flex-wrap items-center gap-1.5 bg-black/40 p-1 rounded-lg border border-[var(--steel-line)]">
                   <button
                     type="button"
                     onClick={() => setWipDispatchType('outward')}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 whitespace-nowrap ${
                       wipDispatchType === 'outward'
                         ? 'bg-sky-500 text-black shadow'
                         : 'text-zinc-400 hover:text-white'
@@ -917,7 +917,7 @@ export const PaintLedgerView: React.FC<PaintLedgerViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setWipDispatchType('inward')}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer flex items-center gap-1 whitespace-nowrap ${
                       wipDispatchType === 'inward'
                         ? 'bg-emerald-500 text-black shadow'
                         : 'text-zinc-400 hover:text-white'

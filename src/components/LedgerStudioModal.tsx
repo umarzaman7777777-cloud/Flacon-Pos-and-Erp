@@ -604,9 +604,9 @@ export const LedgerStudioModal: React.FC<LedgerStudioModalProps> = ({
 
         {/* Bottom Action Footer with Direct Export & Save */}
         <div className="p-4 border-t border-[var(--steel-line)] bg-[var(--panel-raised)] shrink-0 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-[var(--text-dim)]">Export with selected columns:</span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handleTriggerExport('csv')}

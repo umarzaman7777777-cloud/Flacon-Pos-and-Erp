@@ -1153,11 +1153,11 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
         </div>
 
         {/* View Toggle (Catalog vs Custom Rod Designer) */}
-        <div className="flex items-center bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl p-1 gap-1 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-xl p-1 gap-1 self-start sm:self-auto max-w-full">
           <button
             type="button"
             onClick={() => setActiveTab('catalog')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition whitespace-nowrap ${
               activeTab === 'catalog'
                 ? 'bg-[var(--yellow)] text-black shadow-sm'
                 : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1170,7 +1170,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('custom_designer')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer whitespace-nowrap ${
               activeTab === 'custom_designer'
                 ? 'bg-[var(--yellow)] text-black shadow-sm'
                 : 'text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[var(--panel)]'
@@ -2482,11 +2482,11 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                   </button>
 
                   {/* Save to Catalog & Save as New Buttons */}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => handleSaveBlueprintToCatalog(false)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 font-bold text-xs hover:bg-emerald-500 hover:text-black transition cursor-pointer active:scale-95"
+                      className="flex-1 min-w-[140px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 font-bold text-xs hover:bg-emerald-500 hover:text-black transition cursor-pointer active:scale-95 whitespace-nowrap"
                     >
                       {designerSaveSuccess ? (
                         <>
@@ -2903,7 +2903,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                     </div>
 
                     {/* Action Buttons Footer */}
-                    <div className="p-3 bg-[var(--panel-raised)] border-t border-[var(--steel-line)] flex items-center justify-between gap-2 font-mono text-xs">
+                    <div className="p-3 bg-[var(--panel-raised)] border-t border-[var(--steel-line)] flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
                       <button
                         type="button"
                         onClick={() => setPreviewItem(item)}
@@ -2913,7 +2913,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                         <span>Preview</span>
                       </button>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => handleShareItem(item)}
@@ -3050,7 +3050,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
 
             {/* Modal Actions */}
             <div className="p-4 bg-[var(--panel-raised)] border-t border-[var(--steel-line)] flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleExportProductBlueprintJPG(selectedProduct)}
@@ -3085,7 +3085,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setSelectedProduct(null)}
@@ -3249,7 +3249,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
             </div>
 
             {/* Modal Actions */}
-            <div className="p-4 bg-[var(--panel-raised)] border-t border-[var(--steel-line)] flex items-center justify-between gap-3 font-mono">
+            <div className="p-4 bg-[var(--panel-raised)] border-t border-[var(--steel-line)] flex flex-wrap items-center justify-between gap-3 font-mono">
               <button
                 type="button"
                 onClick={() => {
@@ -3261,7 +3261,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({
                 <span>Delete from Archive</span>
               </button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setPreviewItem(null)}

@@ -759,7 +759,7 @@ export const ChequeManagementWidget: React.FC<ChequeManagementWidgetProps> = ({
 
         {/* Mode Switcher (Action List <-> Cheque Calendar) & Registry Link */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="inline-flex rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] p-0.5 text-xs font-mono">
+          <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] p-0.5 text-xs font-mono max-w-full">
             <button
               type="button"
               id="cheque-widget-view-list-btn"
@@ -1243,7 +1243,7 @@ export const ChequeManagementWidget: React.FC<ChequeManagementWidgetProps> = ({
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="inline-flex rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] p-0.5 text-[11px] font-mono">
+                <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-[var(--panel)] border border-[var(--steel-line)] p-0.5 text-[11px] font-mono max-w-full">
                   <button
                     type="button"
                     onClick={() => {

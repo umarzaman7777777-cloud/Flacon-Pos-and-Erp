@@ -24,7 +24,8 @@ import {
   ChevronLeft,
   ChevronRight,
   List as ListIcon,
-  X
+  X,
+  Package
 } from 'lucide-react';
 import {
   AppState,
@@ -40,7 +41,9 @@ import {
   updateChequeStatusAndAutoReverse,
   endorseCustomerChequeToSupplier
 } from '../utils/chequeManager';
+import { summarizeTrackedChequeBatches } from '../utils/batchTrackingGenerator';
 import { hapticTap, hapticTransactionComplete } from '../utils/haptics';
+import { ChequeDetailSidePanel } from './ChequeDetailSidePanel';
 
 interface ChequesViewProps {
   state: AppState;
@@ -124,6 +127,15 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
   const [searchField, setSearchField] = useState<'all' | 'customer' | 'amount' | 'chequeNo'>('all');
   const [activeTab, setActiveTab] = useState<'all' | 'endorsed' | 'presented' | 'overdue' | 'pending' | 'cleared' | 'bounced'>('all');
   const [selectedBank, setSelectedBank] = useState<string>('all');
+  const [selectedAccountType, setSelectedAccountType] = useState<
+    'all' | 'customer_received' | 'endorsed_to_supplier' | 'company_issued' | 'raw_supplier' | 'other_ledger'
+  >('all');
+  const [dateWindowPreset, setDateWindowPreset] = useState<
+    'all' | 'today' | 'next_7_days' | 'this_month' | 'last_30_days' | 'overdue_window' | 'custom'
+  >('all');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>('all');
 
   // Calendar State
   const todayStr = todayISO();
@@ -159,11 +171,35 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
     bankName: 'HBL',
     amount: '',
     chequeDate: todayISO(),
+    batchId: '',
     notes: ''
   });
 
   // Extract all cheques dynamically
   const allCheques = useMemo(() => extractAllCheques(state), [state]);
+
+  // Keep selected detail cheque synchronized with latest AppState transitions
+  const liveDetailCheque = useMemo(() => {
+    if (!viewDetailsCheque) return null;
+    return (
+      allCheques.find(c => c.id === viewDetailsCheque.id || c.chequeNo === viewDetailsCheque.chequeNo) ||
+      viewDetailsCheque
+    );
+  }, [viewDetailsCheque, allCheques]);
+
+  // Summarize tracked batches linked to cheques and flag batches within 3 days of due date
+  const trackedBatchSummaries = useMemo(
+    () => summarizeTrackedChequeBatches(allCheques, 3),
+    [allCheques]
+  );
+
+  const availableOrderBatches = useMemo(() => {
+    const set = new Set<string>();
+    (state.transactions || []).forEach(t => {
+      if (t.batchId && t.batchId.trim()) set.add(t.batchId.trim().toUpperCase());
+    });
+    return Array.from(set);
+  }, [state.transactions]);
 
   // Unique banks for filtering
   const banksList = useMemo(() => {
@@ -173,6 +209,83 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
     });
     return Array.from(set);
   }, [allCheques]);
+
+  // Helper to normalize DD/MM/YYYY or YYYY-MM-DD to YYYY-MM-DD
+  const normalizeDueDateISO = (raw?: string): string => {
+    if (!raw) return '';
+    const trimmed = raw.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
+    const fromDmy = dmyToISO(trimmed);
+    if (fromDmy) return fromDmy;
+    const parsed = parseDMY(trimmed);
+    if (parsed) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+    }
+    return '';
+  };
+
+  // Apply quick maturity date-window preset
+  const handleDateWindowPresetChange = (
+    preset: 'all' | 'today' | 'next_7_days' | 'this_month' | 'last_30_days' | 'overdue_window' | 'custom'
+  ) => {
+    hapticTap();
+    setDateWindowPreset(preset);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const [ty, tm, td] = todayStr.split('-').map(Number);
+    const base = new Date(ty, tm - 1, td);
+    const toISO = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    if (preset === 'all') {
+      setFilterStartDate('');
+      setFilterEndDate('');
+    } else if (preset === 'today') {
+      setFilterStartDate(todayStr);
+      setFilterEndDate(todayStr);
+    } else if (preset === 'next_7_days') {
+      const end = new Date(base);
+      end.setDate(end.getDate() + 7);
+      setFilterStartDate(todayStr);
+      setFilterEndDate(toISO(end));
+    } else if (preset === 'this_month') {
+      const start = new Date(ty, tm - 1, 1);
+      const end = new Date(ty, tm, 0);
+      setFilterStartDate(toISO(start));
+      setFilterEndDate(toISO(end));
+    } else if (preset === 'last_30_days') {
+      const start = new Date(base);
+      start.setDate(start.getDate() - 30);
+      setFilterStartDate(toISO(start));
+      setFilterEndDate(todayStr);
+    } else if (preset === 'overdue_window') {
+      const yesterday = new Date(base);
+      yesterday.setDate(yesterday.getDate() - 1);
+      setFilterStartDate('');
+      setFilterEndDate(toISO(yesterday));
+    }
+  };
+
+  const hasActiveSearchOrFilters =
+    Boolean(searchTerm.trim()) ||
+    selectedBank !== 'all' ||
+    selectedAccountType !== 'all' ||
+    selectedBatchFilter !== 'all' ||
+    Boolean(filterStartDate) ||
+    Boolean(filterEndDate) ||
+    activeTab !== 'all';
+
+  const handleResetAllFilters = () => {
+    hapticTap();
+    setSearchTerm('');
+    setSearchField('all');
+    setActiveTab('all');
+    setSelectedBank('all');
+    setSelectedAccountType('all');
+    setSelectedBatchFilter('all');
+    setDateWindowPreset('all');
+    setFilterStartDate('');
+    setFilterEndDate('');
+  };
 
   // Filtered Cheques
   const filteredCheques = useMemo(() => {
@@ -188,7 +301,47 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
       // Bank filter
       if (selectedBank !== 'all' && cheque.bankName !== selectedBank) return false;
 
-      // Search term (Customer name, Amount, or Cheque #)
+      // Account Type / Source filter
+      if (selectedAccountType !== 'all') {
+        if (selectedAccountType === 'customer_received' && cheque.chequeType !== 'customer_received') {
+          return false;
+        }
+        if (selectedAccountType === 'endorsed_to_supplier' && cheque.chequeType !== 'endorsed_to_supplier') {
+          return false;
+        }
+        if (selectedAccountType === 'company_issued' && cheque.chequeType !== 'company_issued') {
+          return false;
+        }
+        if (
+          selectedAccountType === 'raw_supplier' &&
+          !cheque.supplierName &&
+          !cheque.supplierEntryId &&
+          cheque.chequeType !== 'endorsed_to_supplier'
+        ) {
+          return false;
+        }
+        if (selectedAccountType === 'other_ledger' && !cheque.otherLedgerType) {
+          return false;
+        }
+      }
+
+      // Batch filter
+      if (selectedBatchFilter !== 'all') {
+        const matchesBatch =
+          cheque.batchId === selectedBatchFilter ||
+          Boolean(cheque.batchIds?.includes(selectedBatchFilter));
+        if (!matchesBatch) return false;
+      }
+
+      // Maturity Date Range filter
+      if (filterStartDate || filterEndDate) {
+        const normalizedMaturity = normalizeDueDateISO(cheque.chequeDate);
+        if (!normalizedMaturity) return false;
+        if (filterStartDate && normalizedMaturity < filterStartDate) return false;
+        if (filterEndDate && normalizedMaturity > filterEndDate) return false;
+      }
+
+      // Search term (Customer name, Amount, Cheque #, or Batch ID)
       if (searchTerm.trim()) {
         const q = searchTerm.trim().toLowerCase();
         const normalizedNoQ = q.replace(/^#/, '');
@@ -203,6 +356,9 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
           Boolean(cheque.supplierName?.toLowerCase().includes(q));
         const matchesBank = Boolean(cheque.bankName?.toLowerCase().includes(q));
         const matchesNotes = Boolean(cheque.notes?.toLowerCase().includes(q));
+        const matchesBatch =
+          Boolean(cheque.batchId?.toLowerCase().includes(q)) ||
+          Boolean(cheque.batchIds?.some(b => b.toLowerCase().includes(q)));
         const matchesAmount =
           (numericQ.length > 0 && String(cheque.amount).includes(numericQ)) ||
           cheque.amount.toLocaleString().toLowerCase().includes(q) ||
@@ -223,28 +379,24 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
           matchesAmount ||
           matchesOtherParties ||
           matchesBank ||
-          matchesNotes
+          matchesNotes ||
+          matchesBatch
         );
       }
 
       return true;
     });
-  }, [allCheques, activeTab, selectedBank, searchTerm, searchField]);
-
-  // Helper to normalize DD/MM/YYYY or YYYY-MM-DD to YYYY-MM-DD
-  const normalizeDueDateISO = (raw?: string): string => {
-    if (!raw) return '';
-    const trimmed = raw.trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed.slice(0, 10);
-    const fromDmy = dmyToISO(trimmed);
-    if (fromDmy) return fromDmy;
-    const parsed = parseDMY(trimmed);
-    if (parsed) {
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
-    }
-    return '';
-  };
+  }, [
+    allCheques,
+    activeTab,
+    selectedBank,
+    selectedAccountType,
+    selectedBatchFilter,
+    filterStartDate,
+    filterEndDate,
+    searchTerm,
+    searchField
+  ]);
 
   // Map filtered cheques by normalized maturity/due date for Monthly Calendar view
   const chequesByDueDate = useMemo(() => {
@@ -312,6 +464,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
       hasPresented: boolean;
       hasPending: boolean;
       hasCleared: boolean;
+      hasBatchDueWithin3Days: boolean;
     }> = [];
 
     let monthCount = 0;
@@ -347,7 +500,8 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
         hasOverdue: cheques.some(ch => ch.status === 'overdue'),
         hasPresented: cheques.some(ch => ch.status === 'presented'),
         hasPending: cheques.some(ch => ch.status === 'pending'),
-        hasCleared: cheques.some(ch => ch.status === 'cleared')
+        hasCleared: cheques.some(ch => ch.status === 'cleared'),
+        hasBatchDueWithin3Days: cheques.some(ch => Boolean(ch.isBatchDueSoon))
       });
     }
 
@@ -594,6 +748,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
       chequeDate: endorseForm.chequeDate || todayISO(),
       customerName: endorseForm.customerName.trim(),
       supplierName: endorseForm.supplierName.trim(),
+      batchId: endorseForm.batchId.trim() || undefined,
       notes: endorseForm.notes.trim()
     });
 
@@ -609,6 +764,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
       bankName: 'HBL',
       amount: '',
       chequeDate: todayISO(),
+      batchId: '',
       notes: ''
     });
   };
@@ -839,7 +995,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Monthly / List View Toggle */}
-          <div className="inline-flex rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] p-0.5 text-xs font-mono">
+          <div className="inline-flex flex-wrap gap-0.5 rounded-xl bg-[var(--panel-raised)] border border-[var(--steel-line)] p-0.5 text-xs font-mono max-w-full">
             <button
               type="button"
               id="cheques-view-list-btn"
@@ -1003,75 +1159,207 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
       </div>
 
       {/* Search & Filtering Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3">
-        {/* Search Input Bar (Customer Name, Amount, or Cheque #) */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-[280px]">
-          <select
-            aria-label="Search field"
-            value={searchField}
-            onChange={e => setSearchField(e.target.value as 'all' | 'customer' | 'amount' | 'chequeNo')}
-            className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-amber-300 font-bold focus:outline-hidden focus:border-amber-400 shrink-0 cursor-pointer"
-          >
-            <option value="all">All Fields</option>
-            <option value="customer">Customer</option>
-            <option value="amount">Amount</option>
-            <option value="chequeNo">Cheque #</option>
-          </select>
+      <div className="space-y-2.5 bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3">
+        {/* Top Row: Search Input + Account Type + Date Range + Bank */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Search Input Bar (Customer Name, Amount, or Cheque #) */}
+          <div className="flex items-center gap-1.5 flex-1 min-w-[260px]">
+            <select
+              aria-label="Search field"
+              value={searchField}
+              onChange={e => setSearchField(e.target.value as 'all' | 'customer' | 'amount' | 'chequeNo')}
+              className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs font-mono text-amber-300 font-bold focus:outline-hidden focus:border-amber-400 shrink-0 cursor-pointer"
+            >
+              <option value="all">All Fields</option>
+              <option value="customer">Customer</option>
+              <option value="amount">Amount</option>
+              <option value="chequeNo">Cheque #</option>
+            </select>
 
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-            <input
-              id="cheques-search-input"
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              placeholder={
-                searchField === 'customer'
-                  ? 'Filter by customer name...'
-                  : searchField === 'amount'
-                  ? 'Filter by amount (e.g. 50000 or 50,000)...'
-                  : searchField === 'chequeNo'
-                  ? 'Filter by cheque number (e.g. 849102)...'
-                  : 'Search customer name, amount, or cheque #...'
-              }
-              className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg pl-9 pr-24 py-1.5 text-xs text-[var(--text)] placeholder-zinc-500 focus:outline-hidden focus:border-amber-400 font-mono"
-            />
-            {searchTerm.trim() && (
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 font-mono text-[10px] font-bold">
-                  {filteredCheques.length} found
-                </span>
+            <div className="relative flex-1 min-w-0">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+              <input
+                id="cheques-search-input"
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder={
+                  searchField === 'customer'
+                    ? 'Filter by customer name...'
+                    : searchField === 'amount'
+                    ? 'Filter by amount (e.g. 50000 or 50,000)...'
+                    : searchField === 'chequeNo'
+                    ? 'Filter by cheque number (e.g. 849102)...'
+                    : 'Search customer name, amount, or cheque #...'
+                }
+                className="w-full bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg pl-9 pr-24 py-1.5 text-xs text-[var(--text)] placeholder-zinc-500 focus:outline-hidden focus:border-amber-400 font-mono"
+              />
+              {searchTerm.trim() && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-200 font-mono text-[10px] font-bold">
+                    {filteredCheques.length} found
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    aria-label="Clear search"
+                    title="Clear search"
+                    className="p-0.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Account Type (Source Ledger) Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <label
+              htmlFor="cheques-account-type-filter"
+              className="text-[11px] font-mono text-zinc-400 whitespace-nowrap flex items-center gap-1"
+            >
+              <Building size={12} className="text-sky-400" />
+              <span>Account Type:</span>
+            </label>
+            <select
+              id="cheques-account-type-filter"
+              value={selectedAccountType}
+              onChange={e => setSelectedAccountType(e.target.value as any)}
+              className={`bg-[var(--panel-raised)] border rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-hidden focus:border-amber-400 cursor-pointer ${
+                selectedAccountType !== 'all'
+                  ? 'border-sky-400/70 text-sky-200 font-bold'
+                  : 'border-[var(--steel-line)] text-[var(--text)]'
+              }`}
+            >
+              <option value="all">All Accounts (Sources)</option>
+              <option value="customer_received">Customer / Factory Receipts</option>
+              <option value="endorsed_to_supplier">Endorsed (Customer → Supplier)</option>
+              <option value="raw_supplier">Raw Material Suppliers</option>
+              <option value="company_issued">Company Issued (Own Cheque)</option>
+              <option value="other_ledger">Painters & Job-Work Ledgers</option>
+            </select>
+          </div>
+
+          {/* Bank Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="cheques-bank-filter" className="text-[11px] font-mono text-zinc-400 whitespace-nowrap">
+              Bank:
+            </label>
+            <select
+              id="cheques-bank-filter"
+              value={selectedBank}
+              onChange={e => setSelectedBank(e.target.value)}
+              className={`bg-[var(--panel-raised)] border rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-hidden focus:border-amber-400 cursor-pointer ${
+                selectedBank !== 'all'
+                  ? 'border-amber-400/70 text-amber-200 font-bold'
+                  : 'border-[var(--steel-line)] text-[var(--text)]'
+              }`}
+            >
+              <option value="all">All Banks</option>
+              {banksList.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Second Row: Maturity Date Range Window Filter */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-[var(--steel-line)]/60">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <label
+              htmlFor="cheques-date-window-filter"
+              className="text-[11px] text-zinc-400 whitespace-nowrap flex items-center gap-1"
+            >
+              <Calendar size={12} className="text-amber-400" />
+              <span>Date Range:</span>
+            </label>
+
+            <select
+              id="cheques-date-window-filter"
+              value={dateWindowPreset}
+              onChange={e => handleDateWindowPresetChange(e.target.value as any)}
+              className={`bg-[var(--panel-raised)] border rounded-lg px-2.5 py-1.5 text-xs font-mono focus:outline-hidden focus:border-amber-400 cursor-pointer ${
+                dateWindowPreset !== 'all'
+                  ? 'border-amber-400/70 text-amber-200 font-bold'
+                  : 'border-[var(--steel-line)] text-[var(--text)]'
+              }`}
+            >
+              <option value="all">All Maturity Dates</option>
+              <option value="today">Maturing Today ({todayStr})</option>
+              <option value="next_7_days">Next 7 Days Window</option>
+              <option value="this_month">This Month</option>
+              <option value="last_30_days">Past 30 Days</option>
+              <option value="overdue_window">Before Today (Past Maturity)</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] uppercase text-zinc-500">From</span>
+                <input
+                  id="cheques-date-start-input"
+                  type="date"
+                  aria-label="Maturity start date"
+                  value={filterStartDate}
+                  onChange={e => {
+                    setFilterStartDate(e.target.value);
+                    setDateWindowPreset('custom');
+                  }}
+                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2 py-1 text-xs text-[var(--text)] focus:outline-hidden focus:border-amber-400"
+                />
+              </div>
+
+              <span className="text-zinc-500">→</span>
+
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] uppercase text-zinc-500">To</span>
+                <input
+                  id="cheques-date-end-input"
+                  type="date"
+                  aria-label="Maturity end date"
+                  value={filterEndDate}
+                  onChange={e => {
+                    setFilterEndDate(e.target.value);
+                    setDateWindowPreset('custom');
+                  }}
+                  className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2 py-1 text-xs text-[var(--text)] focus:outline-hidden focus:border-amber-400"
+                />
+              </div>
+
+              {(filterStartDate || filterEndDate) && (
                 <button
                   type="button"
-                  onClick={() => setSearchTerm('')}
-                  aria-label="Clear search"
-                  title="Clear search"
-                  className="p-0.5 rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white transition cursor-pointer"
+                  onClick={() => handleDateWindowPresetChange('all')}
+                  className="px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-[10px] font-bold transition cursor-pointer whitespace-nowrap"
+                  title="Clear date range filter"
                 >
-                  <X size={12} />
+                  Clear Dates
                 </button>
-              </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 ml-auto text-[11px] font-mono">
+            <span className="px-2 py-1 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-zinc-300">
+              Showing <strong className="text-amber-300">{filteredCheques.length}</strong> of {allCheques.length} cheques
+            </span>
+            {hasActiveSearchOrFilters && (
+              <button
+                type="button"
+                id="cheques-reset-filters-btn"
+                onClick={handleResetAllFilters}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/35 text-rose-200 hover:bg-rose-500 hover:text-white font-bold transition cursor-pointer whitespace-nowrap"
+              >
+                <X size={12} />
+                <span>Reset Filters</span>
+              </button>
             )}
           </div>
         </div>
 
-        {/* Bank Dropdown */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-400">Bank:</span>
-          <select
-            value={selectedBank}
-            onChange={e => setSelectedBank(e.target.value)}
-            className="bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-amber-400"
-          >
-            <option value="all">All Banks</option>
-            {banksList.map(b => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Segmented Filter Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto w-full md:w-auto">
+        {/* Third Row: Segmented Status Tabs */}
+        <div className="flex flex-wrap items-center gap-1 pt-2 border-t border-[var(--steel-line)]/60">
           {[
             { id: 'all', label: 'All', count: allCheques.length, dotCls: '' },
             { id: 'endorsed', label: 'Endorsed (3rd-Party)', count: stats.endorsedCount, dotCls: 'bg-sky-400' },
@@ -1085,7 +1373,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'bg-amber-500 text-black shadow-sm'
                   : 'bg-[var(--panel-raised)] border border-[var(--steel-line)] text-zinc-400 hover:text-white'
@@ -1104,6 +1392,104 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Tracked Batches Due-Window Strip (Highlights batches within 3 days of due date with subtle warning icon) */}
+      {trackedBatchSummaries.length > 0 && (
+        <div
+          id="cheques-batch-tracking-strip"
+          className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-3 space-y-2"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 font-mono">
+              <Package size={14} className="text-amber-400 shrink-0" />
+              <span className="font-bold text-[var(--text)] uppercase tracking-wide text-[11px]">
+                Tracked Batches Linked to Cheques
+              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--panel-raised)] border border-[var(--steel-line)] text-zinc-400">
+                {trackedBatchSummaries.length} {trackedBatchSummaries.length === 1 ? 'batch' : 'batches'}
+              </span>
+              {trackedBatchSummaries.some(b => b.isWithin3DaysOfDueDate) && (
+                <span
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/12 border border-amber-400/40 text-amber-200 font-medium"
+                  title="Active batches with a cheque due within 3 days"
+                >
+                  <AlertTriangle size={11} className="text-amber-400 shrink-0" />
+                  <span>
+                    {trackedBatchSummaries.filter(b => b.isWithin3DaysOfDueDate).length} due within 3 days
+                  </span>
+                </span>
+              )}
+            </div>
+
+            {selectedBatchFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  hapticTap();
+                  setSelectedBatchFilter('all');
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-mono cursor-pointer transition whitespace-nowrap"
+              >
+                <X size={11} />
+                <span>Show All Batches</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {trackedBatchSummaries.map(batch => {
+              const isSelected = selectedBatchFilter === batch.batchId;
+              const isWarn = batch.isWithin3DaysOfDueDate;
+
+              return (
+                <button
+                  key={batch.batchId}
+                  type="button"
+                  onClick={() => {
+                    hapticTap();
+                    setSelectedBatchFilter(prev => (prev === batch.batchId ? 'all' : batch.batchId));
+                  }}
+                  title={
+                    isWarn
+                      ? `Batch ${batch.batchId} has ${batch.dueSoonCount} cheque(s) within 3 days of due date (${batch.earliestDueDate})`
+                      : `Filter by batch ${batch.batchId} (${batch.chequeCount} cheque(s), earliest due ${batch.earliestDueDate})`
+                  }
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left font-mono text-[11px] transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-500/25 border-amber-400 text-amber-100 ring-1 ring-amber-400/50'
+                      : isWarn
+                      ? 'bg-amber-500/[0.08] border-amber-500/45 text-amber-100 hover:border-amber-400'
+                      : 'bg-[var(--panel-raised)] border-[var(--steel-line)] text-zinc-300 hover:border-zinc-500'
+                  }`}
+                >
+                  {isWarn ? (
+                    <AlertTriangle
+                      size={13}
+                      className="text-amber-400/90 shrink-0"
+                      aria-label="Within 3 days of due date"
+                    />
+                  ) : (
+                    <Package size={12} className="text-zinc-400 shrink-0" />
+                  )}
+                  <span className="font-bold">{batch.batchId}</span>
+                  <span className="text-[10px] text-zinc-400">
+                    ({batch.chequeCount})
+                  </span>
+                  {isWarn ? (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-200 border border-amber-400/35 font-semibold whitespace-nowrap">
+                      {batch.alertLabel}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-zinc-400 whitespace-nowrap">
+                      {batch.alertLabel}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Cheques Main View: Monthly Calendar OR List View */}
       {viewMode === 'calendar' ? (
@@ -1239,6 +1625,8 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                           ? 'bg-red-950/30 border-red-500/55 hover:border-red-400'
                           : cell.hasOverdue
                           ? 'bg-orange-950/30 border-orange-500/55 hover:border-orange-400'
+                          : cell.hasBatchDueWithin3Days
+                          ? 'bg-amber-500/[0.08] border-amber-400/55 hover:border-amber-300'
                           : cell.hasPresented
                           ? 'bg-amber-950/25 border-amber-500/45 hover:border-amber-400'
                           : cell.hasCleared && !cell.hasPending
@@ -1248,7 +1636,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                           : 'bg-[var(--panel-raised)]/50 border-[var(--steel-line)] hover:border-zinc-500'
                       }`}
                     >
-                      <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center justify-between w-full gap-1">
                         <span
                           className={`text-xs font-bold leading-none ${
                             cell.isToday
@@ -1260,11 +1648,21 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                         >
                           {cell.day}
                         </span>
-                        {hasCheques && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/60 text-zinc-200 font-bold">
-                            {cell.cheques.length}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {cell.hasBatchDueWithin3Days && (
+                            <span title="Due within 3 days" className="inline-flex">
+                              <AlertTriangle
+                                size={10}
+                                className="text-amber-400/90 shrink-0"
+                              />
+                            </span>
+                          )}
+                          {hasCheques && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-black/60 text-zinc-200 font-bold">
+                              {cell.cheques.length}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Plot Cheque Pills inside Day Cell */}
@@ -1311,6 +1709,10 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-emerald-500/60 border border-emerald-400" /> Cleared</span>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-orange-500/65 border border-orange-400" /> Overdue</span>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-red-500/65 border border-red-400" /> Bounced</span>
+                <span className="flex items-center gap-1 text-amber-300/90">
+                  <AlertTriangle size={11} className="text-amber-400/90" />
+                  <span>Batch Due ≤ 3d</span>
+                </span>
                 <span className="ml-auto text-sky-300 text-[10px]">Blue highlight = Next 7 Days</span>
               </div>
             </div>
@@ -1363,17 +1765,54 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                     const isBounced = cheque.status === 'bounced';
                     const isCleared = cheque.status === 'cleared';
                     const statusStyle = getChequeStatusStyle(cheque.status);
+                    const isDetailSelected = liveDetailCheque?.id === cheque.id;
 
                     return (
                       <div
                         key={`sel_${cheque.id}`}
-                        className={`p-3 rounded-xl border space-y-2 text-xs transition ${statusStyle.cardBg}`}
+                        onClick={() => {
+                          hapticTap();
+                          setViewDetailsCheque(cheque);
+                        }}
+                        className={`p-3 rounded-xl border space-y-2 text-xs transition cursor-pointer ${statusStyle.cardBg} ${
+                          isDetailSelected ? 'ring-1 ring-amber-400' : ''
+                        }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="flex items-center gap-1.5 font-mono">
+                            <div className="flex items-center gap-1.5 font-mono flex-wrap">
                               <span className="font-bold text-sm text-[var(--yellow)]">#{cheque.chequeNo}</span>
                               <span className="text-zinc-400">{cheque.bankName || 'Bank'}</span>
+                              {cheque.batchId && (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[10px] font-mono ${
+                                    cheque.isBatchDueSoon
+                                      ? 'bg-amber-500/15 border-amber-400/50 text-amber-200 font-semibold'
+                                      : 'bg-[var(--panel-raised)] border-[var(--steel-line)] text-zinc-300'
+                                  }`}
+                                  title={
+                                    cheque.isBatchDueSoon
+                                      ? `Batch ${cheque.batchId} due within 3 days (${cheque.batchDueAlert?.label})`
+                                      : `Linked Batch: ${cheque.batchId}`
+                                  }
+                                >
+                                  {cheque.isBatchDueSoon && (
+                                    <AlertTriangle size={10} className="text-amber-400/90 shrink-0" />
+                                  )}
+                                  <span>{cheque.batchId}</span>
+                                </span>
+                              )}
+                              {!cheque.batchId && cheque.isBatchDueSoon && (
+                                <span
+                                  title={`Due within 3 days (${cheque.batchDueAlert?.label || 'Due soon'})`}
+                                  className="inline-flex"
+                                >
+                                  <AlertTriangle
+                                    size={11}
+                                    className="text-amber-400/85 shrink-0"
+                                  />
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-zinc-300 mt-0.5">
                               {isEndorsed ? (
@@ -1412,7 +1851,10 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                         )}
 
                         {/* Quick Scheduling Status Actions */}
-                        <div className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-[var(--steel-line)]/60">
+                        <div
+                          className="flex items-center gap-1.5 flex-wrap pt-1.5 border-t border-[var(--steel-line)]/60"
+                          onClick={e => e.stopPropagation()}
+                        >
                           {!isPresented && !isCleared && !isBounced && (
                             <button
                               type="button"
@@ -1451,11 +1893,15 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                           )}
                           <button
                             type="button"
-                            onClick={() => setViewDetailsCheque(cheque)}
-                            className="ml-auto p-1 rounded bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition cursor-pointer"
-                            title="View Full Cross-Check Details"
+                            onClick={() => {
+                              hapticTap();
+                              setViewDetailsCheque(cheque);
+                            }}
+                            className="ml-auto px-2 py-1 rounded bg-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-700 inline-flex items-center gap-1 text-[11px] transition cursor-pointer"
+                            title="Open Side-Panel Detailed View"
                           >
-                            <Info size={13} />
+                            <Info size={12} />
+                            <span>Inspect</span>
                           </button>
                         </div>
                       </div>
@@ -1467,12 +1913,22 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
           </div>
         </div>
       ) : filteredCheques.length === 0 ? (
-        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-12 text-center text-zinc-500 space-y-2">
+        <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl p-12 text-center text-zinc-500 space-y-3">
           <CreditCard size={36} className="mx-auto text-zinc-600 mb-2" />
           <div className="text-sm font-bold text-zinc-300">No Cheques Matching Current Filters</div>
           <p className="text-xs max-w-md mx-auto">
             You can record customer cheques or directly endorse cheques to raw material suppliers using the button above.
           </p>
+          {hasActiveSearchOrFilters && (
+            <button
+              type="button"
+              onClick={handleResetAllFilters}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500 hover:text-black text-xs font-bold font-mono transition cursor-pointer"
+            >
+              <RefreshCw size={13} />
+              <span>Clear All Search & Filter Criteria</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-xl overflow-hidden shadow-xs">
@@ -1496,18 +1952,48 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                   const isBounced = cheque.status === 'bounced';
                   const isCleared = cheque.status === 'cleared';
                   const statusStyle = getChequeStatusStyle(cheque.status);
+                  const isRowSelected = liveDetailCheque?.id === cheque.id;
 
                   return (
                     <tr
                       key={cheque.id}
-                      className={`transition ${statusStyle.rowBg}`}
+                      onClick={() => {
+                        hapticTap();
+                        setViewDetailsCheque(cheque);
+                      }}
+                      className={`transition cursor-pointer ${statusStyle.rowBg} ${
+                        cheque.isBatchDueSoon ? 'border-l-2 border-l-amber-400/75 bg-amber-500/[0.04]' : ''
+                      } ${isRowSelected ? 'ring-1 ring-inset ring-amber-400/80 bg-amber-500/[0.09]' : ''}`}
                     >
                       {/* Cheque # & Bank */}
                       <td className="py-3 px-3 align-top">
                         <div className="flex flex-col">
-                          <span className="font-mono font-bold text-sm text-[var(--yellow)]">
-                            #{cheque.chequeNo}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-bold text-sm text-[var(--yellow)]">
+                              #{cheque.chequeNo}
+                            </span>
+                            {cheque.batchId && (
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border text-[10px] font-mono ${
+                                  cheque.isBatchDueSoon
+                                    ? 'bg-amber-500/15 border-amber-400/50 text-amber-200 font-semibold'
+                                    : 'bg-[var(--panel-raised)] border-[var(--steel-line)] text-zinc-300'
+                                }`}
+                                title={
+                                  cheque.isBatchDueSoon
+                                    ? `Batch ${cheque.batchId} due within 3 days (${cheque.batchDueAlert?.label})`
+                                    : `Tracked Batch: ${cheque.batchId}`
+                                }
+                              >
+                                {cheque.isBatchDueSoon ? (
+                                  <AlertTriangle size={10} className="text-amber-400/90 shrink-0" />
+                                ) : (
+                                  <Package size={10} className="text-zinc-400 shrink-0" />
+                                )}
+                                <span>{cheque.batchId}</span>
+                              </span>
+                            )}
+                          </div>
                           <span className="text-xs text-zinc-300 font-semibold mt-0.5">
                             {cheque.bankName || 'Bank Cheque'}
                           </span>
@@ -1559,7 +2045,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                           )}
 
                           {/* Cross-linking Badge */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {cheque.isCrossLinked && (
                               <span className="inline-flex items-center gap-1 text-[10px] text-sky-300 bg-sky-500/10 px-1.5 py-0.2 rounded border border-sky-500/20 font-mono">
                                 <ShieldCheck size={11} className="text-sky-400" />
@@ -1594,6 +2080,20 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                             <span className="text-[10px] text-orange-400 font-sans font-bold flex items-center gap-1">
                               <AlertTriangle size={11} />
                               Overdue by {Math.abs(cheque.daysRemaining)} days
+                            </span>
+                          ) : cheque.isBatchDueSoon ? (
+                            <span
+                              className="text-[10px] text-amber-300 font-sans font-semibold flex items-center gap-1"
+                              title="Within 3 days of due date"
+                            >
+                              <AlertTriangle size={11} className="text-amber-400/90 shrink-0" />
+                              <span>
+                                {cheque.daysRemaining === 0
+                                  ? 'Due Today!'
+                                  : cheque.daysRemaining === 1
+                                  ? 'Due Tomorrow (≤3d)'
+                                  : `Due in ${cheque.daysRemaining} days`}
+                              </span>
                             </span>
                           ) : isPresented ? (
                             <span className="text-[10px] text-amber-300 font-sans font-semibold">
@@ -1633,7 +2133,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-3 align-top text-right">
+                      <td className="py-3 px-3 align-top text-right" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
                           {!isPresented && !isCleared && !isBounced && (
                             <button
@@ -1681,11 +2181,19 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
 
                           <button
                             type="button"
-                            onClick={() => setViewDetailsCheque(cheque)}
-                            className="p-1 rounded bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition cursor-pointer"
-                            title="View Full Cross-Check Details"
+                            onClick={() => {
+                              hapticTap();
+                              setViewDetailsCheque(cheque);
+                            }}
+                            className={`px-2 py-1 rounded inline-flex items-center gap-1 text-[11px] font-semibold transition cursor-pointer ${
+                              isRowSelected
+                                ? 'bg-amber-500 text-black'
+                                : 'bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700'
+                            }`}
+                            title="Open Detailed Side Panel"
                           >
-                            <Info size={14} />
+                            <Info size={12} />
+                            <span>Details</span>
                           </button>
                         </div>
                       </td>
@@ -1822,6 +2330,32 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
                 </div>
               </div>
 
+              {/* Production Batch Tag (Optional) */}
+              <div>
+                <label className="block text-zinc-400 mb-1 font-medium">Production Batch ID (Optional):</label>
+                <div className="flex gap-2">
+                  {availableOrderBatches.length > 0 && (
+                    <select
+                      value={availableOrderBatches.includes(endorseForm.batchId) ? endorseForm.batchId : ''}
+                      onChange={e => setEndorseForm({ ...endorseForm, batchId: e.target.value })}
+                      className="flex-1 bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-3 py-2 font-mono text-[var(--text)] focus:border-amber-400"
+                    >
+                      <option value="">No Batch Linked</option>
+                      {availableOrderBatches.map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="e.g. BATCH-202609-LOT02"
+                    value={endorseForm.batchId}
+                    onChange={e => setEndorseForm({ ...endorseForm, batchId: e.target.value.toUpperCase() })}
+                    className="flex-1 bg-[var(--panel-raised)] border border-[var(--steel-line)] rounded-lg px-3 py-2 font-mono text-[var(--text)] focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
               {/* Memo Notes */}
               <div>
                 <label className="block text-zinc-400 mb-1 font-medium">Notes / Purpose (Optional):</label>
@@ -1945,122 +2479,17 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 3: VIEW FULL DETAILS & CROSS-CHECK BREAKDOWN */}
-      {viewDetailsCheque && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-            <div className="p-4 border-b border-[var(--steel-line)] bg-[var(--panel-raised)]/60 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Info size={18} className="text-amber-400" />
-                <h3 className="font-serif font-bold text-base text-[var(--text)]">
-                  Cheque Audit & Ledger Cross-Check
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewDetailsCheque(null)}
-                className="text-zinc-400 hover:text-white p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3 text-xs font-mono">
-              {(() => {
-                const detailStatusStyle = getChequeStatusStyle(viewDetailsCheque.status);
-                return (
-                  <div className={`grid grid-cols-2 gap-2.5 p-3.5 rounded-xl border ${detailStatusStyle.cardBg}`}>
-                    <div>
-                      <span className="text-zinc-400 block">Cheque Number:</span>
-                      <span className="font-bold text-amber-400 text-sm">#{viewDetailsCheque.chequeNo}</span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 block">Amount:</span>
-                      <span className="font-bold text-white text-sm">{fmt(viewDetailsCheque.amount)}</span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 block">Bank Name:</span>
-                      <span className="text-zinc-200">{viewDetailsCheque.bankName || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 block mb-1">Status:</span>
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border font-bold uppercase text-[11px] ${detailStatusStyle.badgeBg}`}
-                      >
-                        {viewDetailsCheque.status === 'cleared' && <CheckCircle2 size={12} />}
-                        {viewDetailsCheque.status === 'presented' && <Clock size={12} />}
-                        {viewDetailsCheque.status === 'bounced' && <XCircle size={12} />}
-                        {viewDetailsCheque.status === 'overdue' && <AlertTriangle size={12} />}
-                        {viewDetailsCheque.status === 'pending' && <Clock size={12} />}
-                        <span>{detailStatusStyle.label}</span>
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 block">Maturity Date:</span>
-                      <span className="text-zinc-200">{viewDetailsCheque.chequeDate}</span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-400 block">Days Status:</span>
-                      <span className={`font-semibold ${detailStatusStyle.textAccent}`}>
-                        {viewDetailsCheque.daysRemaining < 0
-                          ? `${Math.abs(viewDetailsCheque.daysRemaining)} days overdue`
-                          : `${viewDetailsCheque.daysRemaining} days remaining`}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Cross-Link Status */}
-              <div className="p-3 rounded-xl bg-zinc-900 border border-[var(--steel-line)] space-y-1.5 font-sans">
-                <span className="text-xs font-bold text-zinc-300 block">Cross-Ledger Verification:</span>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-zinc-400">Customer Ledger:</span>
-                  <span className="font-semibold text-emerald-400">
-                    {viewDetailsCheque.customerLedgerName || viewDetailsCheque.payerParty}
-                  </span>
-                </div>
-                {viewDetailsCheque.supplierName && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-zinc-400">Raw Supplier Ledger:</span>
-                    <span className="font-semibold text-sky-400">
-                      {viewDetailsCheque.supplierName}
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center gap-2 text-xs mt-2">
-                  <span className="text-zinc-400">Reversal Status:</span>
-                  <span
-                    className={
-                      viewDetailsCheque.reversalApplied
-                        ? 'px-2 py-0.5 rounded border bg-red-600/30 border-red-400/55 text-red-100 font-bold'
-                        : 'px-2 py-0.5 rounded bg-slate-700/50 text-slate-300 border border-slate-600/50'
-                    }
-                  >
-                    {viewDetailsCheque.reversalApplied ? 'Reversal Entry Posted in Ledgers' : 'Not Required / Pending'}
-                  </span>
-                </div>
-              </div>
-
-              {viewDetailsCheque.notes && (
-                <div className="p-2.5 rounded-lg bg-[var(--panel-raised)] text-zinc-400 text-xs">
-                  <strong className="text-zinc-300">Memo / Details:</strong> {viewDetailsCheque.notes}
-                </div>
-              )}
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setViewDetailsCheque(null)}
-                  className="px-4 py-2 rounded-xl bg-zinc-800 text-zinc-300 hover:bg-zinc-700 font-semibold"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* SIDE PANEL 3: DETAILED VIEW AGGREGATING HISTORY, ORIGINAL INVOICE REFERENCE & BATCH METADATA */}
+      <ChequeDetailSidePanel
+        state={state}
+        cheque={liveDetailCheque}
+        filteredCheques={filteredCheques}
+        onClose={() => setViewDetailsCheque(null)}
+        onSelectCheque={cheque => setViewDetailsCheque(cheque)}
+        onUpdateStatus={handleUpdateStatus}
+        onNavigateToView={onNavigateToView}
+        getStatusStyle={getChequeStatusStyle}
+      />
 
       {/* MODAL 4: CUSTOMER CLEARED VS BOUNCED SUMMARY REPORT (PDF & CSV) */}
       {isSummaryReportModalOpen && (
@@ -2290,7 +2719,7 @@ export const ChequesView: React.FC<ChequesViewProps> = ({
               <span className="text-[11px] font-mono text-zinc-400">
                 Range: {reportStartDate || 'Beginning'} → {reportEndDate || 'Today'}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsSummaryReportModalOpen(false)}

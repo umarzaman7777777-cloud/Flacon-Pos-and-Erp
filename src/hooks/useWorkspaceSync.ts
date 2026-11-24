@@ -48,6 +48,7 @@ import { autoAuthenticateAndGetActiveToken, refreshGoogleWorkspaceTokenSilently 
 import firebaseConfig from '../../firebase-applet-config.json';
 import { auth } from '../firebase/config';
 import { openExternalUrl } from '../utils/openExternalUrl';
+import { notifyBackupEvent } from '../utils/workshopNotifications';
 
 export interface WorkspaceSyncState {
   // Google Sheets
@@ -217,11 +218,21 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           setDriveSuccessMsg(`✓ Automated scheduled backup saved to Google Drive: ${uploaded.name}`);
           setTimeout(() => setDriveSuccessMsg(null), 5000);
           notifyWorkspaceSyncUpdated();
+          notifyBackupEvent({
+            status: 'success',
+            title: '☁️ Drive Auto-Backup Saved',
+            body: `Scheduled snapshot "${uploaded.name}" uploaded (${appState.transactions?.length || 0} orders).`
+          }).catch(() => {});
 
           // Auto-prune older backups to retain latest 6 snapshots
           pruneGoogleDriveBackups(driveTokenInfo.token, 6).catch(() => {});
-        } catch (e) {
+        } catch (e: any) {
           console.warn('[Workspace Sync] Scheduled auto-backup failed:', e);
+          notifyBackupEvent({
+            status: 'error',
+            title: '⚠️ Scheduled Backup Failed',
+            body: e?.message || 'Could not upload scheduled Drive backup. Tap to check Backup & Sync.'
+          }).catch(() => {});
         } finally {
           isBackingUpRef.current = false;
         }
@@ -329,6 +340,12 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
             refreshGoogleWorkspaceTokenSilently().catch(() => {});
             setSheetsError('Google Workspace session expired (HTTP 401). Tap Reconnect to refresh.');
             notifyWorkspaceSyncUpdated();
+            notifyBackupEvent({
+              status: 'warning',
+              title: '🔐 Google Sync Needs Reconnect',
+              body: 'Workspace session expired. Tap to refresh Sheets & Drive backup access.',
+              tag: 'falcon-backup-auth-warning'
+            }).catch(() => {});
           }
         } finally {
           setIsSyncingSheets(false);
@@ -369,6 +386,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           setDriveBackupsCount(prev => prev + 1);
           driveSuccess = true;
           console.info('[Workspace Sync] ✓ Google Drive scheduled backup uploaded:', uploaded.name);
+          notifyBackupEvent({
+            status: 'success',
+            title: '☁️ Drive Auto-Backup Complete',
+            body: `Uploaded ${uploaded.name} (${stateToSync.transactions?.length || 0} orders secured).`
+          }).catch(() => {});
 
           // Auto-prune older backups to keep Google Drive clean and respect retention limit
           pruneGoogleDriveBackups(activeToken, 6).catch(() => {});
@@ -382,6 +404,12 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
             refreshGoogleWorkspaceTokenSilently().catch(() => {});
             setDriveError('Google Workspace session expired (HTTP 401). Tap Reconnect to refresh.');
             notifyWorkspaceSyncUpdated();
+            notifyBackupEvent({
+              status: 'error',
+              title: '⚠️ Drive Backup Session Expired',
+              body: 'Reconnect Google Drive to resume automatic lockscreen backups.',
+              tag: 'falcon-backup-drive-auth'
+            }).catch(() => {});
           }
         } finally {
           setIsUploadingDrive(false);
@@ -694,6 +722,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
             description: `Falcon Rod Maker POS Full JSON Database Snapshot (${stateToBackup.transactions.length} txns, ${stateToBackup.products.length} products)`
           });
           setDriveSuccessMsg(`✓ Successfully backed up JSON database to Google Drive: ${uploaded.name}`);
+          notifyBackupEvent({
+            status: 'success',
+            title: '☁️ JSON Backup Saved to Drive',
+            body: `${uploaded.name} (${stateToBackup.transactions.length} orders)`
+          }).catch(() => {});
         } else {
           const sql = generateFullDatabaseSQL(
             stateToBackup,
@@ -709,10 +742,16 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
             description: `Falcon Rod Maker POS Full PostgreSQL Schema & Data Dump`
           });
           setDriveSuccessMsg(`✓ Successfully uploaded SQL database dump to Google Drive: ${uploaded.name}`);
+          notifyBackupEvent({
+            status: 'success',
+            title: '☁️ SQL Dump Saved to Drive',
+            body: `${uploaded.name} uploaded to workshop vault.`
+          }).catch(() => {});
         }
 
         const now = new Date().toISOString();
         setLastDriveBackup(now);
+        setLastDriveBackupTime(now);
         setDriveBackupsCount(prev => prev + 1);
         setTimeout(() => setDriveSuccessMsg(null), 5000);
         notifyWorkspaceSyncUpdated();
@@ -724,6 +763,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           console.debug('[Workspace Sync] Drive credentials refreshed silently in background.');
         } else {
           setDriveError(err?.message || 'Failed to upload backup to Google Drive.');
+          notifyBackupEvent({
+            status: 'error',
+            title: '❌ Google Drive Backup Failed',
+            body: err?.message || 'Failed to upload backup to Google Drive.'
+          }).catch(() => {});
         }
         return false;
       } finally {
@@ -778,6 +822,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
         setDriveSuccessMsg(`✓ Successfully backed up all files (JSON & SQL) to Google Drive!`);
         setTimeout(() => setDriveSuccessMsg(null), 5000);
         notifyWorkspaceSyncUpdated();
+        notifyBackupEvent({
+          status: 'success',
+          title: '☁️ Full Backup Complete (JSON & SQL)',
+          body: 'Both JSON snapshot & PostgreSQL dump uploaded to Google Drive.'
+        }).catch(() => {});
         pruneGoogleDriveBackups(token, 6).catch(() => {});
         return true;
       } catch (err: any) {
@@ -786,6 +835,11 @@ export function useWorkspaceSync(appState: AppState, terminalId: string = 'defau
           console.debug('[Workspace Sync] Drive credentials refreshed silently in background.');
         } else {
           setDriveError(err?.message || 'Failed to backup all files to Google Drive.');
+          notifyBackupEvent({
+            status: 'error',
+            title: '❌ Full Drive Backup Failed',
+            body: err?.message || 'Could not upload JSON/SQL backups.'
+          }).catch(() => {});
         }
         return false;
       } finally {

@@ -124,7 +124,7 @@ export const MobilePermissionsBanner: React.FC<MobilePermissionsBannerProps> = (
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         {state.isIframe && (
           <button
             type="button"

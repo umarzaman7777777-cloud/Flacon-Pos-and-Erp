@@ -1,15 +1,27 @@
 import {
   AppState,
+  BatchDueAlertStatus,
   ChequeRecord,
   ChequeStatus,
   ChequeStatusLogEntry,
   ChequeType,
   CustomerLedgerEntry,
+  CustomerPayment,
   RawEntry,
   PaintEntry,
-  Inquiry
+  Inquiry,
+  ProductionProjectCostEstimate,
+  Transaction
 } from '../types';
 import { todayISO, generateId, fmt, dmyToISO } from './helpers';
+import {
+  DEFAULT_BATCH_DUE_WARNING_DAYS,
+  TrackedChequeBatchSummary,
+  evaluateBatchDueWindow,
+  extractBatchIdsFromText,
+  extractOrderIdsFromText,
+  summarizeTrackedChequeBatches
+} from './batchTrackingGenerator';
 
 // Helper to normalize cheque numbers for cross-matching (e.g. "HBL-884912" -> "884912" or "hbl884912")
 export function normalizeChequeNo(chq: string): string {
@@ -70,6 +82,85 @@ export function calculateDaysRemaining(chequeDateStr?: string): { daysRemaining:
 export function extractAllCheques(state: AppState): ChequeRecord[] {
   const chequesMap = new Map<string, ChequeRecord>();
 
+  // Build quick lookup tables from transactions to resolve batch IDs & linked order IDs
+  const txnByIdMap = new Map<string, { batchId?: string; id: string }>();
+  const txnByNormChequeMap = new Map<string, Array<{ batchId?: string; id: string }>>();
+
+  (state.transactions || []).forEach(txn => {
+    txnByIdMap.set(txn.id, { id: txn.id, batchId: txn.batchId });
+    if (txn.detailBank) {
+      const chqMatch = txn.detailBank.match(/#?([0-9A-Za-z-]{3,})/);
+      if (chqMatch?.[1]) {
+        const normChq = normalizeChequeNo(chqMatch[1]);
+        if (normChq) {
+          const arr = txnByNormChequeMap.get(normChq) || [];
+          arr.push({ id: txn.id, batchId: txn.batchId });
+          txnByNormChequeMap.set(normChq, arr);
+        }
+      }
+    }
+  });
+
+  const resolveEntryBatches = (params: {
+    explicitBatchId?: string;
+    txnId?: string;
+    desc?: string;
+    detail?: string;
+    normChequeNo: string;
+  }): { batchIds: string[]; linkedOrderIds: string[] } => {
+    const batchSet = new Set<string>();
+    const orderSet = new Set<string>();
+
+    if (params.explicitBatchId && params.explicitBatchId.trim()) {
+      batchSet.add(params.explicitBatchId.trim().toUpperCase());
+    }
+
+    const combinedText = `${params.desc || ''} ${params.detail || ''}`;
+    extractBatchIdsFromText(combinedText).forEach(b => batchSet.add(b));
+
+    if (params.txnId) {
+      orderSet.add(params.txnId);
+      const matchedTxn = txnByIdMap.get(params.txnId);
+      if (matchedTxn?.batchId) {
+        batchSet.add(matchedTxn.batchId.trim().toUpperCase());
+      }
+    }
+
+    extractOrderIdsFromText(combinedText).forEach(ordId => {
+      orderSet.add(ordId);
+      const matchedTxn = txnByIdMap.get(ordId);
+      if (matchedTxn?.batchId) {
+        batchSet.add(matchedTxn.batchId.trim().toUpperCase());
+      }
+    });
+
+    const bankMatchedTxns = txnByNormChequeMap.get(params.normChequeNo) || [];
+    bankMatchedTxns.forEach(t => {
+      orderSet.add(t.id);
+      if (t.batchId) {
+        batchSet.add(t.batchId.trim().toUpperCase());
+      }
+    });
+
+    return {
+      batchIds: Array.from(batchSet),
+      linkedOrderIds: Array.from(orderSet)
+    };
+  };
+
+  const mergeBatchInfo = (
+    existing: ChequeRecord,
+    addedBatchIds: string[],
+    addedOrderIds: string[]
+  ) => {
+    const bSet = new Set<string>([...(existing.batchIds || []), ...addedBatchIds]);
+    const oSet = new Set<string>([...(existing.linkedOrderIds || []), ...addedOrderIds]);
+    const mergedBatches = Array.from(bSet);
+    existing.batchIds = mergedBatches.length > 0 ? mergedBatches : undefined;
+    existing.batchId = mergedBatches[0];
+    existing.linkedOrderIds = oSet.size > 0 ? Array.from(oSet) : undefined;
+  };
+
   // 1. Scan Customer Ledgers (Cheques received from Customers/Factories)
   (state.customerLedgers || []).forEach(account => {
     (account.entries || []).forEach(entry => {
@@ -96,6 +187,18 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
         rawStatus === 'bounced' ? 'bounced' : rawStatus === 'cleared' ? 'cleared' : rawStatus === 'presented' ? 'presented' : isOverdue ? 'overdue' : 'pending';
 
       const normKey = normalizeChequeNo(chqNumber);
+      const batchInfo = resolveEntryBatches({
+        explicitBatchId: entry.batchId,
+        txnId: entry.txnId,
+        desc: entry.desc,
+        detail: entry.detail,
+        normChequeNo: normKey
+      });
+      const batchDueAlert = evaluateBatchDueWindow(
+        chqDate,
+        finalStatus,
+        DEFAULT_BATCH_DUE_WARNING_DAYS
+      );
 
       const record: ChequeRecord = {
         id: `cheque_cust_${entry.id}`,
@@ -114,7 +217,12 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
         reversalApplied: entry.reversalEntryId !== undefined,
         isOverdue,
         daysRemaining,
-        notes: entry.detail || entry.desc
+        notes: entry.detail || entry.desc,
+        batchId: batchInfo.batchIds[0],
+        batchIds: batchInfo.batchIds.length > 0 ? batchInfo.batchIds : undefined,
+        linkedOrderIds: batchInfo.linkedOrderIds.length > 0 ? batchInfo.linkedOrderIds : undefined,
+        batchDueAlert,
+        isBatchDueSoon: batchDueAlert.isWithinWarningWindow
       };
 
       chequesMap.set(normKey, record);
@@ -149,6 +257,13 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
       const finalStatus: ChequeStatus =
         rawStatus === 'bounced' ? 'bounced' : rawStatus === 'cleared' ? 'cleared' : rawStatus === 'presented' ? 'presented' : isOverdue ? 'overdue' : 'pending';
 
+      const batchInfo = resolveEntryBatches({
+        explicitBatchId: entry.batchId,
+        desc: entry.desc,
+        detail: entry.detail,
+        normChequeNo: normKey
+      });
+
       if (existing) {
         // Cross-linked! This cheque was received from a customer AND endorsed to this raw material supplier!
         existing.isCrossLinked = true;
@@ -156,10 +271,23 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
         existing.payeeParty = supplier.name;
         existing.supplierName = supplier.name;
         existing.supplierEntryId = entry.id;
+        mergeBatchInfo(existing, batchInfo.batchIds, batchInfo.linkedOrderIds);
         if (finalStatus === 'bounced' || existing.status === 'bounced') {
           existing.status = 'bounced';
         }
+        const refreshedAlert = evaluateBatchDueWindow(
+          existing.chequeDate,
+          existing.status,
+          DEFAULT_BATCH_DUE_WARNING_DAYS
+        );
+        existing.batchDueAlert = refreshedAlert;
+        existing.isBatchDueSoon = refreshedAlert.isWithinWarningWindow;
       } else {
+        const batchDueAlert = evaluateBatchDueWindow(
+          chqDate,
+          finalStatus,
+          DEFAULT_BATCH_DUE_WARNING_DAYS
+        );
         // Falcon's own cheque issued to the supplier
         const record: ChequeRecord = {
           id: `cheque_supp_${entry.id}`,
@@ -178,7 +306,12 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
           reversalApplied: entry.reversalEntryId !== undefined,
           isOverdue,
           daysRemaining,
-          notes: entry.detail || entry.desc
+          notes: entry.detail || entry.desc,
+          batchId: batchInfo.batchIds[0],
+          batchIds: batchInfo.batchIds.length > 0 ? batchInfo.batchIds : undefined,
+          linkedOrderIds: batchInfo.linkedOrderIds.length > 0 ? batchInfo.linkedOrderIds : undefined,
+          batchDueAlert,
+          isBatchDueSoon: batchDueAlert.isWithinWarningWindow
         };
         chequesMap.set(normKey, record);
       }
@@ -202,15 +335,28 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
 
       const normKey = normalizeChequeNo(chqNumber);
       const existing = chequesMap.get(normKey);
+      const batchInfo = resolveEntryBatches({
+        explicitBatchId: entry.batchId,
+        desc: entry.desc,
+        detail: entry.detail,
+        normChequeNo: normKey
+      });
 
       if (existing) {
         existing.isCrossLinked = true;
         existing.otherLedgerType = 'paint';
         existing.otherLedgerName = painter.name;
         existing.otherEntryId = entry.id;
+        mergeBatchInfo(existing, batchInfo.batchIds, batchInfo.linkedOrderIds);
       } else {
         const chqDate = entry.chequeDate || entry.date || todayISO();
         const { daysRemaining, isOverdue } = calculateDaysRemaining(chqDate);
+        const finalStatus = ((entry.chequeStatus as any) || (isOverdue ? 'overdue' : 'pending')) as ChequeStatus;
+        const batchDueAlert = evaluateBatchDueWindow(
+          chqDate,
+          finalStatus,
+          DEFAULT_BATCH_DUE_WARNING_DAYS
+        );
         chequesMap.set(normKey, {
           id: `cheque_pnt_${entry.id}`,
           chequeNo: chqNumber,
@@ -218,7 +364,7 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
           amount,
           issueDate: entry.date,
           chequeDate: chqDate,
-          status: (entry.chequeStatus as any) || (isOverdue ? 'overdue' : 'pending'),
+          status: finalStatus,
           chequeType: 'company_issued',
           payerParty: state.companyName || 'Falcon Rod Maker',
           payeeParty: painter.name,
@@ -227,7 +373,13 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
           otherEntryId: entry.id,
           isCrossLinked: false,
           isOverdue,
-          daysRemaining
+          daysRemaining,
+          notes: entry.detail || entry.desc,
+          batchId: batchInfo.batchIds[0],
+          batchIds: batchInfo.batchIds.length > 0 ? batchInfo.batchIds : undefined,
+          linkedOrderIds: batchInfo.linkedOrderIds.length > 0 ? batchInfo.linkedOrderIds : undefined,
+          batchDueAlert,
+          isBatchDueSoon: batchDueAlert.isWithinWarningWindow
         });
       }
     });
@@ -249,12 +401,17 @@ export function extractAllCheques(state: AppState): ChequeRecord[] {
 
       const normKey = normalizeChequeNo(chqNumber);
       const existing = chequesMap.get(normKey);
+      const batchInfo = resolveEntryBatches({
+        desc: entry.desc,
+        normChequeNo: normKey
+      });
 
       if (existing) {
         existing.isCrossLinked = true;
         existing.otherLedgerType = 'custom';
         existing.otherLedgerName = ledger.name;
         existing.otherEntryId = entry.id;
+        mergeBatchInfo(existing, batchInfo.batchIds, batchInfo.linkedOrderIds);
       }
     });
   });
@@ -508,6 +665,23 @@ export function updateChequeStatusAndAutoReverse(
 
   const updatedLogs = [auditLogEntry, ...(state.chequeStatusLogs || [])];
 
+  if (typeof window !== 'undefined' && previousStatus !== newStatus) {
+    import('./workshopNotifications')
+      .then((m) =>
+        m.notifyChequeEvent({
+          chequeNo: targetCheque?.chequeNo || chequeNo,
+          status: newStatus,
+          amount,
+          payerParty: payer,
+          payeeParty: payee,
+          bankName: targetCheque?.bankName,
+          chequeDate: targetCheque?.chequeDate,
+          batchId: targetCheque?.batchId
+        })
+      )
+      .catch(() => {});
+  }
+
   return {
     newState: {
       ...state,
@@ -537,11 +711,13 @@ export function endorseCustomerChequeToSupplier(
     customerName: string;
     supplierName: string;
     notes?: string;
+    batchId?: string;
   }
 ): AppState {
   const currentDate = todayISO();
   const currentTime = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   const entryId = generateId('endorsed');
+  const cleanBatchId = params.batchId && params.batchId.trim() ? params.batchId.trim().toUpperCase() : undefined;
 
   // 1. Credit Customer Ledger
   let updatedCustomerLedgers = [...(state.customerLedgers || [])];
@@ -551,7 +727,7 @@ export function endorseCustomerChequeToSupplier(
     id: `chq_c_${entryId}`,
     date: currentDate,
     time: currentTime,
-    desc: `Cheque Received #${params.chequeNo} (${params.bankName}) · Endorsed to ${params.supplierName}`,
+    desc: `Cheque Received #${params.chequeNo} (${params.bankName}) · Endorsed to ${params.supplierName}${cleanBatchId ? ` · [${cleanBatchId}]` : ''}`,
     debit: 0,
     credit: params.amount,
     method: 'Cheque',
@@ -561,6 +737,7 @@ export function endorseCustomerChequeToSupplier(
     chequeStatus: 'pending',
     isEndorsedCheque: true,
     endorsedToSupplier: params.supplierName,
+    batchId: cleanBatchId,
     detail: params.notes || `Cheque received from ${params.customerName} and directly endorsed to Raw Material Supplier ${params.supplierName}`
   };
 
@@ -584,7 +761,7 @@ export function endorseCustomerChequeToSupplier(
     id: `chq_s_${entryId}`,
     date: currentDate,
     time: currentTime,
-    desc: `Payment via Endorsed Customer Cheque #${params.chequeNo} (${params.bankName}) from ${params.customerName}`,
+    desc: `Payment via Endorsed Customer Cheque #${params.chequeNo} (${params.bankName}) from ${params.customerName}${cleanBatchId ? ` · [${cleanBatchId}]` : ''}`,
     debit: params.amount,
     credit: 0,
     method: 'Cheque',
@@ -596,6 +773,7 @@ export function endorseCustomerChequeToSupplier(
     endorsedFromCustomer: params.customerName,
     paidBy: `Customer Cheque: ${params.customerName}`,
     paidTo: params.supplierName,
+    batchId: cleanBatchId,
     detail: params.notes || `Endorsed 3rd-party cheque received from customer ${params.customerName} given for raw material payment.`
   };
 
@@ -626,9 +804,27 @@ export function endorseCustomerChequeToSupplier(
     payerParty: params.customerName,
     payeeParty: params.supplierName,
     chequeType: 'endorsed_to_supplier',
+    batchId: cleanBatchId,
     source: 'Cheque Endorsement',
     notes: params.notes || `Customer cheque #${params.chequeNo} endorsed to ${params.supplierName} (Due ${params.chequeDate})`
   };
+
+  if (typeof window !== 'undefined') {
+    import('./workshopNotifications')
+      .then((m) =>
+        m.notifyChequeEvent({
+          chequeNo: params.chequeNo,
+          status: 'endorsed',
+          amount: params.amount,
+          payerParty: params.customerName,
+          payeeParty: params.supplierName,
+          bankName: params.bankName,
+          chequeDate: params.chequeDate,
+          batchId: cleanBatchId
+        })
+      )
+      .catch(() => {});
+  }
 
   return {
     ...state,
@@ -730,4 +926,374 @@ export function buildChequeAuditTimeline(state: AppState): ChequeStatusLogEntry[
     const tB = new Date(b.timestamp).getTime() || 0;
     return tB - tA;
   });
+}
+
+export interface ChequeSourceVoucherRef {
+  ledgerType: 'Customer Ledger' | 'Raw Supplier Ledger' | 'Painter Ledger' | 'Custom Ledger';
+  ledgerName: string;
+  entryId: string;
+  date: string;
+  time?: string;
+  desc: string;
+  detail?: string;
+  debit: number;
+  credit: number;
+  method?: string;
+  accountNumber?: string;
+  txnId?: string;
+  batchId?: string;
+}
+
+export interface ChequeInvoiceReferenceItem {
+  txnId: string;
+  date: string;
+  time: string;
+  factory: string;
+  itemsSummary: string;
+  itemCount: number;
+  sizes?: string;
+  colors?: string;
+  total: number;
+  paid: boolean;
+  method?: string | null;
+  batchId?: string;
+  trackingNumber?: string;
+  gatePassNo?: string;
+  gateSequenceNo?: string;
+  matchReason: 'Direct Invoice Link' | 'Cheque # Referenced' | 'Batch Match' | 'Recent Customer Invoice';
+  isDirectMatch: boolean;
+  payments: CustomerPayment[];
+  totalPaidOnInvoice: number;
+}
+
+export interface ChequeBatchMetadataItem {
+  batchId: string;
+  batchSummary?: TrackedChequeBatchSummary;
+  linkedTransactions: Transaction[];
+  relatedCheques: ChequeRecord[];
+  trackingNumbers: string[];
+  relatedProject?: ProductionProjectCostEstimate;
+}
+
+export interface ChequeAggregatedDetailContext {
+  cheque: ChequeRecord;
+  historyTimeline: ChequeStatusLogEntry[];
+  sourceVouchers: ChequeSourceVoucherRef[];
+  invoiceReferences: ChequeInvoiceReferenceItem[];
+  batchIds: string[];
+  trackingNumbers: string[];
+  batchDueAlert: BatchDueAlertStatus;
+  batchMetadataList: ChequeBatchMetadataItem[];
+}
+
+/**
+ * Aggregates complete contextual intelligence for a selected cheque:
+ * 1. Timestamped audit trail & source ledger vouchers
+ * 2. Original invoice / sales order references & linked customer payments
+ * 3. Associated production batch metadata, tracking numbers, and due-window warnings
+ */
+export function resolveChequeDetailContext(
+  state: AppState,
+  cheque: ChequeRecord
+): ChequeAggregatedDetailContext {
+  const normKey = normalizeChequeNo(cheque.chequeNo);
+  const allCheques = extractAllCheques(state);
+
+  // 1. Chronological History Timeline for this cheque
+  const historyTimeline = buildChequeAuditTimeline(state).filter(
+    l => l.normalizedChequeNo === normKey || normalizeChequeNo(l.chequeNo) === normKey
+  );
+
+  // 2. Originating Ledger Vouchers
+  const sourceVouchers: ChequeSourceVoucherRef[] = [];
+  const directTxnIds = new Set<string>(cheque.linkedOrderIds || []);
+  const batchIdSet = new Set<string>();
+  if (cheque.batchId && cheque.batchId.trim()) batchIdSet.add(cheque.batchId.trim().toUpperCase());
+  (cheque.batchIds || []).forEach(b => {
+    if (b && b.trim()) batchIdSet.add(b.trim().toUpperCase());
+  });
+
+  (state.customerLedgers || []).forEach(acc => {
+    (acc.entries || []).forEach(entry => {
+      const entryNorm = entry.chequeNo ? normalizeChequeNo(entry.chequeNo) : '';
+      const isMatch =
+        entry.id === cheque.customerEntryId || (normKey && entryNorm && entryNorm === normKey);
+      if (!isMatch || entry.isReversal) return;
+
+      sourceVouchers.push({
+        ledgerType: 'Customer Ledger',
+        ledgerName: acc.name,
+        entryId: entry.id,
+        date: entry.date,
+        time: entry.time,
+        desc: entry.desc,
+        detail: entry.detail,
+        debit: entry.debit,
+        credit: entry.credit,
+        method: entry.method,
+        accountNumber: entry.accountNumber,
+        txnId: entry.txnId,
+        batchId: entry.batchId
+      });
+      if (entry.txnId) directTxnIds.add(entry.txnId);
+      if (entry.batchId && entry.batchId.trim()) batchIdSet.add(entry.batchId.trim().toUpperCase());
+    });
+  });
+
+  (state.rawSuppliers || []).forEach(sup => {
+    (sup.entries || []).forEach(entry => {
+      const entryNorm = entry.chequeNo ? normalizeChequeNo(entry.chequeNo) : '';
+      const isMatch =
+        entry.id === cheque.supplierEntryId || (normKey && entryNorm && entryNorm === normKey);
+      if (!isMatch || entry.isReversal) return;
+
+      sourceVouchers.push({
+        ledgerType: 'Raw Supplier Ledger',
+        ledgerName: sup.name,
+        entryId: entry.id,
+        date: entry.date,
+        time: entry.time,
+        desc: entry.desc,
+        detail: entry.detail,
+        debit: entry.debit,
+        credit: entry.credit,
+        method: entry.method,
+        accountNumber: entry.accountNumber,
+        batchId: entry.batchId
+      });
+      if (entry.batchId && entry.batchId.trim()) batchIdSet.add(entry.batchId.trim().toUpperCase());
+    });
+  });
+
+  (state.painters || []).forEach(pnt => {
+    (pnt.entries || []).forEach(entry => {
+      const entryNorm = entry.chequeNo ? normalizeChequeNo(entry.chequeNo) : '';
+      const isMatch =
+        (cheque.otherLedgerType === 'paint' && entry.id === cheque.otherEntryId) ||
+        (normKey && entryNorm && entryNorm === normKey);
+      if (!isMatch) return;
+
+      sourceVouchers.push({
+        ledgerType: 'Painter Ledger',
+        ledgerName: pnt.name,
+        entryId: entry.id,
+        date: entry.date,
+        time: entry.time,
+        desc: entry.desc,
+        detail: entry.detail,
+        debit: entry.debit,
+        credit: entry.credit,
+        method: entry.method,
+        accountNumber: entry.accountNumber,
+        batchId: entry.batchId
+      });
+      if (entry.batchId && entry.batchId.trim()) batchIdSet.add(entry.batchId.trim().toUpperCase());
+    });
+  });
+
+  (state.customLedgersList || []).forEach(cul => {
+    (cul.entries || []).forEach(entry => {
+      const entryNorm = entry.chequeNo ? normalizeChequeNo(entry.chequeNo) : '';
+      const isMatch =
+        (cheque.otherLedgerType === 'custom' && entry.id === cheque.otherEntryId) ||
+        (normKey && entryNorm && entryNorm === normKey);
+      if (!isMatch) return;
+
+      sourceVouchers.push({
+        ledgerType: 'Custom Ledger',
+        ledgerName: cul.name,
+        entryId: entry.id,
+        date: entry.date,
+        time: entry.time,
+        desc: entry.desc,
+        detail: entry.detail,
+        debit: entry.debit,
+        credit: entry.credit,
+        method: entry.method,
+        accountNumber: entry.accountNumber
+      });
+    });
+  });
+
+  // Also capture payment records mentioning this cheque # so their txnId links to original invoice
+  const paymentMatchedTxnIds = new Set<string>();
+  const paymentsByTxnId = new Map<string, CustomerPayment[]>();
+  (state.customerPayments || []).forEach(p => {
+    const arr = paymentsByTxnId.get(p.txnId) || [];
+    arr.push(p);
+    paymentsByTxnId.set(p.txnId, arr);
+
+    if (normKey && p.detail && normalizeChequeNo(p.detail).includes(normKey)) {
+      paymentMatchedTxnIds.add(p.txnId);
+    }
+  });
+
+  // 3. Original Invoice References from Transactions
+  const invoiceReferences: ChequeInvoiceReferenceItem[] = [];
+  const matchedTxnIds = new Set<string>();
+
+  const toInvoiceRef = (
+    txn: Transaction,
+    matchReason: ChequeInvoiceReferenceItem['matchReason'],
+    isDirectMatch: boolean
+  ): ChequeInvoiceReferenceItem => {
+    const payments = paymentsByTxnId.get(txn.id) || [];
+    const totalPaidOnInvoice = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    return {
+      txnId: txn.id,
+      date: txn.date,
+      time: txn.time,
+      factory: txn.factory || cheque.customerLedgerName || 'Direct / Cash Sale',
+      itemsSummary: txn.itemsSummary,
+      itemCount: txn.itemCount,
+      sizes: txn.sizes,
+      colors: txn.colors,
+      total: txn.total,
+      paid: txn.paid,
+      method: txn.method,
+      batchId: txn.batchId,
+      trackingNumber: txn.trackingNumber,
+      gatePassNo: txn.gatePass?.gatePassNo,
+      gateSequenceNo: txn.gateSequenceNo || txn.gatePass?.gateSequenceNo,
+      matchReason,
+      isDirectMatch,
+      payments,
+      totalPaidOnInvoice
+    };
+  };
+
+  (state.transactions || []).forEach(txn => {
+    const txnBankNorm = txn.detailBank ? normalizeChequeNo(txn.detailBank) : '';
+    const txnOnlineNorm = txn.detailOnline ? normalizeChequeNo(txn.detailOnline) : '';
+    const txnNotesNorm = txn.batchNotes ? normalizeChequeNo(txn.batchNotes) : '';
+
+    const hasDirectOrderId = directTxnIds.has(txn.id);
+    const hasChequeTokenInTxn =
+      Boolean(normKey) &&
+      (txnBankNorm.includes(normKey) ||
+        txnOnlineNorm.includes(normKey) ||
+        txnNotesNorm.includes(normKey) ||
+        paymentMatchedTxnIds.has(txn.id));
+
+    const txnBatchTokens = new Set<string>();
+    if (txn.batchId && txn.batchId.trim()) txnBatchTokens.add(txn.batchId.trim().toUpperCase());
+    if (txn.itemBatches) {
+      txn.itemBatches.split(',').forEach(b => {
+        if (b.trim()) txnBatchTokens.add(b.trim().toUpperCase());
+      });
+    }
+    const hasBatchIntersection = Array.from(batchIdSet).some(b => txnBatchTokens.has(b));
+
+    if (hasDirectOrderId) {
+      matchedTxnIds.add(txn.id);
+      invoiceReferences.push(toInvoiceRef(txn, 'Direct Invoice Link', true));
+      txnBatchTokens.forEach(b => batchIdSet.add(b));
+    } else if (hasChequeTokenInTxn) {
+      matchedTxnIds.add(txn.id);
+      invoiceReferences.push(toInvoiceRef(txn, 'Cheque # Referenced', true));
+      txnBatchTokens.forEach(b => batchIdSet.add(b));
+    } else if (hasBatchIntersection) {
+      matchedTxnIds.add(txn.id);
+      invoiceReferences.push(toInvoiceRef(txn, 'Batch Match', true));
+    }
+  });
+
+  // Fallback for customer cheques with no explicit Order ID / Batch link on the voucher:
+  // surface recent invoices belonging to the same customer party clearly tagged as party context
+  const customerPartyName = cheque.customerLedgerName || (cheque.chequeType !== 'company_issued' ? cheque.payerParty : undefined);
+  if (invoiceReferences.length === 0 && customerPartyName) {
+    const targetLower = customerPartyName.trim().toLowerCase();
+    const customerTxns = (state.transactions || [])
+      .filter(t => t.factory && t.factory.trim().toLowerCase() === targetLower)
+      .slice(-3)
+      .reverse();
+
+    customerTxns.forEach(txn => {
+      if (!matchedTxnIds.has(txn.id)) {
+        matchedTxnIds.add(txn.id);
+        invoiceReferences.push(toInvoiceRef(txn, 'Recent Customer Invoice', false));
+      }
+    });
+  }
+
+  // 4. Associated Batch Metadata & Tracking Identifiers
+  const finalBatchIds = Array.from(batchIdSet);
+  const trackingSet = new Set<string>();
+  const batchSummaries = summarizeTrackedChequeBatches(allCheques, DEFAULT_BATCH_DUE_WARNING_DAYS);
+
+  const batchMetadataList: ChequeBatchMetadataItem[] = finalBatchIds.map(bId => {
+    const batchSummary = batchSummaries.find(s => s.batchId === bId);
+    const linkedTransactions = (state.transactions || []).filter(txn => {
+      if (txn.batchId && txn.batchId.trim().toUpperCase() === bId) return true;
+      if (txn.itemBatches) {
+        return txn.itemBatches
+          .split(',')
+          .some(part => part.trim().toUpperCase() === bId);
+      }
+      return false;
+    });
+
+    const trkForBatch = new Set<string>();
+    linkedTransactions.forEach(t => {
+      if (t.trackingNumber && t.trackingNumber.trim()) {
+        trkForBatch.add(t.trackingNumber.trim());
+        trackingSet.add(t.trackingNumber.trim());
+      }
+      if (t.itemTrackingNumbers) {
+        t.itemTrackingNumbers.split(',').forEach(part => {
+          if (part.trim()) {
+            trkForBatch.add(part.trim());
+            trackingSet.add(part.trim());
+          }
+        });
+      }
+    });
+
+    const relatedCheques = allCheques.filter(other => {
+      if (other.id === cheque.id) return false;
+      return (
+        other.batchId?.toUpperCase() === bId ||
+        Boolean(other.batchIds?.some(x => x.toUpperCase() === bId))
+      );
+    });
+
+    const partyLower = (cheque.customerLedgerName || cheque.payerParty || '').toLowerCase();
+    const relatedProject = (state.productionProjects || []).find(
+      p =>
+        p.projectName.toUpperCase().includes(bId) ||
+        Boolean(p.notes && p.notes.toUpperCase().includes(bId)) ||
+        (partyLower && p.targetPartyName.toLowerCase() === partyLower)
+    );
+
+    return {
+      batchId: bId,
+      batchSummary,
+      linkedTransactions,
+      relatedCheques,
+      trackingNumbers: Array.from(trkForBatch),
+      relatedProject
+    };
+  });
+
+  // Also capture tracking numbers from direct-matched invoices even if batchId was empty
+  invoiceReferences
+    .filter(inv => inv.isDirectMatch && inv.trackingNumber)
+    .forEach(inv => {
+      if (inv.trackingNumber) trackingSet.add(inv.trackingNumber);
+    });
+
+  const batchDueAlert =
+    cheque.batchDueAlert ||
+    evaluateBatchDueWindow(cheque.chequeDate, cheque.status, DEFAULT_BATCH_DUE_WARNING_DAYS);
+
+  return {
+    cheque,
+    historyTimeline,
+    sourceVouchers,
+    invoiceReferences,
+    batchIds: finalBatchIds,
+    trackingNumbers: Array.from(trackingSet),
+    batchDueAlert,
+    batchMetadataList
+  };
 }

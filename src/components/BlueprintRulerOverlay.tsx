@@ -195,55 +195,34 @@ export const BlueprintRulerOverlay: React.FC<BlueprintRulerOverlayProps> = ({
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* 2. FLOATING QUICK GRID ON/OFF SWITCH BUTTON                    */}
-      {/* Allows users to view clear app or drafting grid instantly     */}
+      {/* 2. FLOATING QUICK GRID EXIT SWITCH (Only visible while ON)     */}
+      {/* When Grid is OFF, TopBar already provides the Grid toggle btn */}
+      {/* so no floating pill overlaps bottom-right cards on mobile.     */}
       {/* ------------------------------------------------------------- */}
-      <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 z-20 flex items-center select-none opacity-60 hover:opacity-100 transition-opacity">
-        <button
-          type="button"
-          onClick={onToggleGrid}
-          title={
-            showGrid
-              ? 'Click to turn OFF Blueprint Grid (View Clear Application Interface)'
-              : 'Click to turn ON Blueprint Grid & Numeric Coordinate Rulers'
-          }
-          className={`group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full border shadow-xl transition-all duration-200 cursor-pointer active:scale-95 font-mono text-[11px] sm:text-xs font-bold backdrop-blur-md ${
-            showGrid
-              ? 'border-sky-400 bg-sky-950/85 text-sky-200 hover:bg-sky-900 shadow-[0_0_15px_rgba(56,189,248,0.35)] ring-1 ring-sky-400/40'
-              : 'border-[var(--steel-line)] bg-zinc-900/85 text-[var(--text-dim)] hover:text-white hover:border-amber-400/60 shadow-lg'
-          }`}
-        >
-          {showGrid ? (
-            <>
-              <div className="relative flex items-center justify-center">
-                <Grid size={15} className="text-sky-400 animate-pulse" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              </div>
-              <span className="flex items-center gap-1">
-                <span>Grid:</span>
-                <span className="text-emerald-400 font-black">ON</span>
-                <span className="text-[10px] text-sky-300/80 font-normal hidden sm:inline">({minorStep}px)</span>
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white font-sans font-semibold flex items-center gap-1 ml-0.5 group-hover:bg-rose-500/30 group-hover:text-rose-200 transition">
-                <EyeOff size={11} />
-                <span className="hidden sm:inline">Clear View</span>
-              </span>
-            </>
-          ) : (
-            <>
-              <Grid size={14} className="text-zinc-400 group-hover:text-amber-400 transition-colors" />
-              <span className="flex items-center gap-1">
-                <span className="text-zinc-400 group-hover:text-zinc-200">Grid:</span>
-                <span className="text-zinc-400 font-bold group-hover:text-amber-400">OFF</span>
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-sans font-semibold flex items-center gap-1 ml-0.5 group-hover:bg-amber-500 group-hover:text-black transition">
-                <Eye size={11} />
-                <span className="hidden sm:inline">Show Grid</span>
-              </span>
-            </>
-          )}
-        </button>
-      </div>
+      {showGrid && (
+        <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 z-20 flex items-center select-none opacity-85 hover:opacity-100 transition-opacity">
+          <button
+            type="button"
+            onClick={onToggleGrid}
+            title="Click to turn OFF Blueprint Grid (View Clear Application Interface)"
+            className="group flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-full border border-sky-400 bg-sky-950/85 text-sky-200 hover:bg-sky-900 shadow-[0_0_15px_rgba(56,189,248,0.35)] ring-1 ring-sky-400/40 transition-all duration-200 cursor-pointer active:scale-95 font-mono text-[11px] sm:text-xs font-bold backdrop-blur-md"
+          >
+            <div className="relative flex items-center justify-center">
+              <Grid size={15} className="text-sky-400 animate-pulse" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            </div>
+            <span className="flex items-center gap-1">
+              <span>Grid:</span>
+              <span className="text-emerald-400 font-black">ON</span>
+              <span className="text-[10px] text-sky-300/80 font-normal hidden sm:inline">({minorStep}px)</span>
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-white font-sans font-semibold flex items-center gap-1 ml-0.5 group-hover:bg-rose-500/30 group-hover:text-rose-200 transition">
+              <EyeOff size={11} />
+              <span className="hidden sm:inline">Clear View</span>
+            </span>
+          </button>
+        </div>
+      )}
     </>
   );
 };

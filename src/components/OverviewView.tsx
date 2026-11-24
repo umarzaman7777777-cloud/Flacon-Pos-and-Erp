@@ -30,11 +30,14 @@ import {
   ArrowUpRight,
   Clock,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  XCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { AppState, AppLanguage } from '../types';
 import { fmt, parseDMY } from '../utils/helpers';
 import { computeSystemFinancials, computeCustomerLedgerDetails } from '../utils/mathEngine';
+import { extractAllCheques } from '../utils/chequeManager';
 import { ChequeManagementWidget } from './ChequeManagementWidget';
 
 interface OverviewViewProps {
@@ -174,6 +177,32 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       hasAlerts: pendingPasses.length > 0 || urgentInquiries.length > 0 || lowStockPipes.length > 0
     };
   }, [state.transactions, state.inquiries, state.rawStock]);
+
+  // Cheque payment issues (Overdue & Bounced) computed via existing chequeManager logic
+  const chequeIssueSummary = useMemo(() => {
+    const allCheques = extractAllCheques(state);
+    const overdue = allCheques.filter(c => c.status === 'overdue');
+    const bounced = allCheques.filter(c => c.status === 'bounced');
+    const overdueAmount = overdue.reduce((sum, c) => sum + c.amount, 0);
+    const bouncedAmount = bounced.reduce((sum, c) => sum + c.amount, 0);
+
+    // Top critical items (bounced first, then most overdue)
+    const urgentItems = [
+      ...bounced,
+      ...[...overdue].sort((a, b) => a.daysRemaining - b.daysRemaining)
+    ].slice(0, 3);
+
+    return {
+      totalChequesCount: allCheques.length,
+      overdueCount: overdue.length,
+      overdueAmount,
+      bouncedCount: bounced.length,
+      bouncedAmount,
+      totalIssueCount: overdue.length + bounced.length,
+      totalIssueAmount: overdueAmount + bouncedAmount,
+      urgentItems
+    };
+  }, [state]);
 
   // Raw Materials inventory summary (Steel Pipe kg, fittings pcs)
   const rawMaterialsSummary = useMemo(() => {
@@ -729,7 +758,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {operationsAlerts.pendingPassesCount > 0 && (
                 <button
                   type="button"
@@ -764,6 +793,198 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* SECTION: CHEQUE PAYMENT ISSUES WATCH (OVERDUE & BOUNCED COUNTS)           */}
+      {/* ========================================================================= */}
+      <div
+        id="overview-cheque-issues-widget"
+        className={`rounded-xl border p-3.5 shadow-sm transition ${
+          chequeIssueSummary.bouncedCount > 0
+            ? 'bg-gradient-to-r from-red-950/35 via-orange-950/20 to-[var(--panel)] border-red-500/45'
+            : chequeIssueSummary.overdueCount > 0
+            ? 'bg-gradient-to-r from-orange-950/30 via-amber-950/15 to-[var(--panel)] border-orange-500/45'
+            : 'bg-[var(--panel)] border-[var(--steel-line)]'
+        }`}
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          {/* Widget Title & Status Indicator */}
+          <div className="flex items-start sm:items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                chequeIssueSummary.bouncedCount > 0
+                  ? 'bg-red-600/25 border-red-400/60 text-red-200'
+                  : chequeIssueSummary.overdueCount > 0
+                  ? 'bg-orange-600/25 border-orange-400/60 text-orange-200'
+                  : 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300'
+              }`}
+            >
+              {chequeIssueSummary.totalIssueCount > 0 ? (
+                <CreditCard size={19} />
+              ) : (
+                <CheckCircle2 size={19} />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-serif font-bold text-sm sm:text-base text-[var(--text)]">
+                  Cheque Payment Issues Monitor
+                </h3>
+                <span className="font-serif text-xs font-semibold text-amber-300">
+                  چیک ادائیگی الرٹ
+                </span>
+                {chequeIssueSummary.totalIssueCount > 0 ? (
+                  <span className="px-2 py-0.5 rounded-full bg-red-600/35 border border-red-400/60 text-red-100 font-mono text-[10px] font-bold">
+                    {chequeIssueSummary.totalIssueCount} Issue{chequeIssueSummary.totalIssueCount === 1 ? '' : 's'} · {fmt(chequeIssueSummary.totalIssueAmount)}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600/25 border border-emerald-400/50 text-emerald-200 font-mono text-[10px] font-bold">
+                    All Clear
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-mono text-[var(--text-dim)] mt-0.5">
+                {chequeIssueSummary.totalIssueCount > 0
+                  ? 'Immediate visibility on overdue & dishonoured cheques across all ledgers'
+                  : `Tracking ${chequeIssueSummary.totalChequesCount} registered cheques — zero overdue or bounced payments`}
+              </p>
+            </div>
+          </div>
+
+          {/* Overdue & Bounced Count KPI Pills + Action Links */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Overdue Cheques Counter */}
+            <button
+              type="button"
+              onClick={() => onNavigate('cheques')}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition cursor-pointer ${
+                chequeIssueSummary.overdueCount > 0
+                  ? 'bg-orange-600/25 border-orange-400/65 hover:bg-orange-600/35 text-orange-100'
+                  : 'bg-[var(--panel-raised)] border-[var(--steel-line)] hover:border-orange-500/40 text-zinc-300'
+              }`}
+              title="View Overdue Cheques in Cheques Registry"
+            >
+              <Clock
+                size={16}
+                className={chequeIssueSummary.overdueCount > 0 ? 'text-orange-300 shrink-0' : 'text-zinc-500 shrink-0'}
+              />
+              <div className="font-mono">
+                <div className="text-[10px] uppercase tracking-wider opacity-85">
+                  Overdue <span className="font-serif normal-case">(تاریخ گزیدہ)</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={`text-lg font-black leading-tight tabular-nums ${
+                      chequeIssueSummary.overdueCount > 0 ? 'text-orange-200' : 'text-[var(--text)]'
+                    }`}
+                  >
+                    {chequeIssueSummary.overdueCount}
+                  </span>
+                  <span className="text-[11px] opacity-85 tabular-nums">
+                    {fmt(chequeIssueSummary.overdueAmount)}
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {/* Bounced Cheques Counter */}
+            <button
+              type="button"
+              onClick={() => onNavigate('cheques')}
+              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border text-left transition cursor-pointer ${
+                chequeIssueSummary.bouncedCount > 0
+                  ? 'bg-red-600/30 border-red-400/70 hover:bg-red-600/40 text-red-100'
+                  : 'bg-[var(--panel-raised)] border-[var(--steel-line)] hover:border-red-500/40 text-zinc-300'
+              }`}
+              title="View Bounced Cheques in Cheques Registry"
+            >
+              <XCircle
+                size={16}
+                className={chequeIssueSummary.bouncedCount > 0 ? 'text-red-300 shrink-0' : 'text-zinc-500 shrink-0'}
+              />
+              <div className="font-mono">
+                <div className="text-[10px] uppercase tracking-wider opacity-85">
+                  Bounced <span className="font-serif normal-case">(باؤنس)</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className={`text-lg font-black leading-tight tabular-nums ${
+                      chequeIssueSummary.bouncedCount > 0 ? 'text-red-200' : 'text-[var(--text)]'
+                    }`}
+                  >
+                    {chequeIssueSummary.bouncedCount}
+                  </span>
+                  <span className="text-[11px] opacity-85 tabular-nums">
+                    {fmt(chequeIssueSummary.bouncedAmount)}
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {/* Direct Action Buttons */}
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              {chequeIssueSummary.totalIssueCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    document.getElementById('cheque-management-widget-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-2.5 py-2 rounded-xl bg-[var(--panel-raised)] hover:bg-zinc-700 border border-[var(--steel-line)] text-zinc-200 font-bold transition cursor-pointer"
+                  title="Jump to Cheque Reconciliation Watchlist below"
+                >
+                  Reconcile ↓
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onNavigate('cheques')}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold transition cursor-pointer shadow-xs"
+              >
+                <span>Cheques</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Flagged Issue Quick Strip (shows up to 3 most urgent Overdue/Bounced cheques) */}
+        {chequeIssueSummary.urgentItems.length > 0 && (
+          <div className="mt-3 pt-2.5 border-t border-[var(--steel-line)]/60 flex items-center gap-2 flex-wrap text-[11px] font-mono">
+            <span className="text-[var(--text-dim)] font-semibold uppercase tracking-wider text-[10px]">
+              Flagged:
+            </span>
+            {chequeIssueSummary.urgentItems.map(ch => {
+              const isBounced = ch.status === 'bounced';
+              return (
+                <button
+                  key={`ov_issue_${ch.id}`}
+                  type="button"
+                  onClick={() => {
+                    if (ch.customerLedgerName) {
+                      onOpenCustomerLedger(ch.customerLedgerName);
+                    } else {
+                      onNavigate('cheques');
+                    }
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border transition cursor-pointer ${
+                    isBounced
+                      ? 'bg-red-600/30 border-red-400/60 text-red-100 hover:bg-red-600/45'
+                      : 'bg-orange-600/25 border-orange-400/60 text-orange-100 hover:bg-orange-600/40'
+                  }`}
+                  title={`Open ${ch.payerParty} ledger or review cheque #${ch.chequeNo}`}
+                >
+                  <span className="font-bold">#{ch.chequeNo}</span>
+                  <span className="opacity-85 truncate max-w-[130px]">{ch.payerParty}</span>
+                  <span className="font-bold">{fmt(ch.amount)}</span>
+                  <span className="uppercase text-[9px] px-1 rounded bg-black/35 font-bold">
+                    {isBounced ? 'Bounced' : `${Math.abs(ch.daysRemaining)}d Overdue`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ========================================================================= */}
       {/* SECTION: 5-PILLAR EXECUTIVE HEARTBEAT STRIP (HIGH-IMPACT WORKSHOP METRICS) */}
@@ -991,7 +1212,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               {/* View & Period Switcher Controls */}
               <div className="flex items-center gap-2.5 flex-wrap">
                 {/* Physical Interactive Toggle Switch: Weekly Sales <-> Monthly Profit */}
-                <div className="flex items-center gap-2.5 bg-[var(--panel-raised)] border border-[var(--steel-line)] px-2.5 py-1 rounded-xl shadow-xs">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 bg-[var(--panel-raised)] border border-[var(--steel-line)] px-2.5 py-1.5 rounded-xl shadow-xs max-w-full">
                   {/* Left Option Label: Weekly Sales */}
                   <button
                     type="button"
@@ -2111,13 +2332,15 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
       {/* ========================================================================= */}
       {/* SECTION: CHEQUE MANAGEMENT & DISHONOUR RECONCILIATION WATCH WIDGET */}
       {/* ========================================================================= */}
-      <ChequeManagementWidget
-        state={state}
-        language={language}
-        onNavigate={onNavigate}
-        onOpenCustomerLedger={onOpenCustomerLedger}
-        onUpdateState={onUpdateState}
-      />
+      <div id="cheque-management-widget-section">
+        <ChequeManagementWidget
+          state={state}
+          language={language}
+          onNavigate={onNavigate}
+          onOpenCustomerLedger={onOpenCustomerLedger}
+          onUpdateState={onUpdateState}
+        />
+      </div>
 
       {/* ========================================================================= */}
       {/* SECTION: TWO-COLUMN LOWER GRID: LEADERBOARD & RECENT ACTIVITY */}

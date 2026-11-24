@@ -126,7 +126,7 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
         className="w-full max-w-5xl max-w-full overflow-x-hidden break-words bg-[var(--panel)] border border-[var(--steel-line)] rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden"
       >
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-[var(--steel-line)] flex items-center justify-between bg-[var(--panel-raised)] shrink-0">
+        <div className="p-4 sm:p-5 border-b border-[var(--steel-line)] flex flex-wrap items-center justify-between gap-3 bg-[var(--panel-raised)] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
               <ShieldCheck size={22} />
@@ -146,7 +146,7 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={handleExportCSV}
@@ -179,7 +179,7 @@ export const UnifiedGateReceiptsModal: React.FC<UnifiedGateReceiptsModalProps> =
         {/* Filter & Metric Summary Strip */}
         <div className="px-4 py-3 bg-[var(--panel-raised)]/60 border-b border-[var(--steel-line)] flex flex-wrap items-center justify-between gap-3 shrink-0">
           {/* Source Tabs */}
-          <div className="flex items-center gap-1 bg-[var(--panel)] p-1 rounded-xl border border-[var(--steel-line)] text-xs">
+          <div className="flex flex-wrap items-center gap-1 bg-[var(--panel)] p-1 rounded-xl border border-[var(--steel-line)] text-xs max-w-full">
             <button
               type="button"
               onClick={() => setFilterType('all')}

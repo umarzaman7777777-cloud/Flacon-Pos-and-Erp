@@ -527,7 +527,7 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
               </div>
             </div>
 
-            <div className="flex gap-1.5 items-center">
+            <div className="flex flex-wrap gap-1.5 items-center">
               <button
                 type="button"
                 id="btn-add-customer-raw-material"
@@ -663,11 +663,11 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
         <div className="mt-3 pt-3 border-t border-[var(--steel-line)] space-y-2.5 text-xs">
           {/* Category Tabs */}
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-1 bg-[var(--panel-raised)] p-1 rounded-xl border border-[var(--steel-line)]">
+            <div className="flex flex-wrap items-center gap-1 bg-[var(--panel-raised)] p-1 rounded-xl border border-[var(--steel-line)] max-w-full">
               <button
                 type="button"
                 onClick={() => setEntryCategory('job_work')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                   entryCategory === 'job_work'
                     ? 'bg-amber-500 text-black shadow'
                     : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -680,7 +680,7 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
               <button
                 type="button"
                 onClick={() => setEntryCategory('general')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                   entryCategory === 'general'
                     ? 'bg-amber-500 text-black shadow'
                     : 'text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -693,7 +693,7 @@ export const CustomLedgerDetailModal: React.FC<CustomLedgerDetailModalProps> = (
               <button
                 type="button"
                 onClick={() => setEntryCategory('payment')}
-                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-lg font-bold text-xs transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                   entryCategory === 'payment'
                     ? 'bg-emerald-500 text-black shadow'
                     : 'text-[var(--text-dim)] hover:text-[var(--text)]'

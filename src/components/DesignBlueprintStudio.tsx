@@ -1511,11 +1511,11 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
           <div className="lg:col-span-5 flex flex-col justify-between bg-[var(--panel)]">
             
             {/* Tabs */}
-            <div className="flex border-b border-[var(--steel-line)] bg-[var(--panel-raised)]/70 text-xs font-mono">
+            <div className="flex flex-wrap border-b border-[var(--steel-line)] bg-[var(--panel-raised)]/70 text-xs font-mono">
               <button
                 type="button"
                 onClick={() => setActiveTab('size')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'size'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1526,7 +1526,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('clamps')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'clamps'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1537,7 +1537,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('holes')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'holes'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1548,7 +1548,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('pipe')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'pipe'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1559,7 +1559,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('cotter')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'cotter'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1570,7 +1570,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
               <button
                 type="button"
                 onClick={() => setActiveTab('qa')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'qa'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1625,7 +1625,7 @@ export const DesignBlueprintStudio: React.FC<DesignBlueprintStudioProps> = ({
 
                     {/* Stepper Buttons & Slider */}
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setSpecs(prev => ({ ...prev, lengthInches: Math.max(1, prev.lengthInches - 12) }))}

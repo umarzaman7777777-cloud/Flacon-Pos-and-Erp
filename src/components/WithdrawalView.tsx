@@ -169,11 +169,11 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
           <p className="text-xs text-[var(--text-dim)]">{t('withdrawal_sub')}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setIsStudioOpen(true)}
-            className="px-3 py-1.5 rounded-lg border border-[var(--yellow)]/30 bg-[var(--yellow)]/15 text-xs font-bold text-[var(--yellow)] hover:bg-[var(--yellow)]/25 transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-lg border border-[var(--yellow)]/30 bg-[var(--yellow)]/15 text-xs font-bold text-[var(--yellow)] hover:bg-[var(--yellow)]/25 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
             title="Open Ledger Studio to select export columns & visual layout"
           >
             <Sliders size={13} />
@@ -182,21 +182,21 @@ export const WithdrawalView: React.FC<WithdrawalViewProps> = ({
           <button
             type="button"
             onClick={() => handleExportCSV()}
-            className="px-3 py-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition"
+            className="px-3 py-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition whitespace-nowrap"
           >
             CSV
           </button>
           <button
             type="button"
             onClick={() => handleExportPDF()}
-            className="px-3 py-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition"
+            className="px-3 py-1.5 rounded-lg border border-[var(--steel-line)] bg-[var(--panel-raised)] text-xs font-semibold text-[var(--text-dim)] hover:text-[var(--text)] transition whitespace-nowrap"
           >
             PDF
           </button>
           <button
             type="button"
             onClick={() => handleExportJPG()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 text-xs font-semibold text-amber-400 hover:bg-amber-500 hover:text-black transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 text-xs font-semibold text-amber-400 hover:bg-amber-500 hover:text-black transition whitespace-nowrap"
             title="Export High-Resolution JPG Image"
           >
             <ImageIcon size={13} />

@@ -97,8 +97,14 @@ import { GmailCloudVaultModal } from './components/GmailCloudVaultModal';
 import {
   registerPosServiceWorker,
   requestStoragePersistence,
-  sendNativeNotification
+  subscribeToNotificationNavigation
 } from './utils/mobilePermissions';
+import {
+  evaluateAndDispatchWorkshopNotifications,
+  notifyGatePassEvent,
+  notifyInquiryEvent,
+  notifyOrderEvent
+} from './utils/workshopNotifications';
 import { initBackgroundSyncEngine } from './utils/backgroundSyncEngine';
 import { saveDocumentToVault, getDocumentFromVault } from './utils/documentVault';
 import { GatePassUploadModal } from './components/GatePassUploadModal';
@@ -356,8 +362,38 @@ export const App: React.FC = () => {
     return INITIAL_STATE;
   });
 
-  // Active view and navigation
-  const [activeView, setActiveView] = useState<AppView>('overview');
+  // Active view and navigation (honors ?view=... deep-links from lockscreen notifications)
+  const [activeView, setActiveView] = useState<AppView>(() => {
+    try {
+      const paramView = new URLSearchParams(window.location.search).get('view');
+      const allowedViews: AppView[] = [
+        'overview',
+        'products',
+        'sales',
+        'transactions',
+        'factories',
+        'paint_ledger',
+        'raw_material',
+        'labour_ledger',
+        'scrapledger',
+        'withdrawal',
+        'stock',
+        'inventory_forecast',
+        'returns',
+        'expenses',
+        'settings',
+        'printer',
+        'gallery',
+        'backup',
+        'notifications',
+        'cheques'
+      ];
+      if (paramView && allowedViews.includes(paramView as AppView)) {
+        return paramView as AppView;
+      }
+    } catch {}
+    return 'overview';
+  });
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [isLocked, setIsLocked] = useState(true);
   const [showOpeningSplash, setShowOpeningSplash] = useState(true);
@@ -750,7 +786,7 @@ export const App: React.FC = () => {
   const bgStateRef = useRef(state);
   bgStateRef.current = state;
 
-  // Connection health verification and PWA background service worker on boot
+  // Connection health verification, PWA background service worker & Lockscreen Notifications Engine
   useEffect(() => {
     testConnection();
     // Initialize PWA Service Worker for mobile push & background notifications
@@ -759,10 +795,54 @@ export const App: React.FC = () => {
     requestStoragePersistence().catch(e => console.debug('Storage persist init:', e));
     // Initialize Continuous Background Sync Engine (keeps syncing even when app is minimized or backgrounded)
     const cleanupSync = initBackgroundSyncEngine(() => bgStateRef.current);
+
+    // Subscribe to lockscreen/notification tap navigation (Service Worker + Native Android)
+    const unsubNotifNav = subscribeToNotificationNavigation((targetView) => {
+      if (targetView) {
+        setActiveView(targetView);
+      }
+    });
+
+    // Initial startup lockscreen & SW snapshot evaluation
+    const bootTimer = setTimeout(() => {
+      evaluateAndDispatchWorkshopNotifications(bgStateRef.current, { triggerReason: 'startup' }).catch(() => {});
+    }, 2200);
+
+    // Periodic workshop monitor (every 5 minutes)
+    const monitorInterval = setInterval(() => {
+      evaluateAndDispatchWorkshopNotifications(bgStateRef.current, { triggerReason: 'interval' }).catch(() => {});
+    }, 5 * 60 * 1000);
+
+    // Trigger off-screen / screen-lock snapshot & digest when phone switches away or locks
+    const handleScreenOffOrHide = () => {
+      if (document.visibilityState === 'hidden') {
+        evaluateAndDispatchWorkshopNotifications(bgStateRef.current, { triggerReason: 'going_hidden' }).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', handleScreenOffOrHide);
+
     return () => {
       cleanupSync();
+      unsubNotifNav();
+      clearTimeout(bootTimer);
+      clearInterval(monitorInterval);
+      document.removeEventListener('visibilitychange', handleScreenOffOrHide);
     };
   }, []);
+
+  // Keep Service Worker alert snapshot & Capacitor native schedules synced when key workshop records update
+  useEffect(() => {
+    const syncTimer = setTimeout(() => {
+      evaluateAndDispatchWorkshopNotifications(state, { triggerReason: 'state_change' }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(syncTimer);
+  }, [
+    state.transactions,
+    state.customerLedgers,
+    state.rawSuppliers,
+    state.rawStock,
+    state.inquiries
+  ]);
 
   // Auto-save to localStorage with version timestamp & Document Vault quota protection
   useEffect(() => {
@@ -1097,11 +1177,14 @@ export const App: React.FC = () => {
       return p;
     });
 
-    // 8. Dispatch native push notification if enabled
-    sendNativeNotification(`Order #${assignedId} Created`, {
-      body: `${safeCustomer}: Rs. ${totalAmount.toLocaleString()} (${summaryStr})`,
-      icon: '/falcon-theme-rod-logo.svg'
-    });
+    // 8. Dispatch categorized mobile lockscreen notification if enabled
+    notifyOrderEvent({
+      type: 'created',
+      orderId: assignedId,
+      customerName: safeCustomer,
+      amount: totalAmount,
+      summary: summaryStr
+    }).catch(() => {});
 
     const updatedState: AppState = {
       ...state,
@@ -1240,6 +1323,23 @@ export const App: React.FC = () => {
       // Synchronize confirmed status with Google Sheets live mirror if connected
       workspaceSync.syncTransactionToSheets(confirmedTxn, { ...prev, transactions: updatedTransactions, rawStock: updatedRawStock });
 
+      notifyOrderEvent({
+        type: 'confirmed',
+        orderId: id,
+        customerName: confirmedTxn.factory || 'Customer',
+        amount: confirmedTxn.total || 0,
+        summary: confirmedTxn.itemsSummary
+      }).catch(() => {});
+
+      if (!confirmedTxn.receiptUrl && !confirmedTxn.gatePass) {
+        notifyGatePassEvent({
+          direction: 'required',
+          orderOrSeq: id,
+          partyName: confirmedTxn.factory || 'Walk-in Customer',
+          detail: `Order confirmed (Rs ${fmt(confirmedTxn.total || 0)}) — Attach outward dispatch gate pass`
+        }).catch(() => {});
+      }
+
       return {
         ...prev,
         transactions: updatedTransactions,
@@ -1296,6 +1396,14 @@ export const App: React.FC = () => {
         });
       }
 
+      notifyOrderEvent({
+        type: 'payment',
+        orderId: txnId,
+        customerName: targetTxn?.factory || 'Customer',
+        amount,
+        summary: `${detail || method}${isNowFullyPaid ? ' · Fully Settled' : ''}`
+      }).catch(() => {});
+
       return {
         ...prev,
         customerPayments: updatedPayments,
@@ -1309,11 +1417,19 @@ export const App: React.FC = () => {
 
   const handleAttachGatePass = (id: string, gatePass?: GatePassData) => {
     setState(prev => {
+      const targetTxn = prev.transactions.find(t => t.id === id);
       const seq = gatePass?.gateSequence || getNextGateSequence(prev.transactions, prev.rawSuppliers);
       const seqNo = gatePass?.gateSequenceNo || formatGateSequence(seq);
       const receiver = gatePass?.receivedBy || 'Gate Officer: M. Tariq';
       const post = gatePass?.gatePost || 'Main Dispatch Gate 1';
       const role = gatePass?.receiverRole || 'Gate Officer / Receiver';
+
+      notifyGatePassEvent({
+        direction: 'outward',
+        orderOrSeq: `${seqNo} · Order #${id}`,
+        partyName: targetTxn?.factory || 'Customer',
+        detail: `${receiver} (${post})`
+      }).catch(() => {});
 
       return {
         ...prev,
@@ -1984,6 +2100,13 @@ export const App: React.FC = () => {
               }
             : finalEntry.gatePass
         };
+
+        notifyGatePassEvent({
+          direction: 'inward',
+          orderOrSeq: seqNo,
+          partyName: supplierName,
+          detail: `${finalEntry.stockName || 'Raw Material'} • ${receiver}`
+        }).catch(() => {});
       }
 
       return {
@@ -2004,6 +2127,13 @@ export const App: React.FC = () => {
       const seqNo = gatePass.gateSequenceNo || formatGateSequence(seq);
       const receiver = gatePass.receivedBy || 'Gate Inward Officer: M. Tariq';
       const post = gatePass.gatePost || 'Raw Material Inward Gate';
+
+      notifyGatePassEvent({
+        direction: 'inward',
+        orderOrSeq: seqNo,
+        partyName: supplierName,
+        detail: `${gatePass.fileName || 'Supplier Gate Slip'} • ${receiver}`
+      }).catch(() => {});
 
       return {
         ...prev,
@@ -2639,6 +2769,7 @@ export const App: React.FC = () => {
       pushStateImmediately(newState);
       return newState;
     });
+    notifyInquiryEvent(inquiryData).catch(() => {});
   };
 
   const handleResolveInquiry = (id: string) => {
@@ -2779,6 +2910,18 @@ export const App: React.FC = () => {
           }}
           onUpdatePin={newPin => setState(prev => ({ ...prev, pin: newPin }))}
           onUpdateVisualSettings={handleUpdateVisualSettings}
+        />
+        <OfflineIndicator
+          isOnline={isOnline}
+          syncState={syncState}
+          pendingQueueCount={pendingQueueCount}
+          lastSyncTime={lastSyncTime}
+          language={state.language}
+          appState={state}
+          onForceSyncNow={() => {
+            forceSyncNow();
+            workspaceSync.autoSyncNow().catch(() => {});
+          }}
         />
       </>
     );
@@ -3629,8 +3772,20 @@ export const App: React.FC = () => {
       <ExportDownloadToast />
       {/* Global Print & Thermal Document Preview Modal */}
       <PrintPreviewModal />
-      {/* PWA Offline Connectivity Indicator */}
-      <OfflineIndicator />
+      {/* PWA Offline Connectivity & Reconnect Sync Status Indicator */}
+      <OfflineIndicator
+        isOnline={isOnline}
+        syncState={syncState}
+        pendingQueueCount={pendingQueueCount}
+        lastSyncTime={lastSyncTime}
+        language={state.language}
+        appState={state}
+        onOpenNotifications={() => setActiveView('notifications')}
+        onForceSyncNow={() => {
+          forceSyncNow();
+          workspaceSync.autoSyncNow().catch(() => {});
+        }}
+      />
     </div>
   );
 };

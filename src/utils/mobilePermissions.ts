@@ -1,19 +1,95 @@
 /**
  * Mobile Permissions & Push / Lockscreen Notifications Utility for Falcon Rod Maker POS
- * 
+ *
  * Supports:
- * 1. Android Native APK (Capacitor LocalNotifications & Android Permissions)
- * 2. Mobile Web Browsers (Chrome Android, Safari iOS, Firefox, Samsung Internet)
- * 3. Lockscreen Heads-Up Notifications with Sound & Vibration
- * 4. Hardware Microphone Access for Voice Commands
- * 5. Persistent Local Storage (IndexedDB + StorageManager API)
- * 6. Iframe sandbox detection & 1-tap direct mobile browser launch
+ * 1. Android Native APK (Capacitor LocalNotifications with dedicated VISIBILITY_PUBLIC lockscreen channels)
+ * 2. Mobile Web Browsers & Installed Home-Screen PWA (Service Worker showNotification)
+ * 3. Lockscreen Heads-Up Notifications across Backups, Gate Passes, Cheques, Orders, Low Stock, Inquiries
+ * 4. Hardware Microphone Access & Persistent Local Storage
+ * 5. Iframe sandbox detection & 1-tap direct mobile browser launch
  */
 
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { AppView } from '../types';
 
 export type PermissionStateStatus = 'granted' | 'denied' | 'prompt' | 'unsupported';
+
+export type NotificationCategory =
+  | 'backups'
+  | 'gatepasses'
+  | 'cheques'
+  | 'orders'
+  | 'stock'
+  | 'inquiries';
+
+export interface NotificationCategoryPrefs {
+  backups: boolean;
+  gatepasses: boolean;
+  cheques: boolean;
+  orders: boolean;
+  stock: boolean;
+  inquiries: boolean;
+  offScreenDigest: boolean;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationCategoryPrefs = {
+  backups: true,
+  gatepasses: true,
+  cheques: true,
+  orders: true,
+  stock: true,
+  inquiries: true,
+  offScreenDigest: true
+};
+
+const PREFS_STORAGE_KEY = 'falcon_notif_category_prefs_v1';
+export const NOTIF_PREFS_CHANGED_EVENT = 'falcon-notif-prefs-changed';
+export const OFFLINE_CACHED_NOTIFS_KEY = 'falcon_offline_cached_notifs_v1';
+export const OFFLINE_NOTIF_CACHED_EVENT = 'falcon-offline-notif-cached';
+
+export interface CachedOfflineNotification {
+  id: string;
+  category: NotificationCategory | 'general';
+  title: string;
+  body: string;
+  view: AppView;
+  createdAt: string;
+}
+
+export function getCachedOfflineNotifications(): CachedOfflineNotification[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(OFFLINE_CACHED_NOTIFS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearCachedOfflineNotifications(): CachedOfflineNotification[] {
+  const existing = getCachedOfflineNotifications();
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(OFFLINE_CACHED_NOTIFS_KEY);
+      window.dispatchEvent(new CustomEvent(OFFLINE_NOTIF_CACHED_EVENT, { detail: [] }));
+    } catch {}
+  }
+  return existing;
+}
+
+function recordOfflineCachedNotification(entry: CachedOfflineNotification): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = getCachedOfflineNotifications();
+    const deduped = existing.filter((x) => x.id !== entry.id);
+    const next = [entry, ...deduped].slice(0, 50);
+    localStorage.setItem(OFFLINE_CACHED_NOTIFS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(OFFLINE_NOTIF_CACHED_EVENT, { detail: next }));
+  } catch {}
+}
 
 export interface MobilePermissionsState {
   notifications: PermissionStateStatus;
@@ -28,11 +104,116 @@ export interface MobilePermissionsState {
   isIframe: boolean;
   isMobile: boolean;
   isNative: boolean;
+  isStandalone: boolean;
   isServiceWorkerReady: boolean;
   lockscreenSupported: boolean;
 }
 
-const ANDROID_URGENT_CHANNEL_ID = 'falcon_pos_urgent';
+interface ChannelConfig {
+  id: string;
+  name: string;
+  description: string;
+  importance: 3 | 4 | 5;
+  lightColor: string;
+  vibrate: number[];
+  defaultView: AppView;
+}
+
+const ANDROID_CHANNELS: Record<NotificationCategory | 'general', ChannelConfig> = {
+  backups: {
+    id: 'falcon_pos_backups',
+    name: 'Backups & Cloud Sync Alerts',
+    description: 'Google Drive auto-backups, Sheets sync status, and SQL/JSON exports on lockscreen',
+    importance: 5,
+    lightColor: '#38BDF8',
+    vibrate: [180, 90, 180],
+    defaultView: 'backup'
+  },
+  gatepasses: {
+    id: 'falcon_pos_gatepasses',
+    name: 'Gate Passes & Dispatch Alerts',
+    description: 'Outward dispatch slips, inward mill gate passes, and pending gate approvals',
+    importance: 5,
+    lightColor: '#F59E0B',
+    vibrate: [240, 100, 240],
+    defaultView: 'notifications'
+  },
+  cheques: {
+    id: 'falcon_pos_cheques',
+    name: 'Cheques & Maturity Alerts',
+    description: 'Cheque bounce auto-reversals, cleared updates, overdue & due-within-3-days alerts',
+    importance: 5,
+    lightColor: '#EF4444',
+    vibrate: [350, 120, 350, 120, 400],
+    defaultView: 'cheques'
+  },
+  orders: {
+    id: 'falcon_pos_orders',
+    name: 'POS Orders & Payments',
+    description: 'New workshop sales, invoices, and recorded customer payments',
+    importance: 5,
+    lightColor: '#10B981',
+    vibrate: [200, 80, 200],
+    defaultView: 'transactions'
+  },
+  stock: {
+    id: 'falcon_pos_stock',
+    name: 'Raw Material Low Stock',
+    description: 'Critical steel pipe, rod, bolt, and paint inventory reorder warnings',
+    importance: 5,
+    lightColor: '#F97316',
+    vibrate: [280, 100, 280],
+    defaultView: 'raw_material'
+  },
+  inquiries: {
+    id: 'falcon_pos_inquiries',
+    name: 'Customer Inquiries & Reminders',
+    description: 'High-priority customer quote requests and follow-ups',
+    importance: 4,
+    lightColor: '#A855F7',
+    vibrate: [180, 90, 180],
+    defaultView: 'notifications'
+  },
+  general: {
+    id: 'falcon_pos_urgent',
+    name: 'Falcon POS Urgent Alerts',
+    description: 'Heads-up orders, inventory and lockscreen notifications',
+    importance: 5,
+    lightColor: '#F59E0B',
+    vibrate: [250, 100, 250],
+    defaultView: 'notifications'
+  }
+};
+
+let androidChannelsInitialized = false;
+
+/**
+ * Load per-category lockscreen notification preferences
+ */
+export function getNotificationCategoryPrefs(): NotificationCategoryPrefs {
+  if (typeof window === 'undefined') return { ...DEFAULT_NOTIFICATION_PREFS };
+  try {
+    const raw = localStorage.getItem(PREFS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_NOTIFICATION_PREFS };
+    return { ...DEFAULT_NOTIFICATION_PREFS, ...JSON.parse(raw) };
+  } catch {
+    return { ...DEFAULT_NOTIFICATION_PREFS };
+  }
+}
+
+/**
+ * Persist updated per-category lockscreen notification preferences
+ */
+export function saveNotificationCategoryPrefs(
+  patch: Partial<NotificationCategoryPrefs>
+): NotificationCategoryPrefs {
+  const next = { ...getNotificationCategoryPrefs(), ...patch };
+  try {
+    localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent(NOTIF_PREFS_CHANGED_EVENT, { detail: next }));
+  } catch {}
+  return next;
+}
 
 /**
  * Detect if running inside an embedded iframe (e.g. AI Studio sandboxed preview)
@@ -43,6 +224,17 @@ export function isInsideIframe(): boolean {
   } catch {
     return true;
   }
+}
+
+/**
+ * Detect standalone installed PWA mode
+ */
+export function isStandalonePwa(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as unknown as { standalone?: boolean }).standalone === true
+  );
 }
 
 /**
@@ -82,21 +274,25 @@ export async function registerPosServiceWorker(): Promise<ServiceWorkerRegistrat
 }
 
 /**
- * Initialize Android Lockscreen Notification Channel
+ * Initialize all Android Lockscreen Notification Channels (importance HIGH + VISIBILITY_PUBLIC)
  */
-async function setupAndroidLockscreenChannel(): Promise<void> {
+export async function setupAndroidLockscreenChannels(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
+  if (androidChannelsInitialized) return;
   try {
-    await LocalNotifications.createChannel({
-      id: ANDROID_URGENT_CHANNEL_ID,
-      name: 'Falcon POS Urgent Alerts',
-      description: 'Heads-up orders, inventory and lockscreen notifications',
-      importance: 5, // IMPORTANCE_HIGH (banner, sound, vibration)
-      visibility: 1, // VISIBILITY_PUBLIC (visible on Android Lock Screen)
-      vibration: true,
-      lights: true,
-      lightColor: '#F59E0B'
-    });
+    for (const cfg of Object.values(ANDROID_CHANNELS)) {
+      await LocalNotifications.createChannel({
+        id: cfg.id,
+        name: cfg.name,
+        description: cfg.description,
+        importance: cfg.importance, // 5 = IMPORTANCE_HIGH (heads-up banner + sound + vibration)
+        visibility: 1, // VISIBILITY_PUBLIC (visible on off / lock screen)
+        vibration: true,
+        lights: true,
+        lightColor: cfg.lightColor
+      });
+    }
+    androidChannelsInitialized = true;
   } catch (e) {
     console.warn('[LocalNotifications] createChannel non-fatal:', e);
   }
@@ -138,15 +334,17 @@ export async function requestNotificationPermission(): Promise<{
     try {
       const res = await LocalNotifications.requestPermissions();
       if (res.display === 'granted') {
-        await setupAndroidLockscreenChannel();
+        await setupAndroidLockscreenChannels();
         return {
           status: 'granted',
-          message: 'Android system notification permission granted! Lockscreen alerts enabled.'
+          message:
+            'Android system notification permission granted! All category channels are lockscreen-active.'
         };
       } else if (res.display === 'denied') {
         return {
           status: 'denied',
-          message: 'Notification permission denied in Android app settings. Open Android Settings > Apps > Falcon POS > Notifications > Allow.'
+          message:
+            'Notification permission denied in Android app settings. Open Android Settings > Apps > Falcon POS > Notifications > Allow.'
         };
       }
       return {
@@ -178,12 +376,13 @@ export async function requestNotificationPermission(): Promise<{
         return { status: 'granted', message: 'Notification permission granted!' };
       }
     } catch {
-      // Browsers often reject requestPermission inside cross-origin iframes
+      // Browsers reject requestPermission inside cross-origin iframes
     }
     if (Notification.permission === 'denied') {
       return {
         status: 'denied',
-        message: 'Mobile browser blocks notification prompts inside embedded preview iframes. Open the direct link in Chrome or Safari.'
+        message:
+          'Mobile browsers block notifications inside embedded preview iframes. Tap "Open Direct App URL" below (or Install to Home Screen) to allow notifications on your phone lock screen.'
       };
     }
   }
@@ -195,12 +394,13 @@ export async function requestNotificationPermission(): Promise<{
     if (permission === 'granted') {
       return {
         status: 'granted',
-        message: 'Push & Lockscreen notification permission granted! Alerts are now active.'
+        message: 'Push & Lockscreen notification permission granted across all workshop categories!'
       };
     } else if (permission === 'denied') {
       return {
         status: 'denied',
-        message: 'Notifications blocked by browser. Tap the Lock (🔒) icon in your browser address bar to Allow.'
+        message:
+          'Notifications blocked by browser. Tap the Lock (🔒) or Settings icon in your mobile address bar > Permissions > Notifications > Allow.'
       };
     } else {
       return {
@@ -216,84 +416,185 @@ export async function requestNotificationPermission(): Promise<{
   }
 }
 
+export interface SendNotificationOptions {
+  body?: string;
+  icon?: string;
+  badge?: string;
+  tag?: string;
+  vibrate?: number[];
+  delayMs?: number;
+  data?: Record<string, any>;
+  category?: NotificationCategory | 'general';
+  view?: AppView;
+  renotify?: boolean;
+  silent?: boolean;
+  actionLabel?: string;
+  forceTest?: boolean;
+  nativeNotificationId?: number;
+}
+
 /**
- * Dispatch a native Push / System / Lockscreen Notification
+ * Dispatch a native Push / System / Lockscreen Notification for any workshop category
  */
 export async function sendNativeNotification(
   title: string,
-  options?: {
-    body?: string;
-    icon?: string;
-    badge?: string;
-    tag?: string;
-    vibrate?: number[];
-    delayMs?: number;
-    data?: any;
-  }
+  options?: SendNotificationOptions
 ): Promise<boolean> {
-  const bodyText = options?.body || 'Falcon Rod Maker POS Workshop Alert';
+  const category = options?.category || 'general';
 
-  // 1. Android Native APK
+  // Enforce per-category toggle unless bypassed for diagnostic test
+  if (!options?.forceTest && category !== 'general') {
+    const prefs = getNotificationCategoryPrefs();
+    if (!prefs[category]) {
+      return false;
+    }
+  }
+
+  const channel = ANDROID_CHANNELS[category] || ANDROID_CHANNELS.general;
+  const targetView: AppView = options?.view || channel.defaultView;
+  const targetUrl = `/?view=${encodeURIComponent(targetView)}`;
+  const bodyText = options?.body || 'Falcon Rod Maker POS Workshop Alert';
+  const tag = options?.tag || `falcon-${category}-${Date.now()}`;
+  const icon = options?.icon && !options.icon.endsWith('.svg') ? options.icon : '/pwa-192x192.png';
+  const badge = options?.badge || '/favicon.png';
+  const vibrate = options?.vibrate || channel.vibrate;
+
+  const extraData = {
+    ...(options?.data || {}),
+    category,
+    view: targetView,
+    url: targetUrl
+  };
+
+  // Cache notifications generated while offline so reconnection confirms cloud sync
+  if (typeof navigator !== 'undefined' && !navigator.onLine && !options?.forceTest) {
+    recordOfflineCachedNotification({
+      id: tag,
+      category,
+      title,
+      body: bodyText,
+      view: targetView,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  // 1. Android Native APK (Capacitor LocalNotifications)
   if (Capacitor.isNativePlatform()) {
     try {
-      await setupAndroidLockscreenChannel();
-      const notifId = Math.floor(Math.random() * 899999 + 100000);
-      const scheduleTime = new Date(Date.now() + (options?.delayMs || 100));
+      await setupAndroidLockscreenChannels();
+      const check = await LocalNotifications.checkPermissions();
+      if (check.display === 'granted') {
+        const notifId =
+          options?.nativeNotificationId || Math.floor(Math.random() * 600000 + 100000);
+        const scheduleTime = new Date(Date.now() + Math.max(150, options?.delayMs || 150));
 
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            id: notifId,
-            title,
-            body: bodyText,
-            channelId: ANDROID_URGENT_CHANNEL_ID,
-            schedule: { at: scheduleTime },
-            sound: 'beep.wav',
-            smallIcon: 'ic_launcher_round',
-            iconColor: '#F59E0B',
-            extra: options?.data || null
-          }
-        ]
-      });
-      return true;
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              id: notifId,
+              title,
+              body: bodyText,
+              channelId: channel.id,
+              schedule: { at: scheduleTime, allowWhileIdle: true },
+              smallIcon: 'ic_launcher_round',
+              iconColor: channel.lightColor,
+              extra: extraData
+            }
+          ]
+        });
+        return true;
+      }
     } catch (e) {
       console.warn('[LocalNotifications] Native schedule error:', e);
     }
   }
 
-  // 2. Mobile Browser via Service Worker (supports Lockscreen requireInteraction)
-  if (typeof window !== 'undefined' && 'serviceWorker' in navigator && 'Notification' in window) {
+  // 2. Mobile Browser / Installed PWA via Service Worker (supports lockscreen requireInteraction + wake delay)
+  if (typeof window !== 'undefined' && 'Notification' in window) {
     if (Notification.permission === 'granted') {
-      const defaultOpts = {
+      const payload = {
+        title,
         body: bodyText,
-        icon: options?.icon || '/falcon-theme-rod-logo.svg',
-        badge: options?.badge || '/favicon.png',
-        tag: options?.tag || `falcon-pos-${Date.now()}`,
-        vibrate: options?.vibrate || [250, 100, 250],
-        requireInteraction: true, // Key for persistent lock screen display!
-        silent: false,
-        data: options?.data || { url: window.location.href }
+        icon,
+        badge,
+        tag,
+        category,
+        view: targetView,
+        url: targetUrl,
+        vibrate,
+        renotify: options?.renotify ?? true,
+        silent: options?.silent ?? false,
+        actionLabel: options?.actionLabel || 'Open Now',
+        timestamp: Date.now(),
+        data: extraData
       };
 
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        if (registration && registration.showNotification) {
-          if (options?.delayMs && options.delayMs > 0) {
-            setTimeout(() => {
-              registration.showNotification(title, defaultOpts).catch(console.warn);
-            }, options.delayMs);
-          } else {
-            await registration.showNotification(title, defaultOpts);
+      if ('serviceWorker' in navigator) {
+        try {
+          let registration = await navigator.serviceWorker.getRegistration();
+          if (!registration) {
+            registration = (await registerPosServiceWorker()) || undefined;
           }
-          return true;
+          if (!registration) {
+            registration = await navigator.serviceWorker.ready;
+          }
+
+          // For delayed notifications (e.g., user hits test and locks screen), delegate timer to SW
+          if (options?.delayMs && options.delayMs > 0 && registration?.active) {
+            registration.active.postMessage({
+              type: 'SCHEDULE_NOTIFICATION',
+              delayMs: options.delayMs,
+              payload
+            });
+            return true;
+          }
+
+          if (registration && registration.showNotification) {
+            await registration.showNotification(title, {
+              body: bodyText,
+              icon,
+              badge,
+              tag,
+              vibrate,
+              renotify: payload.renotify,
+              silent: payload.silent,
+              requireInteraction: true,
+              data: extraData
+            } as NotificationOptions);
+            return true;
+          }
+        } catch (swErr) {
+          console.warn('[SW Notification] dispatch warning:', swErr);
         }
-      } catch (swErr) {
-        console.warn('[SW Notification] ready registration error:', swErr);
       }
 
-      // Try desktop Notification constructor fallback
+      // Direct Notification constructor fallback (no delay)
       try {
-        new Notification(title, defaultOpts);
+        if (options?.delayMs && options.delayMs > 0) {
+          setTimeout(() => {
+            try {
+              new Notification(title, {
+                body: bodyText,
+                icon,
+                badge,
+                tag,
+                requireInteraction: true,
+                silent: false,
+                data: extraData
+              });
+            } catch {}
+          }, options.delayMs);
+        } else {
+          new Notification(title, {
+            body: bodyText,
+            icon,
+            badge,
+            tag,
+            requireInteraction: true,
+            silent: false,
+            data: extraData
+          });
+        }
         return true;
       } catch (fallbackErr) {
         console.warn('[Notification] Constructor failed:', fallbackErr);
@@ -305,14 +606,73 @@ export async function sendNativeNotification(
 }
 
 /**
+ * Subscribe to notification click / tap navigation from Capacitor OR Service Worker
+ */
+export function subscribeToNotificationNavigation(
+  onNavigate: (view: AppView, data?: Record<string, any>) => void
+): () => void {
+  const cleanups: Array<() => void> = [];
+
+  // Service Worker message listener (PWA / Mobile Browser)
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'NAVIGATE_FROM_NOTIFICATION' && event.data.view) {
+        onNavigate(event.data.view as AppView, event.data.data);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    cleanups.push(() => navigator.serviceWorker.removeEventListener('message', handleSwMessage));
+  }
+
+  // Capacitor Native notification action listener
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const listenerPromise = LocalNotifications.addListener(
+        'localNotificationActionPerformed',
+        (event) => {
+          const extra = event.notification?.extra as Record<string, any> | undefined;
+          if (extra?.view) {
+            onNavigate(extra.view as AppView, extra);
+          } else {
+            onNavigate('notifications', extra);
+          }
+        }
+      );
+      cleanups.push(() => {
+        listenerPromise.then((h) => h.remove()).catch(() => {});
+      });
+    } catch {}
+  }
+
+  return () => {
+    cleanups.forEach((fn) => fn());
+  };
+}
+
+/**
  * Schedule a lockscreen test notification delayed by N seconds
  * Allows user to lock their phone and see the notification light up the lockscreen
  */
-export async function scheduleLockscreenTestNotification(delaySeconds: number = 3): Promise<boolean> {
-  return await sendNativeNotification('🔒 Falcon POS Lockscreen Alert', {
-    body: `Lockscreen Notification Active! Fired at ${new Date().toLocaleTimeString()} — Touch to view details.`,
+export async function scheduleLockscreenTestNotification(
+  delaySeconds: number = 3,
+  category: NotificationCategory | 'general' = 'general'
+): Promise<boolean> {
+  const labelMap: Record<NotificationCategory | 'general', string> = {
+    backups: '☁️ Falcon Backup Lockscreen Alert',
+    gatepasses: '🛂 Falcon Gate Pass Lockscreen Alert',
+    cheques: '💳 Falcon Cheque Due Lockscreen Alert',
+    orders: '🛒 Falcon Order Lockscreen Alert',
+    stock: '📦 Falcon Low Stock Lockscreen Alert',
+    inquiries: '🔔 Falcon Inquiry Lockscreen Alert',
+    general: '🔒 Falcon POS Lockscreen Alert'
+  };
+
+  return await sendNativeNotification(labelMap[category], {
+    body: `Lockscreen Alert Active (${category.toUpperCase()}) • Fired at ${new Date().toLocaleTimeString()} — Tap to open.`,
     delayMs: delaySeconds * 1000,
-    tag: 'falcon-lockscreen-test'
+    tag: `falcon-lockscreen-test-${category}`,
+    category,
+    forceTest: true
   });
 }
 
@@ -369,7 +729,8 @@ export async function requestMicrophonePermission(): Promise<{
         return {
           granted: false,
           status: 'denied',
-          message: 'Microphone is blocked by the embedded preview iframe. Open the app directly in Chrome/Safari to enable voice.'
+          message:
+            'Microphone is blocked by the embedded preview iframe. Open the app directly in Chrome/Safari to enable voice.'
         };
       }
     }
@@ -377,7 +738,6 @@ export async function requestMicrophonePermission(): Promise<{
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // Stop tracks immediately so mic indicator is not left on
     stream.getTracks().forEach((track) => track.stop());
     return {
       granted: true,
@@ -423,7 +783,6 @@ export async function testLocalStorageIntegrity(): Promise<boolean> {
     localStorage.removeItem(testKey);
     if (read !== testVal) return false;
 
-    // Test IndexedDB
     if ('indexedDB' in window) {
       return await new Promise<boolean>((resolve) => {
         const req = indexedDB.open('__falcon_probe_db__', 1);
@@ -431,7 +790,7 @@ export async function testLocalStorageIntegrity(): Promise<boolean> {
           req.result.close();
           resolve(true);
         };
-        req.onerror = () => resolve(true); // localStorage worked so still functional
+        req.onerror = () => resolve(true);
       });
     }
     return true;
@@ -515,6 +874,7 @@ export async function checkAllMobilePermissions(): Promise<MobilePermissionsStat
   const isIframe = isInsideIframe();
   const isMobile = isMobileDevice();
   const isNative = Capacitor.isNativePlatform();
+  const isStandalone = isStandalonePwa();
 
   let isServiceWorkerReady = false;
   if ('serviceWorker' in navigator) {
@@ -535,6 +895,7 @@ export async function checkAllMobilePermissions(): Promise<MobilePermissionsStat
     isIframe,
     isMobile,
     isNative,
+    isStandalone,
     isServiceWorkerReady,
     lockscreenSupported: isNative || ('Notification' in window && 'serviceWorker' in navigator)
   };

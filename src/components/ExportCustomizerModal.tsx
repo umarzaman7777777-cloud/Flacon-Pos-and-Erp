@@ -481,7 +481,7 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
             </div>
 
             {/* Save as default feedback */}
-            <div className="mt-3 flex items-center justify-between text-xs font-mono">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
               <button
                 type="button"
                 onClick={handleSaveAsDefault}
@@ -497,7 +497,7 @@ export const ExportCustomizerModal: React.FC<ExportCustomizerModalProps> = ({
           {/* Right Column: Customization Controls (7 cols) */}
           <div className="lg:col-span-7 p-4 sm:p-5 flex flex-col space-y-4">
             {/* Navigation Tabs */}
-            <div className="flex border-b border-[var(--steel-line)] gap-2 pb-2">
+            <div className="flex flex-wrap border-b border-[var(--steel-line)] gap-2 pb-2">
               <button
                 type="button"
                 onClick={() => setActiveTab('theme')}

@@ -697,11 +697,11 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
           <div className="lg:col-span-5 flex flex-col justify-between bg-[var(--panel)]">
             
             {/* Control Tabs */}
-            <div className="flex border-b border-[var(--steel-line)] bg-[var(--panel-raised)]/70 text-xs font-mono">
+            <div className="flex flex-wrap border-b border-[var(--steel-line)] bg-[var(--panel-raised)]/70 text-xs font-mono">
               <button
                 type="button"
                 onClick={() => setActiveTab('dimensions')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'dimensions'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -712,7 +712,7 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
               <button
                 type="button"
                 onClick={() => setActiveTab('clamps')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'clamps'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -723,7 +723,7 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
               <button
                 type="button"
                 onClick={() => setActiveTab('holes')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'holes'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -734,7 +734,7 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
               <button
                 type="button"
                 onClick={() => setActiveTab('finish')}
-                className={`flex-1 py-3 px-2 font-bold text-center border-b-2 transition ${
+                className={`flex-1 min-w-[105px] whitespace-nowrap py-3 px-2 font-bold text-center border-b-2 transition ${
                   activeTab === 'finish'
                     ? 'border-amber-400 text-amber-400 bg-[var(--panel)]'
                     : 'border-transparent text-[var(--text-dim)] hover:text-[var(--text)]'
@@ -1333,7 +1333,7 @@ export const RodBlueprintStudioModal: React.FC<RodBlueprintStudioModalProps> = (
 
             {/* STUDIO FOOTER ACTION BUTTONS */}
             <div className="p-4 border-t border-[var(--steel-line)] bg-[var(--panel-raised)] flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setSpecs(defaultBlueprintSpecs(product))}

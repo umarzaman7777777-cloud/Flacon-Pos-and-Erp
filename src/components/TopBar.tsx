@@ -197,10 +197,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Row 2: Streamlined Quick Action Bar (Designed to never truncate or overflow) */}
-      <div className="px-2.5 sm:px-6 py-1.5 flex items-center justify-between gap-1.5 sm:gap-2 bg-[var(--panel-raised)]/35 overflow-x-auto no-scrollbar">
+      {/* Row 2: Streamlined Quick Action Bar (Wraps cleanly on small phones so DB/LIVE/Printer never clip) */}
+      <div className="px-2.5 sm:px-6 py-1.5 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 bg-[var(--panel-raised)]/35">
         {/* Left Side: Navigation & Core Operations */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5">
           {/* Menu button */}
           {onToggleMenu && (
             <button
@@ -208,7 +208,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               id="btn-toggle-main-menu"
               onClick={onToggleMenu}
               title="Toggle Menu"
-              className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text)] hover:border-amber-400 transition active:scale-95 text-xs font-semibold cursor-pointer"
+              className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg bg-[var(--panel-raised)] border border-[var(--steel-line)] text-[var(--text)] hover:border-amber-400 transition active:scale-95 text-xs font-semibold cursor-pointer whitespace-nowrap shrink-0"
             >
               <Menu size={14} />
               <span className="hidden xs:inline">Menu</span>
@@ -221,7 +221,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             id="btn-header-lock-screen"
             onClick={onLock}
             title="Lock Terminal"
-            className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-400 font-bold text-xs transition active:scale-95 cursor-pointer shadow-xs"
+            className="flex items-center gap-1 h-7 sm:h-8 px-2 sm:px-2.5 rounded-lg border border-red-500/40 bg-red-500/15 hover:bg-red-500/25 text-red-400 font-bold text-xs transition active:scale-95 cursor-pointer shadow-xs whitespace-nowrap shrink-0"
           >
             <Lock size={12} className="text-red-400 shrink-0" />
             <span className="uppercase tracking-wider">Lock</span>
@@ -276,7 +276,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Right Side: Status Badges, Notifications & Hardware Printer */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+        <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 ml-auto justify-end">
           {/* Notifications Button */}
           <button
             type="button"

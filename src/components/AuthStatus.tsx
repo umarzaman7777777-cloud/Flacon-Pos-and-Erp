@@ -852,7 +852,7 @@ export const AuthStatus: React.FC<AuthStatusProps> = ({
       )}
 
       {/* EXPANDABLE DIAGNOSTICS & RAW SCOPE INSPECTOR */}
-      <div className="mt-4 pt-3 border-t border-[var(--steel-line)] flex items-center justify-between text-xs text-[var(--text-dim)]">
+      <div className="mt-4 pt-3 border-t border-[var(--steel-line)] flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-dim)]">
         <button
           type="button"
           onClick={() => setShowDiagnostics(!showDiagnostics)}

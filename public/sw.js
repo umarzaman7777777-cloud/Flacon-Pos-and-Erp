@@ -1,10 +1,15 @@
 // Service Worker for Falcon Rod Maker — POS & ERP
-// Provides Offline Caching (App Shell & Dynamic Assets), Background Sync, and System Push Notifications
+// Provides Offline Caching, Background Sync, Lockscreen Alerts (All Categories), and Deep-Link Routing
 
-const CACHE_VERSION = 'falcon-pos-v2';
+const CACHE_VERSION = 'falcon-pos-v3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 const FONT_CACHE = `fonts-${CACHE_VERSION}`;
+const ALERTS_SNAPSHOT_CACHE = 'falcon-alerts-snapshot-v1';
+const ALERTS_SNAPSHOT_URL = '/__falcon_alerts_snapshot__.json';
+
+const DEFAULT_ICON = '/pwa-192x192.png';
+const DEFAULT_BADGE = '/favicon.png';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -19,6 +24,7 @@ const PRECACHE_ASSETS = [
   '/pwa-512x512.png',
   '/pwa-maskable-512x512.png',
   '/apple-touch-icon.png',
+  '/falcon-logo.png',
   '/falcon-theme-rod-logo.svg'
 ];
 
@@ -42,13 +48,35 @@ self.addEventListener('activate', (event) => {
       caches.keys().then((keys) => {
         return Promise.all(
           keys
-            .filter((key) => key !== STATIC_CACHE && key !== DYNAMIC_CACHE && key !== FONT_CACHE)
+            .filter(
+              (key) =>
+                key !== STATIC_CACHE &&
+                key !== DYNAMIC_CACHE &&
+                key !== FONT_CACHE &&
+                key !== ALERTS_SNAPSHOT_CACHE
+            )
             .map((key) => caches.delete(key))
         );
       })
     ])
   );
 });
+
+// Helper: Detect Vite development server module paths so we never stall or cache dev HMR modules
+function isViteDevAsset(url) {
+  const p = url.pathname;
+  return (
+    p.startsWith('/@vite') ||
+    p.startsWith('/@react-refresh') ||
+    p.startsWith('/@id/') ||
+    p.startsWith('/@fs/') ||
+    p.startsWith('/src/') ||
+    p.startsWith('/node_modules/') ||
+    url.searchParams.has('t') ||
+    url.searchParams.has('v') ||
+    /\.(ts|tsx|jsx|mts|cts)$/.test(p)
+  );
+}
 
 // Fetch: Handle Offline Capabilities & Caching Strategy
 self.addEventListener('fetch', (event) => {
@@ -57,6 +85,16 @@ self.addEventListener('fetch', (event) => {
 
   // Skip non-GET requests and internal browser/chrome-extension requests
   if (request.method !== 'GET' || !request.url.startsWith('http')) {
+    return;
+  }
+
+  // Never intercept API calls, Firestore RPC, or Vite dev source modules
+  if (
+    url.pathname.startsWith('/api/') ||
+    url.pathname === ALERTS_SNAPSHOT_URL ||
+    isViteDevAsset(url) ||
+    url.hostname.includes('googleapis.com') && !url.hostname.includes('fonts.googleapis.com')
+  ) {
     return;
   }
 
@@ -100,12 +138,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Static Assets (Scripts, Styles, Images, SVGs, Fonts): Stale-While-Revalidate
+  // 3. Static Assets (Images, SVGs, Fonts, Built Bundles): Stale-While-Revalidate
   const isStaticAsset =
     url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|ico|webp|woff|woff2|ttf|json)$/) ||
     url.pathname.startsWith('/assets/');
 
-  if (isStaticAsset) {
+  if (isStaticAsset && url.origin === self.location.origin) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         const fetchPromise = fetch(request)
@@ -123,30 +161,94 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-
-  // 4. Default strategy: Network with cache fallback
-  event.respondWith(
-    fetch(request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, clone));
-        }
-        return networkResponse;
-      })
-      .catch(() => caches.match(request))
-  );
 });
+
+// Build standardized lockscreen notification options
+function buildLockscreenOptions(payload) {
+  const targetView = (payload && (payload.view || (payload.data && payload.data.view))) || 'notifications';
+  const targetUrl =
+    (payload && (payload.url || (payload.data && payload.data.url))) ||
+    `/?view=${encodeURIComponent(targetView)}`;
+
+  const category = (payload && payload.category) || 'general';
+  const tag =
+    (payload && payload.tag) || `falcon-${category}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+  const opts = {
+    body: (payload && payload.body) || 'Workshop notification received.',
+    icon: (payload && payload.icon) || DEFAULT_ICON,
+    badge: (payload && payload.badge) || DEFAULT_BADGE,
+    tag,
+    renotify: payload && payload.renotify !== undefined ? payload.renotify : true,
+    silent: payload && payload.silent !== undefined ? payload.silent : false,
+    vibrate: (payload && payload.vibrate) || [260, 110, 260, 110, 300],
+    requireInteraction: true,
+    timestamp: (payload && payload.timestamp) || Date.now(),
+    data: {
+      ...(payload && payload.data ? payload.data : {}),
+      category,
+      view: targetView,
+      url: targetUrl
+    },
+    actions: [
+      { action: 'open', title: payload && payload.actionLabel ? payload.actionLabel : 'Open Now' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
+  };
+
+  // Chromium Web Notification Triggers (best-effort for true OS wake-up when scheduled)
+  if (payload && payload.triggerAt && typeof self.TimestampTrigger === 'function') {
+    try {
+      opts.showTrigger = new self.TimestampTrigger(payload.triggerAt);
+    } catch (_) {}
+  }
+
+  return opts;
+}
+
+// Dispatch any due alerts stored in SW snapshot cache (used when woken by sync / periodicsync)
+async function dispatchAlertsFromSnapshot() {
+  try {
+    const cache = await caches.open(ALERTS_SNAPSHOT_CACHE);
+    const res = await cache.match(ALERTS_SNAPSHOT_URL);
+    if (!res) return;
+    const snapshot = await res.json();
+    if (!snapshot || !Array.isArray(snapshot.alerts) || snapshot.alerts.length === 0) return;
+
+    const now = Date.now();
+    const updatedAlerts = [];
+    for (const item of snapshot.alerts) {
+      if (!item || item.dispatched) continue;
+      if (!item.dueAt || item.dueAt <= now) {
+        const title = item.title || 'Falcon POS Alert';
+        const opts = buildLockscreenOptions(item);
+        await self.registration.showNotification(title, opts);
+      } else {
+        updatedAlerts.push(item);
+      }
+    }
+
+    await cache.put(
+      ALERTS_SNAPSHOT_URL,
+      new Response(JSON.stringify({ updatedAt: now, alerts: updatedAlerts }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  } catch (err) {
+    console.warn('[SW] Snapshot dispatch warning:', err);
+  }
+}
 
 // Push notification event listener
 self.addEventListener('push', (event) => {
   let data = {
     title: 'Falcon Rod Maker — POS & ERP',
     body: 'New workshop notification received.',
-    icon: '/falcon-logo.png',
-    badge: '/favicon.png',
+    icon: DEFAULT_ICON,
+    badge: DEFAULT_BADGE,
     tag: 'falcon-pos-alert',
-    url: '/'
+    view: 'notifications',
+    url: '/?view=notifications'
   };
 
   if (event.data) {
@@ -158,26 +260,10 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const options = {
-    body: data.body,
-    icon: data.icon || '/falcon-logo.png',
-    badge: data.badge || '/favicon.png',
-    tag: data.tag || 'falcon-pos-notification',
-    vibrate: [250, 100, 250],
-    requireInteraction: true,
-    data: {
-      url: data.url || '/'
-    },
-    actions: [
-      { action: 'open', title: 'Open POS' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ]
-  };
-
-  event.waitUntil(self.registration.showNotification(data.title, options));
+  event.waitUntil(self.registration.showNotification(data.title, buildLockscreenOptions(data)));
 });
 
-// Notification interaction click handler
+// Notification interaction click handler -> opens or focuses & routes to exact view
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -185,15 +271,25 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const notifData = event.notification.data || {};
+  const targetView = notifData.view || 'notifications';
+  const targetUrl = notifData.url || `/?view=${encodeURIComponent(targetView)}`;
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
+      // Focus existing app window and navigate directly via postMessage
       for (const client of clientList) {
-        if (client.url.includes(targetUrl) && 'focus' in client) {
-          return client.focus();
+        if (client.url && client.url.startsWith(self.location.origin) && 'focus' in client) {
+          await client.focus();
+          client.postMessage({
+            type: 'NAVIGATE_FROM_NOTIFICATION',
+            view: targetView,
+            data: notifData
+          });
+          return;
         }
       }
+      // App was completely closed -> launch directly into target view URL
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetUrl);
       }
@@ -201,45 +297,102 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Client request for notifications
+// Client messages for immediate, scheduled, and background-snapshot notifications
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
-    const payload = event.data.payload || {};
-    const title = payload.title || 'Falcon Rod Maker — POS & ERP';
-    const options = {
-      body: payload.body || 'Workshop alert',
-      icon: payload.icon || '/falcon-logo.png',
-      badge: payload.badge || '/favicon.png',
-      tag: payload.tag || 'falcon-pos-msg',
-      vibrate: payload.vibrate || [250, 100, 250],
-      requireInteraction: true,
-      data: payload.data || { url: '/' }
-    };
-    self.registration.showNotification(title, options);
-  }
-});
+  const msg = event.data;
+  if (!msg || !msg.type) return;
 
-// Background Sync
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'falcon-sync-sheets' || event.tag === 'falcon-sync') {
+  if (msg.type === 'SHOW_NOTIFICATION') {
+    const payload = msg.payload || {};
+    const title = payload.title || 'Falcon Rod Maker — POS & ERP';
+    event.waitUntil(self.registration.showNotification(title, buildLockscreenOptions(payload)));
+    return;
+  }
+
+  if (msg.type === 'SCHEDULE_NOTIFICATION') {
+    const payload = msg.payload || {};
+    const delayMs = Math.max(0, Number(msg.delayMs || 3000));
+    const title = payload.title || 'Falcon POS Lockscreen Alert';
+    const triggerAt = Date.now() + delayMs;
+
+    // If native Web Notification TimestampTrigger exists, register immediately
+    if (typeof self.TimestampTrigger === 'function') {
+      event.waitUntil(
+        self.registration.showNotification(
+          title,
+          buildLockscreenOptions({ ...payload, triggerAt })
+        )
+      );
+      return;
+    }
+
+    // Wait inside extendLifetime waitUntil while timer completes (survives screen lock for short/medium delays)
     event.waitUntil(
-      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-        for (const client of clients) {
-          client.postMessage({ type: 'EXECUTE_BACKGROUND_SYNC' });
-        }
+      new Promise((resolve) => {
+        setTimeout(() => {
+          self.registration
+            .showNotification(title, buildLockscreenOptions(payload))
+            .finally(resolve);
+        }, delayMs);
       })
+    );
+    return;
+  }
+
+  if (msg.type === 'STORE_ALERTS_SNAPSHOT') {
+    const alerts = Array.isArray(msg.alerts) ? msg.alerts : [];
+    event.waitUntil(
+      caches
+        .open(ALERTS_SNAPSHOT_CACHE)
+        .then((cache) =>
+          cache.put(
+            ALERTS_SNAPSHOT_URL,
+            new Response(JSON.stringify({ updatedAt: Date.now(), alerts }), {
+              headers: { 'Content-Type': 'application/json' }
+            })
+          )
+        )
+        .catch(() => {})
     );
   }
 });
 
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'falcon-sync-sheets' || event.tag === 'falcon-periodic-sync') {
+// Background Sync (triggers client sync + dispatches due workshop alerts even off-screen)
+self.addEventListener('sync', (event) => {
+  if (
+    event.tag === 'falcon-sync-sheets' ||
+    event.tag === 'falcon-sync' ||
+    event.tag === 'falcon-alerts-check'
+  ) {
     event.waitUntil(
-      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-        for (const client of clients) {
-          client.postMessage({ type: 'EXECUTE_BACKGROUND_SYNC' });
-        }
-      })
+      Promise.all([
+        dispatchAlertsFromSnapshot(),
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+          for (const client of clients) {
+            client.postMessage({ type: 'EXECUTE_BACKGROUND_SYNC' });
+          }
+        })
+      ])
+    );
+  }
+});
+
+// Periodic Background Sync (installed PWA wake-up while phone is off / locked)
+self.addEventListener('periodicsync', (event) => {
+  if (
+    event.tag === 'falcon-sync-sheets' ||
+    event.tag === 'falcon-periodic-sync' ||
+    event.tag === 'falcon-alerts-periodic'
+  ) {
+    event.waitUntil(
+      Promise.all([
+        dispatchAlertsFromSnapshot(),
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+          for (const client of clients) {
+            client.postMessage({ type: 'EXECUTE_BACKGROUND_SYNC' });
+          }
+        })
+      ])
     );
   }
 });
